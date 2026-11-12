@@ -30,6 +30,10 @@ class TerritoryWalkApp {
         this.isMapVisible = true;
         this.isDebugMode = false;
 
+        window.switchTab = (tabId) => this.switchTab(tabId);
+
+        this.statsManager = new StatsManager(this.supabaseManager, this);
+        this.initStatsModal();
         this.posterGenerator = new PosterGenerator(this);
         this.proManager = new ProManager();
 
@@ -380,6 +384,60 @@ class TerritoryWalkApp {
     }
 
     initGrid() {
+    initStatsModal() {
+        const modal = document.getElementById('stats-modal');
+        const openBtn = document.getElementById('btn-open-stats');
+        const closeBtn = document.getElementById('btn-close-stats');
+        
+        openBtn.addEventListener('click', () => {
+            modal.classList.remove('hidden');
+            this.updateStatsDisplay();
+            this.switchTab('my-stats');
+        });
+        
+        closeBtn.addEventListener('click', () => modal.classList.add('hidden'));
+
+        document.getElementById('btn-save-nickname').addEventListener('click', () => {
+            const nick = document.getElementById('input-nickname').value;
+            this.statsManager.setNickname(nick);
+            alert('保存しました');
+            this.updateStatsDisplay();
+        });
+    }
+
+    async switchTab(tabId) {
+        const panels = ['panel-my-stats', 'panel-weekly-rank', 'panel-lifetime-rank'];
+        panels.forEach(p => document.getElementById(p).classList.add('hidden'));
+        document.getElementById(`panel-${tabId}`).classList.remove('hidden');
+        
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelector(`button[onclick="switchTab('${tabId}')"]`)?.classList.add('active');
+
+        if (tabId === 'weekly-rank') {
+            const list = await this.statsManager.getWeeklyLeaderboard(this.supabaseManager.getCurrentWeekId());
+            this.renderRanking('list-weekly-rank', list, 'tiles_count');
+        } else if (tabId === 'lifetime-rank') {
+            const list = await this.statsManager.getLifetimeLeaderboard();
+            this.renderRanking('list-lifetime-rank', list, 'lifetime_tiles');
+        }
+    }
+
+    renderRanking(containerId, list, field) {
+        const container = document.getElementById(containerId);
+        container.innerHTML = list.map((item, i) => `
+            <li class="flex justify-between">
+                <span>${i + 1}. ${item.nickname || '名もなき歩行者'}</span>
+                <span>${item[field] || 0}マス</span>
+            </li>
+        `).join('');
+    }
+
+    updateStatsDisplay() {
+        document.getElementById('stat-lifetime-tiles').textContent = this.statsManager.stats.lifetime_tiles;
+        document.getElementById('stat-lifetime-reclaimed').textContent = this.statsManager.stats.lifetime_reclaimed;
+        document.getElementById('input-nickname').value = this.statsManager.nickname;
+    }
+
         if (typeof GridManager !== 'undefined') {
             this.gridManager = new GridManager(this.map, this);
     async loadRemoteTiles() {

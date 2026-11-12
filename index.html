@@ -43,6 +43,10 @@
                 </button>
 
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                <button id="btn-open-stats" class="w-full py-2 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 border border-zinc-700 text-amber-400 font-mono text-xs font-bold rounded-xl shadow transition-all active:scale-95 flex items-center justify-center gap-2">
+                    <span>🏆 ランキング・マイ戦績</span>
+                </button>
+
                     </svg>
                     <span>MENU</span>
                 </button>
@@ -94,6 +98,9 @@
     <div id="dpad-container" class="fixed bottom-24 right-4 z-[1000] bg-black/85 backdrop-blur-md border border-zinc-800 p-2.5 rounded-2xl shadow-2xl select-none flex flex-col items-center gap-1 hidden">
     <!-- Pro Manager -->
     <script src="pro.js"></script>
+    <!-- Stats Module -->
+    <script src="stats.js"></script>
+
         <div class="text-[9px] text-zinc-400 font-mono tracking-wider mb-0.5">VIRTUAL D-PAD (DEBUG)</div>
         <button id="dpad-up" class="w-10 h-10 bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-700 border border-zinc-700 text-white rounded-lg flex items-center justify-center font-bold text-sm shadow transition-all active:scale-95">▲</button>
     <!-- Poster Generation Module -->
@@ -110,6 +117,39 @@
     <!-- MENU モーダル -->
     <div id="menu-modal" class="hidden fixed inset-0 z-[2000] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
         <div class="dark-glass-modal max-w-md w-full max-w-[calc(100vw-2rem)] rounded-2xl p-6 shadow-2xl flex flex-col gap-4 text-xs select-none">
+    <!-- 戦績＆ランキングモーダル -->
+    <div id="stats-modal" class="hidden fixed inset-0 z-[2000] bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="max-w-lg w-full bg-zinc-900 border border-zinc-700 rounded-2xl p-6 shadow-2xl flex flex-col gap-4 text-white">
+            <div class="flex justify-between items-center border-b border-zinc-700 pb-3">
+                <h2 class="font-bold text-amber-400">🏆 ランキング・マイ戦績</h2>
+                <button id="btn-close-stats" class="text-zinc-400 hover:text-white">✕</button>
+            </div>
+            
+            <div class="flex gap-2">
+                <button onclick="switchTab('my-stats')" class="tab-btn px-4 py-1 border-b-2 border-amber-500">マイ戦績</button>
+                <button onclick="switchTab('weekly-rank')" class="tab-btn px-4 py-1">今週のTOP10</button>
+                <button onclick="switchTab('lifetime-rank')" class="tab-btn px-4 py-1">歴代開拓王</button>
+            </div>
+
+            <div id="panel-my-stats" class="space-y-3">
+                <div class="flex items-center gap-2">
+                    <input id="input-nickname" type="text" placeholder="ニックネーム" class="flex-1 bg-zinc-950 border border-zinc-700 p-2 rounded">
+                    <button id="btn-save-nickname" class="bg-amber-600 px-4 py-2 rounded font-bold">保存</button>
+                </div>
+                <div class="text-sm">通算開拓数: <span id="stat-lifetime-tiles">0</span></div>
+                <div class="text-sm">通算奪還数: <span id="stat-lifetime-reclaimed">0</span></div>
+            </div>
+
+            <div id="panel-weekly-rank" class="hidden">
+                <ul id="list-weekly-rank" class="space-y-2"></ul>
+            </div>
+
+            <div id="panel-lifetime-rank" class="hidden">
+                <ul id="list-lifetime-rank" class="space-y-2"></ul>
+            </div>
+        </div>
+    </div>
+
             <div class="flex items-center justify-between border-b border-zinc-800 pb-3">
                 <div class="font-bold text-sm tracking-wider flex items-center gap-2">
                     <span class="text-amber-400">❖</span> MENU & RULES
