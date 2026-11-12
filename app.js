@@ -126,7 +126,9 @@ class TerritoryWalkApp {
         this.map = L.map('map', {
             zoomControl: false,
             attributionControl: true,
-            doubleClickZoom: false
+            doubleClickZoom: false,
+            minZoom: 1,
+            maxZoom: 20
         }).setView(CONFIG.DEFAULT_CENTER, CONFIG.DEFAULT_ZOOM);
 
         L.control.zoom({ position: 'topright' }).addTo(this.map);
@@ -568,7 +570,21 @@ document.addEventListener('DOMContentLoaded', () => {
     window.territoryApp = new TerritoryWalkApp();
 });
 
-// iOS Safari ダブルタップズーム防止（2本指ピンチ操作は維持）
+// iOS Safari 全画面ピンチズーム抑止（ウィンドウ全体の拡大を防ぎUIを完全固定）
+// Leafletの地図ピンチズームはtouchstart/touchmoveで動作するため地図のみスムーズにズームします
+document.addEventListener('gesturestart', (e) => {
+    e.preventDefault();
+}, { passive: false });
+
+document.addEventListener('gesturechange', (e) => {
+    e.preventDefault();
+}, { passive: false });
+
+document.addEventListener('gestureend', (e) => {
+    e.preventDefault();
+}, { passive: false });
+
+// iOS Safari ダブルタップズーム防止
 let lastTouchEnd = 0;
 document.addEventListener('touchend', (e) => {
     const now = Date.now();
@@ -579,3 +595,13 @@ document.addEventListener('touchend', (e) => {
     }
     lastTouchEnd = now;
 }, { passive: false });
+
+// 固定UI要素でのタッチスクロール・ゴムバンド現象の抑止
+['header', 'footer', '#dpad-container'].forEach((sel) => {
+    const el = document.querySelector(sel);
+    if (el) {
+        el.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+        }, { passive: false });
+    }
+});

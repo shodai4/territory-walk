@@ -13,6 +13,9 @@ html, body {
     -webkit-touch-callout: none;
     -webkit-user-select: none;
     user-select: none;
+    overflow: hidden;
+    position: fixed;
+    overscroll-behavior: none;
 }
 
 #map {
@@ -139,17 +142,19 @@ footer {
     box-shadow: 0 0 12px rgba(0, 0, 0, 0.9);
 }
 
-/* Monotone Grayscale Tile Filter for Street Map */
+/* Monotone Dark Inverted Tile Filter for Street Map */
 .leaflet-tile-pane {
-    filter: grayscale(100%) contrast(115%) brightness(0.95);
+    filter: invert(100%) hue-rotate(180deg) brightness(85%) contrast(90%);
 }
 
-/* Prevent Double-Tap Zoom while keeping Pinch Zoom */
-html, body, #map {
-    touch-action: manipulation !important;
+/* Prevent Window Pinch Zoom & Ensure Fixed UI Shell */
+header, footer, #dpad-container, #rules-modal, #menu-modal {
+    touch-action: none !important;
+    -webkit-user-select: none !important;
+    user-select: none !important;
 }
 
-button, #dpad-container, #dpad-container button, header, footer {
+button {
     touch-action: manipulation !important;
     -webkit-user-select: none !important;
     user-select: none !important;

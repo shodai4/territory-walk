@@ -1,6 +1,8 @@
 /**
  * TERRITORY WALK - grid.js
  * 100m Mesh Grid Calculation & Layer Render Module
+ * ナスカの地上絵モード：未開拓空マス描画を全廃し、塗られたマスのみを描画することで
+ * 日本全体・広域ズーム（zoom 1〜22）でもスマホで超軽量・高速描画を実現
  */
 
 class GridManager {
@@ -12,8 +14,9 @@ class GridManager {
         this.claimedTilesCache = new Map();
 
         this.LAT_GRID = 0.0009; // 約100m四方の緯度グリッド
-        this.MIN_ZOOM_FOR_GRID = 14;
 
+        this.checkWeekReset();
+        this.loadTilesFromStorage();
         this.initEventListeners();
         this.updateGrids();
     }
@@ -46,6 +49,46 @@ class GridManager {
         return { meshId: this.getMeshId(latIdx, lngIdx), latIdx, lngIdx };
     }
 
+    checkWeekReset() {
+        const currentWeek = this.app?.supabaseManager?.getCurrentWeekId() || 'default-week';
+        const savedWeek = localStorage.getItem('territory_saved_week');
+        if (savedWeek && savedWeek !== currentWeek) {
+            localStorage.removeItem('territory_claimed_tiles');
+            this.claimedTilesCache.clear();
+            this.gridLayerGroup.clearLayers();
+            this.renderedMeshes.clear();
+        }
+        localStorage.setItem('territory_saved_week', currentWeek);
+    }
+
+    loadTilesFromStorage() {
+        try {
+            const saved = localStorage.getItem('territory_claimed_tiles');
+            if (saved) {
+                const obj = JSON.parse(saved);
+                for (const [k, v] of Object.entries(obj)) {
+                    if (v === 'white' || v === 'black') {
+                        this.claimedTilesCache.set(k, v);
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn('Failed to load tiles from localStorage:', e);
+        }
+    }
+
+    saveTilesToStorage() {
+        try {
+            const obj = {};
+            for (const [k, v] of this.claimedTilesCache.entries()) {
+                obj[k] = v;
+            }
+            localStorage.setItem('territory_claimed_tiles', JSON.stringify(obj));
+        } catch (e) {
+            console.warn('Failed to save tiles to localStorage:', e);
+        }
+    }
+
     initEventListeners() {
         let throttleTimer = null;
         const onMapChange = () => {
@@ -53,7 +96,7 @@ class GridManager {
             throttleTimer = setTimeout(() => {
                 this.updateGrids();
                 throttleTimer = null;
-            }, 150);
+            }, 100);
         };
 
         this.map.on('moveend', onMapChange);
@@ -84,99 +127,117 @@ class GridManager {
                 });
             }
 
-            if (updated && this.app.updateScoreUI) {
-                this.app.updateScoreUI();
+            if (updated) {
+                this.saveTilesToStorage();
+                if (this.app.updateScoreUI) {
+                    this.app.updateScoreUI();
+                }
             }
         } catch (e) {
             console.warn('Tile sync failed or running offline:', e);
         }
     }
 
+    /**
+     * 広域ズーム（ナスカの地上絵モード）対応グリッド更新
+     * 空マスは一切生成せず、開拓済みタイルのみを高速描画
+     */
     async updateGrids() {
-        const currentZoom = this.map.getZoom();
-
-        if (currentZoom < this.MIN_ZOOM_FOR_GRID) {
-            if (this.renderedMeshes.size > 0) {
-                this.gridLayerGroup.clearLayers();
-                this.renderedMeshes.clear();
-            }
-            return;
-        }
-
         await this.fetchAndSyncTiles();
 
-        const bounds = this.map.getBounds();
-        const north = bounds.getNorth();
-        const south = bounds.getSouth();
-        const west = bounds.getWest();
-        const east = bounds.getEast();
+        const bounds = this.map.getBounds().pad(0.2);
+        const currentZoom = this.map.getZoom();
+        const isDistant = currentZoom < 13;
+        const activeMeshIds = new Set();
 
-        const swIndices = this.getMeshIndices(south, west);
-        const neIndices = this.getMeshIndices(north, east);
+        for (const [meshId, team] of this.claimedTilesCache.entries()) {
+            if (team !== 'white' && team !== 'black') continue;
 
-        const minLatIdx = Math.min(swIndices.latIdx, neIndices.latIdx) - 1;
-        const maxLatIdx = Math.max(swIndices.latIdx, neIndices.latIdx) + 1;
-        const minLngIdx = Math.min(swIndices.lngIdx, neIndices.lngIdx) - 1;
-        const maxLngIdx = Math.max(swIndices.lngIdx, neIndices.lngIdx) + 1;
+            const [latIdxStr, lngIdxStr] = meshId.split('_');
+            const latIdx = parseInt(latIdxStr, 10);
+            const lngIdx = parseInt(lngIdxStr, 10);
+            const meshBounds = this.getMeshBounds(latIdx, lngIdx);
 
-        const newVisibleMeshIds = new Set();
-
-        for (let latIdx = minLatIdx; latIdx <= maxLatIdx; latIdx++) {
-            for (let lngIdx = minLngIdx; lngIdx <= maxLngIdx; lngIdx++) {
-                const meshId = this.getMeshId(latIdx, lngIdx);
-                newVisibleMeshIds.add(meshId);
-
-                const team = this.claimedTilesCache.get(meshId);
-                const style = this.getTileStyle(team);
+            // 画面内に入るマスのみ描画（引きズーム時は広範囲が全て対象になる）
+            if (bounds.intersects(meshBounds)) {
+                activeMeshIds.add(meshId);
+                const style = this.getTileStyle(team, currentZoom);
 
                 if (this.renderedMeshes.has(meshId)) {
-                    const rectangle = this.renderedMeshes.get(meshId);
-                    rectangle.setStyle(style);
+                    const rect = this.renderedMeshes.get(meshId);
+                    if (rect._team !== team || rect._isDistant !== isDistant) {
+                        rect.setStyle(style);
+                        rect._team = team;
+                        rect._isDistant = isDistant;
+                    }
                 } else {
-                    const meshBounds = this.getMeshBounds(latIdx, lngIdx);
-                    const rectangle = L.rectangle(meshBounds, style);
-                    this.gridLayerGroup.addLayer(rectangle);
-                    this.renderedMeshes.set(meshId, rectangle);
+                    const rect = L.rectangle(meshBounds, style);
+                    rect._team = team;
+                    rect._isDistant = isDistant;
+                    this.gridLayerGroup.addLayer(rect);
+                    this.renderedMeshes.set(meshId, rect);
                 }
             }
         }
 
-        for (const [meshId, rectangle] of this.renderedMeshes.entries()) {
-            if (!newVisibleMeshIds.has(meshId)) {
-                this.gridLayerGroup.removeLayer(rectangle);
+        // 画面外に外れたマスをクリーンアップ
+        for (const [meshId, rect] of this.renderedMeshes.entries()) {
+            if (!activeMeshIds.has(meshId)) {
+                this.gridLayerGroup.removeLayer(rect);
                 this.renderedMeshes.delete(meshId);
             }
         }
     }
 
-    getTileStyle(team) {
+    /**
+     * 白マス・黒マスのスタイル定義
+     * 地図ON（ダーク反転）時も地図OFF（漆黒）時もオセロのように鮮明に際立つ境界線と配色
+     */
+    getTileStyle(team, currentZoom = 16) {
+        const isDistant = currentZoom < 13;
+        const strokeWidth = isDistant ? 0.8 : 1.5;
+
         if (team === 'white') {
             return {
-                color: '#ffffff',
-                weight: 1.5,
-                opacity: 0.95,
+                color: '#000000', // 白マスにクッキリした黒枠（オセロ白コマ調）
+                weight: strokeWidth,
+                opacity: 1.0,
                 fillColor: '#ffffff',
-                fillOpacity: 0.7,
+                fillOpacity: 0.92,
                 interactive: false
             };
         } else if (team === 'black') {
             return {
-                color: '#52525b', // Zinc-600 の明確な境界線（ダーク背景・街路樹マップ両方でくっきり視認）
-                weight: 1.5,
-                opacity: 0.95,
+                color: '#71717a', // 黒マスにZinc-500の明るい輪郭枠（ダーク背景でも埋もれない）
+                weight: strokeWidth,
+                opacity: 1.0,
                 fillColor: '#09090b',
-                fillOpacity: 0.85,
+                fillOpacity: 0.95,
                 interactive: false
             };
+        }
+        return null;
+    }
+
+    renderSingleTile(meshId, team) {
+        const [latIdxStr, lngIdxStr] = meshId.split('_');
+        const latIdx = parseInt(latIdxStr, 10);
+        const lngIdx = parseInt(lngIdxStr, 10);
+        const meshBounds = this.getMeshBounds(latIdx, lngIdx);
+        const currentZoom = this.map.getZoom();
+        const style = this.getTileStyle(team, currentZoom);
+
+        if (this.renderedMeshes.has(meshId)) {
+            const rect = this.renderedMeshes.get(meshId);
+            rect.setStyle(style);
+            rect._team = team;
+            rect._isDistant = currentZoom < 13;
         } else {
-            return {
-                color: '#3f3f46',
-                weight: 1,
-                opacity: 0.25,
-                fillColor: '#ffffff',
-                fillOpacity: 0.02,
-                interactive: false
-            };
+            const rect = L.rectangle(meshBounds, style);
+            rect._team = team;
+            rect._isDistant = currentZoom < 13;
+            this.gridLayerGroup.addLayer(rect);
+            this.renderedMeshes.set(meshId, rect);
         }
     }
 
@@ -191,10 +252,8 @@ class GridManager {
         }
 
         this.claimedTilesCache.set(meshId, currentTeam);
-
-        if (this.renderedMeshes.has(meshId)) {
-            this.renderedMeshes.get(meshId).setStyle(this.getTileStyle(currentTeam));
-        }
+        this.renderSingleTile(meshId, currentTeam);
+        this.saveTilesToStorage();
 
         if (this.app.playClaimSound) {
             this.app.playClaimSound();
