@@ -221,11 +221,6 @@ class TerritoryWalkApp {
             btn.addEventListener('click', (e) => {
                 const targetSkin = e.currentTarget.dataset.skin;
 
-                // Non-default skins require Pro unless in Debug Mode
-                if (targetSkin !== 'default' && !this.isDebugMode && !this.checkProAccess('限定スキン')) {
-                    return;
-                }
-
                 document.body.dataset.skin = targetSkin;
                 localStorage.setItem('territory_skin', targetSkin);
                 this.updateSkinBadge(targetSkin);
@@ -234,6 +229,7 @@ class TerritoryWalkApp {
                 if (this.gridManager) {
                     this.gridManager.redrawTiles();
                 }
+                this.showToast(`テーマを変更しました`);
             });
         });
     }
