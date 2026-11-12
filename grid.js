@@ -1,6 +1,8 @@
 /**
- * TERRITORY WALK - grid.js (Part 1)
+ * TERRITORY WALK - grid.js
+ * 100m Mesh Grid Calculation & Layer Render Module
  */
+
 class GridManager {
     constructor(mapInstance, appInstance) {
         this.map = mapInstance;
@@ -9,7 +11,7 @@ class GridManager {
         this.renderedMeshes = new Map();
         this.claimedTilesCache = new Map();
 
-        this.LAT_GRID = 0.0009;
+        this.LAT_GRID = 0.0009; // 約100m四方の緯度グリッド
         this.MIN_ZOOM_FOR_GRID = 14;
 
         this.initEventListeners();
@@ -56,27 +58,37 @@ class GridManager {
 
         this.map.on('moveend', onMapChange);
         this.map.on('zoomend', onMapChange);
+    }
+
     async fetchAndSyncTiles() {
         if (!this.app || !this.app.supabaseManager) return;
 
-        const bounds = this.map.getBounds();
-        const tiles = await this.app.supabaseManager.fetchTilesInBounds(
-            bounds.getSouth(),
-            bounds.getNorth(),
-            bounds.getWest(),
-            bounds.getEast()
-        );
+        try {
+            const bounds = this.map.getBounds();
+            const tiles = await this.app.supabaseManager.fetchTilesInBounds(
+                bounds.getSouth(),
+                bounds.getNorth(),
+                bounds.getWest(),
+                bounds.getEast()
+            );
 
-        let updated = false;
-        tiles.forEach(tile => {
-            if (this.claimedTilesCache.get(tile.tile_id) !== tile.team) {
-                this.claimedTilesCache.set(tile.tile_id, tile.team);
-                updated = true;
+            let updated = false;
+            if (Array.isArray(tiles)) {
+                tiles.forEach(tile => {
+                    if (tile && tile.tile_id && tile.team) {
+                        if (this.claimedTilesCache.get(tile.tile_id) !== tile.team) {
+                            this.claimedTilesCache.set(tile.tile_id, tile.team);
+                            updated = true;
+                        }
+                    }
+                });
             }
-        });
 
-        if (updated && this.map.getZoom() >= this.MIN_ZOOM_FOR_GRID) {
-            this.updateGrids();
+            if (updated && this.app.updateScoreUI) {
+                this.app.updateScoreUI();
+            }
+        } catch (e) {
+            console.warn('Tile sync failed or running offline:', e);
         }
     }
 
@@ -184,10 +196,22 @@ class GridManager {
             this.renderedMeshes.get(meshId).setStyle(this.getTileStyle(currentTeam));
         }
 
-        if (this.app.supabaseManager) {
-            await this.app.supabaseManager.claimTile(meshId, latIdx, lngIdx, currentTeam);
+        if (this.app.playClaimSound) {
+            this.app.playClaimSound();
         }
-    }
+        if (this.app.triggerHaptic) {
+            this.app.triggerHaptic();
+        }
+        if (this.app.updateScoreUI) {
+            this.app.updateScoreUI();
+        }
 
+        if (this.app.supabaseManager) {
+            try {
+                await this.app.supabaseManager.claimTile(meshId, latIdx, lngIdx, currentTeam);
+            } catch (err) {
+                console.warn('Supabase claimTile offline/error:', err);
+            }
+        }
     }
 }

@@ -1,8 +1,10 @@
 /**
- * TERRITORY WALK - app.js (Part 1)
+ * TERRITORY WALK - app.js
+ * Main Application Controller
  */
+
 const CONFIG = {
-    DEFAULT_CENTER: [34.6654, 135.6268],
+    DEFAULT_CENTER: [34.6654, 135.6268], // 東花園駅周辺（東大阪市）
     DEFAULT_ZOOM: 16,
     TILE_URL: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
     TILE_OPTIONS: {
@@ -31,17 +33,10 @@ class TerritoryWalkApp {
         this.initSupabase();
         this.initGrid();
         this.initGeolocation();
-        this.initTeam();
-        this.initDOM();
-        this.initMap();
-        this.initSupabase();
-        this.initGrid();
-        this.initGeolocation();
         this.initEvents();
         this.initDPad();
         this.initResetCountdown();
-        this.initEvents();
-        this.initDPad();
+        this.updateScoreUI();
     }
 
     initTeam() {
@@ -74,12 +69,48 @@ class TerritoryWalkApp {
         if (this.currentTeam === 'white') {
             this.teamBadgeContainer.innerHTML = `
                 <span class="inline-block w-3 h-3 rounded-full bg-white border border-zinc-400 shadow-[0_0_8px_rgba(255,255,255,0.8)]"></span>
-                <span class="text-white">TEAM: WHITE</span>
+                <span class="text-white font-bold">TEAM: WHITE</span>
             `;
         } else {
             this.teamBadgeContainer.innerHTML = `
                 <span class="inline-block w-3 h-3 rounded-full bg-black border-2 border-white shadow-[0_0_8px_rgba(0,0,0,0.9)]"></span>
-                <span class="text-white">TEAM: BLACK</span>
+                <span class="text-white font-bold">TEAM: BLACK</span>
+            `;
+        }
+    }
+
+    initMap() {
+        this.map = L.map('map', {
+            zoomControl: false,
+            attributionControl: true
+        }).setView(CONFIG.DEFAULT_CENTER, CONFIG.DEFAULT_ZOOM);
+
+        L.control.zoom({ position: 'topright' }).addTo(this.map);
+        L.tileLayer(CONFIG.TILE_URL, CONFIG.TILE_OPTIONS).addTo(this.map);
+
+        this.updatePlayerMarker(CONFIG.DEFAULT_CENTER);
+
+        this.map.on('dragstart', () => {
+            this.isFollowingUser = false;
+        });
+    }
+
+    initSupabase() {
+        if (typeof SupabaseManager !== 'undefined') {
+            this.supabaseManager = new SupabaseManager();
+        } else {
+            console.warn('SupabaseManager is not defined.');
+        }
+    }
+
+    initGrid() {
+        if (typeof GridManager !== 'undefined') {
+            this.gridManager = new GridManager(this.map, this);
+        } else {
+            console.warn('GridManager is not defined.');
+        }
+    }
+
     initGeolocation() {
         if (!navigator.geolocation) {
             this.updateGPSStatus('UNSUPPORTED', 'bg-red-500', 'text-red-400');
@@ -112,8 +143,8 @@ class TerritoryWalkApp {
         const lng = position.coords.longitude;
         this.currentPosition = [lat, lng];
 
-        this.latValEl.textContent = lat.toFixed(4);
-        this.lngValEl.textContent = lng.toFixed(4);
+        if (this.latValEl) this.latValEl.textContent = lat.toFixed(4);
+        if (this.lngValEl) this.lngValEl.textContent = lng.toFixed(4);
 
         this.updateGPSStatus('GPS ACTIVE', 'bg-emerald-400', 'text-emerald-400');
         this.updatePlayerMarker(this.currentPosition);
@@ -152,41 +183,35 @@ class TerritoryWalkApp {
         }
     }
 
-    initMap() {
-        this.map = L.map('map', {
-            zoomControl: false,
-            attributionControl: true
-        }).setView(CONFIG.DEFAULT_CENTER, CONFIG.DEFAULT_ZOOM);
+    updatePlayerMarker(latLng) {
+        const isWhite = this.currentTeam === 'white';
+        const pulseClass = isWhite ? 'player-pulse-white' : 'player-pulse-black';
+        const dotClass = isWhite ? 'player-dot-white' : 'player-dot-black';
 
-        L.control.zoom({ position: 'topright' }).addTo(this.map);
+        const playerIcon = L.divIcon({
+            className: 'player-marker-container',
+            html: `<div class="${pulseClass}"></div><div class="${dotClass}"></div>`,
+            iconSize: [20, 20],
+            iconAnchor: [10, 10]
+        });
+
+        if (this.playerMarker) {
+            this.playerMarker.setLatLng(latLng);
+            this.playerMarker.setIcon(playerIcon);
+        } else {
+            this.playerMarker = L.marker(latLng, { icon: playerIcon }).addTo(this.map);
+            this.playerMarker.bindPopup(`<div class="text-black font-bold text-xs uppercase">現在地 (${this.currentTeam} TEAM)</div>`);
+        }
+    }
+
     async processMeshAndClaim(lat, lng) {
         if (!this.gridManager) return;
-
-        const { meshId, latIdx, lngIdx } = this.gridManager.getMeshIdFromLatLng(lat, lng);
-        const cachedTeam = this.gridManager.claimedTilesCache.get(meshId);
-
-        if (this.currentMeshId !== meshId || cachedTeam !== this.currentTeam) {
-            this.currentMeshId = meshId;
-
-            this.gridManager.claimedTilesCache.set(meshId, this.currentTeam);
-            if (this.gridManager.renderedMeshes.has(meshId)) {
-                this.gridManager.renderedMeshes.get(meshId).setStyle(this.gridManager.getTileStyle(this.currentTeam));
-            }
-
-            this.playClaimSound();
-            this.triggerHaptic();
-
-            if (this.supabaseManager) {
-                await this.supabaseManager.claimTile(meshId, latIdx, lngIdx, this.currentTeam);
-            }
-        }
+        await this.gridManager.onPlayerStep(lat, lng);
     }
 
     playClaimSound() {
         try {
             if (!this.audioCtx) {
-        this.updateScoreUI();
-
                 const AudioContext = window.AudioContext || window.webkitAudioContext;
                 if (AudioContext) {
                     this.audioCtx = new AudioContext();
@@ -201,7 +226,7 @@ class TerritoryWalkApp {
                 osc.type = 'sine';
                 osc.frequency.setValueAtTime(587.33, this.audioCtx.currentTime);
                 osc.frequency.exponentialRampToValueAtTime(880, this.audioCtx.currentTime + 0.08);
-                
+
                 gain.gain.setValueAtTime(0.15, this.audioCtx.currentTime);
                 gain.gain.exponentialRampToValueAtTime(0.01, this.audioCtx.currentTime + 0.12);
 
@@ -222,6 +247,32 @@ class TerritoryWalkApp {
         } catch (e) {}
     }
 
+    updateScoreUI() {
+        let whiteCount = 0;
+        let blackCount = 0;
+
+        if (this.gridManager && this.gridManager.claimedTilesCache) {
+            for (const team of this.gridManager.claimedTilesCache.values()) {
+                if (team === 'white') whiteCount++;
+                else if (team === 'black') blackCount++;
+            }
+        }
+
+        const total = whiteCount + blackCount;
+        let whitePct = 50;
+        let blackPct = 50;
+
+        if (total > 0) {
+            whitePct = Math.round((whiteCount / total) * 100);
+            blackPct = 100 - whitePct;
+        }
+
+        if (this.scoreBlackEl) this.scoreBlackEl.textContent = `${blackPct}%`;
+        if (this.scoreWhiteEl) this.scoreWhiteEl.textContent = `${whitePct}%`;
+        if (this.barBlackEl) this.barBlackEl.style.width = `${blackPct}%`;
+        if (this.barWhiteEl) this.barWhiteEl.style.width = `${whitePct}%`;
+    }
+
     initDPad() {
         const btnUp = document.getElementById('dpad-up');
         const btnDown = document.getElementById('dpad-down');
@@ -235,8 +286,8 @@ class TerritoryWalkApp {
             this.currentPosition[0] += dLat;
             this.currentPosition[1] += dLng;
 
-            this.latValEl.textContent = this.currentPosition[0].toFixed(4);
-            this.lngValEl.textContent = this.currentPosition[1].toFixed(4);
+            if (this.latValEl) this.latValEl.textContent = this.currentPosition[0].toFixed(4);
+            if (this.lngValEl) this.lngValEl.textContent = this.currentPosition[1].toFixed(4);
 
             this.updatePlayerMarker(this.currentPosition);
             this.map.setView(this.currentPosition, this.map.getZoom(), { animate: true });
@@ -267,30 +318,18 @@ class TerritoryWalkApp {
     initEvents() {
         if (this.btnRecenter) {
             this.btnRecenter.addEventListener('click', () => {
-    updateScoreUI() {
-        let whiteCount = 0;
-        let blackCount = 0;
+                this.isFollowingUser = true;
+                if (this.currentPosition) {
+                    this.map.setView(this.currentPosition, Math.max(this.map.getZoom(), 16), { animate: true });
+                }
+            });
+        }
 
-        if (this.gridManager && this.gridManager.claimedTilesCache) {
-            for (const team of this.gridManager.claimedTilesCache.values()) {
-                if (team === 'white') whiteCount++;
-                else if (team === 'black') blackCount++;
+        window.addEventListener('resize', () => {
+            if (this.map) {
+                this.map.invalidateSize();
             }
-        }
-
-        const total = whiteCount + blackCount;
-        let whitePct = 50;
-        let blackPct = 50;
-
-        if (total > 0) {
-            whitePct = Math.round((whiteCount / total) * 100);
-            blackPct = 100 - whitePct;
-        }
-
-        if (this.scoreBlackEl) this.scoreBlackEl.textContent = `${blackPct}%`;
-        if (this.scoreWhiteEl) this.scoreWhiteEl.textContent = `${whitePct}%`;
-        if (this.barBlackEl) this.barBlackEl.style.width = `${blackPct}%`;
-        if (this.barWhiteEl) this.barWhiteEl.style.width = `${whitePct}%`;
+        });
     }
 
     initResetCountdown() {
@@ -304,7 +343,7 @@ class TerritoryWalkApp {
 
             const dayOfWeek = jstDate.getDay();
             const daysUntilMonday = (1 + 7 - dayOfWeek) % 7;
-            
+
             const nextMonday = new Date(jstDate);
             nextMonday.setDate(jstDate.getDate() + (daysUntilMonday === 0 ? 7 : daysUntilMonday));
             nextMonday.setHours(0, 0, 0, 0);
@@ -329,67 +368,8 @@ class TerritoryWalkApp {
         updateTimer();
         setInterval(updateTimer, 60000);
     }
+}
 
-                this.isFollowingUser = true;
-                if (this.currentPosition) {
-                    this.map.setView(this.currentPosition, Math.max(this.map.getZoom(), 16), { animate: true });
-                }
-            });
-        }
-
-        window.addEventListener('resize', () => {
-            if (this.map) {
-                this.map.invalidateSize();
-            }
-        });
-    }
-
-        L.tileLayer(CONFIG.TILE_URL, CONFIG.TILE_OPTIONS).addTo(this.map);
-
-        this.updatePlayerMarker(CONFIG.DEFAULT_CENTER);
-
-        this.map.on('dragstart', () => {
-            this.isFollowingUser = false;
-        });
-    }
-
-    updatePlayerMarker(latLng) {
-        const isWhite = this.currentTeam === 'white';
-        const pulseClass = isWhite ? 'player-pulse-white' : 'player-pulse-black';
-        const dotClass = isWhite ? 'player-dot-white' : 'player-dot-black';
-
-        const playerIcon = L.divIcon({
-            className: 'player-marker-container',
-            html: `<div class="${pulseClass}"></div><div class="${dotClass}"></div>`,
-            iconSize: [20, 20],
-            iconAnchor: [10, 10]
-        });
-
-        if (this.playerMarker) {
-            this.playerMarker.setLatLng(latLng);
-            this.playerMarker.setIcon(playerIcon);
-        } else {
-            this.playerMarker = L.marker(latLng, { icon: playerIcon }).addTo(this.map);
-            this.playerMarker.bindPopup(`<div class="text-black font-bold text-xs uppercase">現在地 (${this.currentTeam} TEAM)</div>`);
-        }
-    }
-
-    initSupabase() {
-        if (typeof SupabaseManager !== 'undefined') {
-            this.supabaseManager = new SupabaseManager();
-        } else {
-            console.warn('SupabaseManager is not defined.');
-        }
-    }
-
-    initGrid() {
-        if (typeof GridManager !== 'undefined') {
-            this.gridManager = new GridManager(this.map, this);
-        } else {
-            console.warn('GridManager is not defined.');
-        }
-    }
-
-            `;
-        }
-    }
+document.addEventListener('DOMContentLoaded', () => {
+    window.territoryApp = new TerritoryWalkApp();
+});
