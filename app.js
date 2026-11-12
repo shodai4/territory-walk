@@ -65,6 +65,10 @@ class TerritoryWalkApp {
         this.scoreWhiteEl = document.getElementById('score-white');
         this.barBlackEl = document.getElementById('bar-black');
         this.barWhiteEl = document.getElementById('bar-white');
+        this.footerScoreBlackEl = document.getElementById('footer-score-black');
+        this.footerScoreWhiteEl = document.getElementById('footer-score-white');
+        this.footerBarBlackEl = document.getElementById('footer-bar-black');
+        this.footerBarWhiteEl = document.getElementById('footer-bar-white');
         this.teamBadgeEl = document.getElementById('team-badge');
 
         // デバッグ & D-Pad要素
@@ -451,6 +455,11 @@ class TerritoryWalkApp {
         if (this.scoreWhiteEl) this.scoreWhiteEl.textContent = `${whitePct}%`;
         if (this.barBlackEl) this.barBlackEl.style.width = `${blackPct}%`;
         if (this.barWhiteEl) this.barWhiteEl.style.width = `${whitePct}%`;
+
+        if (this.footerScoreBlackEl) this.footerScoreBlackEl.textContent = `${blackPct}%`;
+        if (this.footerScoreWhiteEl) this.footerScoreWhiteEl.textContent = `${whitePct}%`;
+        if (this.footerBarBlackEl) this.footerBarBlackEl.style.width = `${blackPct}%`;
+        if (this.footerBarWhiteEl) this.footerBarWhiteEl.style.width = `${whitePct}%`;
     }
 
     initDPad() {
