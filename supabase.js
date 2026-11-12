@@ -3,8 +3,8 @@
  * Supabase Client & Territory Data Sync Module with Asia/Tokyo ISO Week Support
  */
 
-const SUPABASE_URL = 'https://your-supabase-project.supabase.co';
-const SUPABASE_ANON_KEY = 'your-supabase-anon-key-here';
+const SUPABASE_URL = 'https://xxzmrdfroqeflfgszgls.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_sPah3iPPh-CesDyG0hxG_A_ZMu2VTkb';
 
 class SupabaseManager {
     constructor() {

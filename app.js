@@ -67,6 +67,14 @@ class TerritoryWalkApp {
             savedTeam = Math.random() < 0.5 ? 'white' : 'black';
             localStorage.setItem('player_team', savedTeam);
         }
+        // Sync remote tiles when map moves
+        this.map.on('moveend', () => {
+            this.loadRemoteTiles();
+        });
+
+        // Load initially
+        this.loadRemoteTiles();
+
         this.currentTeam = savedTeam;
         this.applyTheme();
     }
@@ -142,6 +150,37 @@ class TerritoryWalkApp {
             this.swapTeamIcon.className = 'w-2 h-2 rounded-full bg-black border border-zinc-300';
             this.swapTeamText.textContent = 'SWAP: Blackへ切替';
         }
+    async processMeshAndClaim(lat, lng) {
+        if (!this.gridManager) return;
+
+        const { meshId, latIdx, lngIdx } = this.gridManager.getMeshIdFromLatLng(lat, lng);
+        const cachedTeam = this.gridManager.claimedTilesCache.get(meshId);
+
+        if (this.currentMeshId !== meshId || cachedTeam !== this.currentTeam) {
+            this.currentMeshId = meshId;
+
+            // 1. Immediate local UI update (no lag)
+            this.gridManager.claimedTilesCache.set(meshId, this.currentTeam);
+            if (this.gridManager.renderedMeshes.has(meshId)) {
+                this.gridManager.renderedMeshes.get(meshId).setStyle(this.gridManager.getTileStyle(this.currentTeam));
+            }
+            this.updateScoreUI();
+
+            // 2. Play sound effect & haptic feedback
+            this.playClaimSound();
+            this.triggerHaptic();
+
+            // 3. Async Supabase UPSERT sync
+            if (this.supabaseManager) {
+                try {
+                    await this.supabaseManager.claimTile(meshId, latIdx, lngIdx, this.currentTeam);
+                } catch (e) {
+                    console.warn('Supabase sync failed, tile remains saved locally:', e);
+                }
+            }
+        }
+    }
+
     }
 
     initMap() {
@@ -343,6 +382,22 @@ class TerritoryWalkApp {
     initGrid() {
         if (typeof GridManager !== 'undefined') {
             this.gridManager = new GridManager(this.map, this);
+    async loadRemoteTiles() {
+        if (!this.supabaseManager) return;
+        const bounds = this.map.getBounds();
+        const tiles = await this.supabaseManager.fetchTilesInBounds(
+            bounds.getSouth(),
+            bounds.getNorth(),
+            bounds.getWest(),
+            bounds.getEast()
+        );
+        if (this.gridManager) {
+            tiles.forEach(t => this.gridManager.claimedTilesCache.set(t.tile_id, t.team));
+            this.gridManager.updateGrids();
+            this.updateScoreUI();
+        }
+    }
+
         } else {
             console.warn('GridManager is not defined.');
         }
