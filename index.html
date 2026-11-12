@@ -9,47 +9,66 @@
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
     <!-- Custom CSS -->
-    <link rel="stylesheet" href="style.css?v=20261112v6">
+    <link rel="stylesheet" href="style.css?v=20261112v7">
 </head>
 <body class="bg-black text-white overflow-hidden h-screen w-screen flex flex-col m-0 p-0 select-none">
 
-    <!-- ヘッダー：黒基調のミニマルなステータスバー -->
-    <header class="absolute top-0 left-0 right-0 z-[1000] bg-black/85 backdrop-blur-md border-b border-zinc-800 px-3 py-2.5 flex items-center justify-between text-xs select-none shadow-lg">
-        <!-- 左：タイトル -->
-        <div class="font-bold tracking-wider text-zinc-100 flex items-center gap-1.5 text-xs shrink-0">
-            <span class="w-2 h-2 rounded-full bg-white animate-pulse"></span>
-            <span>TERRITORY WALK</span>
+    <!-- ヘッダー：2行構成（1行目: タイトル+チーム+MENU / 2行目: 点滅GPSランプ+全幅対戦パーセンテージバー） -->
+    <header class="absolute top-0 left-0 right-0 z-[1000] bg-black/85 backdrop-blur-md border-b border-zinc-800 px-3 py-2 flex flex-col gap-2 text-xs select-none shadow-lg">
+        <!-- 1行目（メインヘッダー） -->
+        <div class="flex items-center justify-between w-full">
+            <!-- 左：タイトル -->
+            <div class="font-bold tracking-wider text-zinc-100 flex items-center gap-1.5 text-xs shrink-0">
+                <span class="w-2 h-2 rounded-full bg-white animate-pulse"></span>
+                <span class="font-mono tracking-wider font-bold">TERRITORY WALK</span>
+            </div>
+
+            <!-- 右：現在チーム表示 & MENUボタン -->
+            <div class="flex items-center gap-2 shrink-0">
+                <div id="team-badge" class="flex items-center gap-1.5 bg-zinc-900 border border-zinc-700/60 px-2.5 py-1 rounded-full font-mono text-xs shadow-inner">
+                    <!-- JSで動的切替: [●] Black または [○] White -->
+                </div>
+                <button id="btn-menu" class="bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-700 border border-zinc-700/80 text-zinc-200 px-2.5 py-1 rounded-lg text-xs font-mono font-bold flex items-center gap-1 shadow transition-all active:scale-95">
+                    <svg class="w-3.5 h-3.5 text-zinc-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                    </svg>
+                    <span>MENU</span>
+                </button>
+            </div>
         </div>
 
-        <!-- 中央：白黒スコア比率バー -->
-        <div class="flex items-center gap-1.5 flex-1 max-w-[130px] sm:max-w-xs mx-2 justify-center">
-            <span id="score-black" class="text-white font-mono font-bold text-[11px]">50%</span>
-            <div class="flex-1 h-2 bg-zinc-800 rounded-full overflow-hidden flex border border-zinc-700 shadow-inner">
-                <div id="bar-black" class="bg-zinc-100 transition-all duration-500" style="width: 50%;"></div>
-                <div id="bar-white" class="bg-zinc-600 transition-all duration-500" style="width: 50%;"></div>
+        <!-- 2行目（サブヘッダー・全幅対戦バー & 点滅GPSランプ） -->
+        <div class="flex items-center gap-2.5 w-full">
+            <!-- 左端：GPSステータスランプ（文字なし、点滅ドットのみ） -->
+            <div id="gps-status-indicator" class="flex items-center justify-center p-1 rounded-full bg-zinc-900/90 border border-zinc-800 shrink-0" title="GPS Status">
+                <span id="gps-dot" class="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse"></span>
             </div>
-            <span id="score-white" class="text-zinc-400 font-mono font-bold text-[11px]">50%</span>
-        </div>
 
-        <!-- 右：現在チーム表示 & MENUボタン -->
-        <div class="flex items-center gap-1.5 sm:gap-2 shrink-0">
-            <div id="team-badge" class="flex items-center gap-1.5 bg-zinc-900 border border-zinc-700/60 px-2.5 py-1 rounded-full font-mono text-xs shadow-inner">
-                <!-- JSで動的切替: [●] Black または [○] White -->
+            <!-- 残り幅全体：Black vs White 対戦パーセンテージバー -->
+            <div class="flex-1 flex items-center gap-2 bg-zinc-950/80 border border-zinc-800/80 px-2.5 py-1 rounded-xl">
+                <div class="flex items-center gap-1.5 shrink-0">
+                    <span class="w-2.5 h-2.5 rounded-full bg-zinc-300 shadow-sm border border-zinc-400"></span>
+                    <span class="text-[10px] text-zinc-400 font-mono hidden xs:inline">Black</span>
+                    <span id="score-black" class="text-white font-mono font-bold text-xs">50%</span>
+                </div>
+                <div class="flex-1 h-3 bg-zinc-900 rounded-full overflow-hidden flex border border-zinc-700/80 shadow-inner">
+                    <div id="bar-black" class="bg-zinc-100 transition-all duration-500" style="width: 50%;"></div>
+                    <div id="bar-white" class="bg-zinc-600 transition-all duration-500" style="width: 50%;"></div>
+                </div>
+                <div class="flex items-center gap-1.5 shrink-0">
+                    <span id="score-white" class="text-zinc-400 font-mono font-bold text-xs">50%</span>
+                    <span class="text-[10px] text-zinc-500 font-mono hidden xs:inline">White</span>
+                    <span class="w-2.5 h-2.5 rounded-full bg-zinc-700 border border-zinc-500 shadow-sm"></span>
+                </div>
             </div>
-            <button id="btn-menu" class="bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-700 border border-zinc-700/80 text-zinc-200 px-2.5 py-1 rounded-lg text-xs font-mono font-bold flex items-center gap-1 shadow transition-all active:scale-95">
-                <svg class="w-3.5 h-3.5 text-zinc-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
-                </svg>
-                <span>MENU</span>
-            </button>
         </div>
     </header>
 
-    <!-- 地図コンテナ -->
+    <!-- 地図コンテナ（全画面表示） -->
     <main id="map" class="flex-1 w-full h-full z-0"></main>
 
     <!-- 右下：テスト用仮想散歩 D-Pad ＆ チーム切替デバッグ機能（MENUでON/OFF可能） -->
-    <div id="dpad-container" class="absolute bottom-20 right-4 z-[1000] bg-black/85 backdrop-blur-md border border-zinc-800 p-2.5 rounded-2xl shadow-2xl select-none flex flex-col items-center gap-1 hidden">
+    <div id="dpad-container" class="fixed bottom-24 right-4 z-[1000] bg-black/85 backdrop-blur-md border border-zinc-800 p-2.5 rounded-2xl shadow-2xl select-none flex flex-col items-center gap-1 hidden">
         <div class="text-[9px] text-zinc-400 font-mono tracking-wider mb-0.5">VIRTUAL D-PAD (DEBUG)</div>
         <button id="dpad-up" class="w-10 h-10 bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-700 border border-zinc-700 text-white rounded-lg flex items-center justify-center font-bold text-sm shadow transition-all active:scale-95">▲</button>
         <div class="flex items-center gap-6">
@@ -66,47 +85,22 @@
         </button>
     </div>
 
-    <!-- フッター：対戦パーセンテージ、GPSステータスバッジ、自機リセンターボタン -->
-    <footer class="absolute bottom-4 left-4 right-4 z-[1000] flex items-center justify-between pointer-events-none select-none">
-        <!-- 左側：GPSステータス & 対戦パーセンテージ（Black vs White） -->
-        <div class="flex items-center gap-2 pointer-events-auto bg-black/85 backdrop-blur-md border border-zinc-800 px-3 py-2 rounded-2xl shadow-xl text-xs font-mono">
-            <div id="gps-badge" class="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400 text-[10px] font-bold border border-zinc-700 shrink-0">
-                <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" id="gps-dot"></span>
-                <span id="gps-text">GPS SEARCH</span>
-            </div>
+    <!-- 右下：独立した大型円形フローティング現在地（リセンター）ボタン -->
+    <button id="btn-recenter" aria-label="現在地に戻る" title="現在地に戻る" class="fixed bottom-6 right-6 z-[1000] w-14 h-14 bg-black/90 hover:bg-zinc-900 active:bg-zinc-800 text-white border border-zinc-700/90 hover:border-zinc-500 rounded-full shadow-2xl flex items-center justify-center transition-all transform active:scale-95">
+        <svg class="w-7 h-7 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="7"></circle>
+            <circle cx="12" cy="12" r="2.5" fill="currentColor"></circle>
+            <line x1="12" y1="2" x2="12" y2="5"></line>
+            <line x1="12" y1="19" x2="12" y2="22"></line>
+            <line x1="2" y1="12" x2="5" y2="12"></line>
+            <line x1="19" y1="12" x2="22" y2="12"></line>
+        </svg>
+    </button>
 
-            <!-- 対戦パーセンテージ（目立つように配置） -->
-            <div class="flex items-center gap-2 pl-2 border-l border-zinc-800">
-                <div class="flex items-center gap-1">
-                    <span class="w-2.5 h-2.5 rounded-full bg-zinc-300 shadow-sm"></span>
-                    <span id="footer-score-black" class="text-white text-xs font-mono font-bold">50%</span>
-                </div>
-                <div class="w-16 sm:w-24 h-2.5 bg-zinc-900 rounded-full overflow-hidden flex border border-zinc-700 shadow-inner">
-                    <div id="footer-bar-black" class="bg-zinc-100 transition-all duration-500" style="width: 50%;"></div>
-                    <div id="footer-bar-white" class="bg-zinc-600 transition-all duration-500" style="width: 50%;"></div>
-                </div>
-                <div class="flex items-center gap-1">
-                    <span id="footer-score-white" class="text-zinc-400 text-xs font-mono font-bold">50%</span>
-                    <span class="w-2.5 h-2.5 rounded-full bg-zinc-700 border border-zinc-500 shadow-sm"></span>
-                </div>
-            </div>
-        </div>
-
-        <!-- 右側：自機リセンターボタン（文字なし・照準アイコン・円形） -->
-        <div class="pointer-events-auto">
-            <button id="btn-recenter" aria-label="現在地に戻る" title="現在地に戻る" class="w-11 h-11 bg-black/90 hover:bg-zinc-900 active:bg-zinc-800 text-white border border-zinc-700/80 hover:border-zinc-500 rounded-full shadow-2xl flex items-center justify-center transition-all transform active:scale-90">
-                <svg class="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="7"></circle>
-                    <circle cx="12" cy="12" r="2" fill="currentColor"></circle>
-                    <line x1="12" y1="2" x2="12" y2="5"></line>
-                    <line x1="12" y1="19" x2="12" y2="22"></line>
-                    <line x1="2" y1="12" x2="5" y2="12"></line>
-                    <line x1="19" y1="12" x2="22" y2="12"></line>
-                </svg>
-            </button>
-        </div>
-    </footer>
-    <div class="absolute bottom-1 left-0 right-0 z-[900] pointer-events-none text-center text-[9px] text-zinc-500/80 font-mono">Created for お絵描き楽しも委員会（しょうだい）</div>
+    <!-- 最下部中央クレジット（薄く邪魔にならないよう配置、タップ無効化） -->
+    <div class="absolute bottom-2 left-0 right-0 z-[900] pointer-events-none text-center text-[10px] text-zinc-400 opacity-40 font-mono select-none">
+        Created with ❤️ for お絵描き楽しも委員会（しょうだい）
+    </div>
 
     <!-- ルール説明モーダル（初回アクセス時自動表示 & MENUから再表示） -->
     <div id="rules-modal" class="fixed inset-0 z-[2000] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 hidden">
@@ -242,8 +236,8 @@
     <!-- Supabase Client Module -->
     <script src="supabase.js"></script>
     <!-- Grid Calculation & Render Module -->
-    <script src="grid.js?v=20261112v6"></script>
+    <script src="grid.js?v=20261112v7"></script>
     <!-- Main Application Logic -->
-    <script src="app.js?v=20261112v6"></script>
+    <script src="app.js?v=20261112v7"></script>
 </body>
 </html>

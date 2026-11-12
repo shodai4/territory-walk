@@ -57,18 +57,13 @@ class TerritoryWalkApp {
     initDOM() {
         this.latValEl = document.getElementById('lat-val');
         this.lngValEl = document.getElementById('lng-val');
-        this.gpsBadgeEl = document.getElementById('gps-badge');
+        this.gpsStatusIndicatorEl = document.getElementById('gps-status-indicator');
         this.gpsDotEl = document.getElementById('gps-dot');
-        this.gpsTextEl = document.getElementById('gps-text');
         this.btnRecenter = document.getElementById('btn-recenter');
         this.scoreBlackEl = document.getElementById('score-black');
         this.scoreWhiteEl = document.getElementById('score-white');
         this.barBlackEl = document.getElementById('bar-black');
         this.barWhiteEl = document.getElementById('bar-white');
-        this.footerScoreBlackEl = document.getElementById('footer-score-black');
-        this.footerScoreWhiteEl = document.getElementById('footer-score-white');
-        this.footerBarBlackEl = document.getElementById('footer-bar-black');
-        this.footerBarWhiteEl = document.getElementById('footer-bar-white');
         this.teamBadgeEl = document.getElementById('team-badge');
 
         // デバッグ & D-Pad要素
@@ -358,12 +353,11 @@ class TerritoryWalkApp {
     }
 
     updateGPSStatus(text, dotColorClass, textColorClass) {
-        if (this.gpsTextEl) this.gpsTextEl.textContent = text;
-        if (this.gpsBadgeEl) {
-            this.gpsBadgeEl.className = `flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-zinc-800 ${textColorClass} text-[10px] font-bold border border-zinc-700`;
-        }
         if (this.gpsDotEl) {
-            this.gpsDotEl.className = `w-1.5 h-1.5 rounded-full ${dotColorClass} animate-ping`;
+            this.gpsDotEl.className = `w-2.5 h-2.5 rounded-full ${dotColorClass} animate-pulse`;
+        }
+        if (this.gpsStatusIndicatorEl) {
+            this.gpsStatusIndicatorEl.title = text;
         }
     }
 
@@ -455,11 +449,6 @@ class TerritoryWalkApp {
         if (this.scoreWhiteEl) this.scoreWhiteEl.textContent = `${whitePct}%`;
         if (this.barBlackEl) this.barBlackEl.style.width = `${blackPct}%`;
         if (this.barWhiteEl) this.barWhiteEl.style.width = `${whitePct}%`;
-
-        if (this.footerScoreBlackEl) this.footerScoreBlackEl.textContent = `${blackPct}%`;
-        if (this.footerScoreWhiteEl) this.footerScoreWhiteEl.textContent = `${whitePct}%`;
-        if (this.footerBarBlackEl) this.footerBarBlackEl.style.width = `${blackPct}%`;
-        if (this.footerBarWhiteEl) this.footerBarWhiteEl.style.width = `${whitePct}%`;
     }
 
     initDPad() {
