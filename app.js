@@ -1,75 +1,50 @@
 /**
  * TERRITORY WALK - app.js
- * Main Application Controller
+ * Core Application Controller, Geolocation, Real-time Grid Updates & Supabase Sync
  */
 
 const CONFIG = {
-    DEFAULT_CENTER: [34.6654, 135.6268], // 東花園駅周辺（東大阪市）
-    DEFAULT_ZOOM: 16,
-    TILE_URL: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-    TILE_OPTIONS: {
-        maxZoom: 19,
-        subdomains: 'abcd',
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-    }
+    DEFAULT_CENTER: [34.6662, 135.6276], // 東大阪・近鉄瓢箪山駅〜東花園エリア
+    DEFAULT_ZOOM: 17,
+    MIN_ZOOM: 10,
+    MAX_ZOOM: 20
 };
 
 class TerritoryWalkApp {
     constructor() {
         this.map = null;
-        this.tileLayer = null;
+        this.currentTeam = 'black'; // 'white' or 'black'
         this.gridManager = null;
         this.supabaseManager = null;
-        this.playerMarker = null;
-        this.currentPosition = [...CONFIG.DEFAULT_CENTER];
+        this.statsManager = null;
+        this.proManager = null;
+        this.posterGenerator = null;
+
+        this.userMarker = null;
         this.watchId = null;
-        this.isFollowingUser = true;
-        this.currentTeam = 'black';
         this.currentMeshId = null;
-        this.audioCtx = null;
+        this.virtualPos = [...CONFIG.DEFAULT_CENTER];
         this.isMapVisible = true;
         this.isDebugMode = false;
 
-        window.switchTab = (tabId) => this.switchTab(tabId);
+        // Initialize managers
         this.proManager = new ProManager();
-
         this.posterGenerator = new PosterGenerator(this);
-        this.initExportButton();
-        this.initProModal();
-
-        this.initSkinSelector();
-
+        this.supabaseManager = new SupabaseManager();
         this.statsManager = new StatsManager(this.supabaseManager, this);
-        this.initStatsModal();
-        this.posterGenerator = new PosterGenerator(this);
-        this.proManager = new ProManager();
-
-        this.initDPad();
-        this.initResetCountdown();
-        this.initProModal();
-        this.initSkinSelector();
-        this.initExportButton();
 
         this.initTeam();
-        this.initDPad();
-        this.initResetCountdown();
-        this.initSkinSelector();
         this.initDOM();
         this.initMap();
-        this.initSupabase();
-        this.isDebugMode = false;
-        this.statsManager = new StatsManager(this.supabaseManager, this);
-        
-        this.initStatsModal();
         this.initGrid();
+        this.initSkinSelector();
+        this.initStatsModal();
+        this.initProModal();
+        this.initExportButton();
         this.initGeolocation();
-        this.initEvents();
         this.initDPad();
-        this.initDebugMode();
+        this.initEvents();
         this.initResetCountdown();
-        this.initRulesModal();
-        this.initMenuModal();
-        this.updateScoreUI();
     }
 
     initTeam() {
@@ -78,179 +53,385 @@ class TerritoryWalkApp {
             savedTeam = Math.random() < 0.5 ? 'white' : 'black';
             localStorage.setItem('player_team', savedTeam);
         }
-        // Sync remote tiles when map moves
-        this.map.on('moveend', () => {
-            this.loadRemoteTiles();
-        });
-
-        // Load initially
-        this.loadRemoteTiles();
-
         this.currentTeam = savedTeam;
         this.applyTheme();
     }
 
     applyTheme() {
-        if (document.body) {
-            document.body.dataset.theme = this.currentTeam;
-        }
-    }
-
-    initDOM() {
-        this.latValEl = document.getElementById('lat-val');
-        this.lngValEl = document.getElementById('lng-val');
-        this.gpsStatusIndicatorEl = document.getElementById('gps-status-indicator');
-        this.gpsDotEl = document.getElementById('gps-dot');
-        this.btnRecenter = document.getElementById('btn-recenter');
-        this.scoreBlackEl = document.getElementById('score-black');
-        this.scoreWhiteEl = document.getElementById('score-white');
-        this.barBlackEl = document.getElementById('bar-black');
-        this.barWhiteEl = document.getElementById('bar-white');
-        this.teamBadgeEl = document.getElementById('team-badge');
-
-        // デバッグ & D-Pad要素
-        this.dpadContainer = document.getElementById('dpad-container');
-        this.btnSwapTeam = document.getElementById('btn-swap-team');
-        this.swapTeamIcon = document.getElementById('swap-team-icon');
-        this.swapTeamText = document.getElementById('swap-team-text');
-
-        // モーダル関連要素
-        this.rulesModal = document.getElementById('rules-modal');
-        this.btnCloseRules = document.getElementById('btn-close-rules');
-        this.menuModal = document.getElementById('menu-modal');
-        this.btnMenu = document.getElementById('btn-menu');
-        this.btnCloseMenu = document.getElementById('btn-close-menu');
-        this.btnModalCloseIcon = document.getElementById('btn-modal-close-icon');
-        this.btnOpenRules = document.getElementById('btn-open-rules');
-        this.btnToggleMap = document.getElementById('btn-toggle-map');
-        this.mapToggleDot = document.getElementById('map-toggle-dot');
-        this.mapToggleText = document.getElementById('map-toggle-text');
-        this.btnToggleDebug = document.getElementById('btn-toggle-debug');
-        this.debugToggleDot = document.getElementById('debug-toggle-dot');
-        this.debugToggleText = document.getElementById('debug-toggle-text');
-        this.menuTeamText = document.getElementById('menu-team-text');
-
+        document.body.dataset.theme = this.currentTeam;
         this.renderTeamBadge();
         this.updateSwapButtonUI();
     }
 
+    initDOM() {
+        this.scoreBlackEl = document.getElementById('score-black');
+        this.scoreWhiteEl = document.getElementById('score-white');
+        this.barBlackEl = document.getElementById('bar-black');
+        this.barWhiteEl = document.getElementById('bar-white');
+        this.gpsDot = document.getElementById('gps-dot');
+        this.teamBadgeContainer = document.getElementById('team-badge');
+        this.menuTeamText = document.getElementById('menu-team-text');
+
+        this.rulesModal = document.getElementById('rules-modal');
+        this.menuModal = document.getElementById('menu-modal');
+        this.btnOpenRules = document.getElementById('btn-open-rules');
+        this.btnCloseRules = document.getElementById('btn-close-rules');
+        this.btnMenu = document.getElementById('btn-menu');
+        this.btnCloseMenu = document.getElementById('btn-close-menu');
+        this.btnModalCloseIcon = document.getElementById('btn-modal-close-icon');
+
+        this.btnToggleMap = document.getElementById('btn-toggle-map');
+        this.mapToggleDot = document.getElementById('map-toggle-dot');
+        this.mapToggleText = document.getElementById('map-toggle-text');
+
+        this.btnToggleDebug = document.getElementById('btn-toggle-debug');
+        this.debugToggleDot = document.getElementById('debug-toggle-dot');
+        this.debugToggleText = document.getElementById('debug-toggle-text');
+        this.dpadContainer = document.getElementById('dpad-container');
+
+        this.btnRecenter = document.getElementById('btn-recenter');
+        this.btnSwapTeam = document.getElementById('btn-swap-team');
+        this.swapTeamIcon = document.getElementById('swap-team-icon');
+        this.swapTeamText = document.getElementById('swap-team-text');
+
+        this.initRulesModal();
+        this.initMenuModal();
+    }
+
     renderTeamBadge() {
-        if (!this.teamBadgeEl) return;
+        if (!this.teamBadgeContainer) return;
+
+        const isPro = this.proManager && this.proManager.isPro();
+        const supporterBadge = isPro ? this.proManager.getSupporterBadgeHtml() : '';
+
         if (this.currentTeam === 'white') {
-            this.teamBadgeEl.innerHTML = `
-                <span class="inline-block w-2.5 h-2.5 rounded-full bg-white border border-zinc-400 shadow-[0_0_8px_rgba(255,255,255,0.8)]"></span>
-                <span class="text-white font-bold text-xs">White</span>
+            this.teamBadgeContainer.innerHTML = `
+                ${supporterBadge}
+                <span class="w-2.5 h-2.5 rounded-full bg-white border border-zinc-300"></span>
+                <span class="text-zinc-100 font-bold">White</span>
             `;
+            if (this.menuTeamText) this.menuTeamText.textContent = 'White Team';
         } else {
-            this.teamBadgeEl.innerHTML = `
-                <span class="inline-block w-2.5 h-2.5 rounded-full bg-black border border-zinc-300 shadow-[0_0_8px_rgba(0,0,0,0.9)]"></span>
-                <span class="text-white font-bold text-xs">Black</span>
+            this.teamBadgeContainer.innerHTML = `
+                ${supporterBadge}
+                <span class="w-2.5 h-2.5 rounded-full bg-black border border-zinc-500 shadow-sm"></span>
+                <span class="text-zinc-100 font-bold">Black</span>
             `;
-        }
-        if (this.menuTeamText) {
-            this.menuTeamText.textContent = this.currentTeam === 'white' ? 'White' : 'Black';
+            if (this.menuTeamText) this.menuTeamText.textContent = 'Black Team';
         }
     }
 
     updateSwapButtonUI() {
         if (!this.swapTeamIcon || !this.swapTeamText) return;
+
         if (this.currentTeam === 'black') {
-            this.swapTeamIcon.className = 'w-2 h-2 rounded-full bg-white border border-zinc-400';
+            this.swapTeamIcon.className = 'w-2 h-2 rounded-full bg-white';
             this.swapTeamText.textContent = 'SWAP: Whiteへ切替';
         } else {
             this.swapTeamIcon.className = 'w-2 h-2 rounded-full bg-black border border-zinc-300';
             this.swapTeamText.textContent = 'SWAP: Blackへ切替';
         }
-    async processMeshAndClaim(lat, lng) {
-        if (!this.gridManager) return;
-
-        const { meshId, latIdx, lngIdx } = this.gridManager.getMeshIdFromLatLng(lat, lng);
-        const cachedTeam = this.gridManager.claimedTilesCache.get(meshId);
-
-        if (this.currentMeshId !== meshId || cachedTeam !== this.currentTeam) {
-            this.currentMeshId = meshId;
-
-            // 1. Immediate local UI update (no lag)
-            this.gridManager.claimedTilesCache.set(meshId, this.currentTeam);
-            if (this.gridManager.renderedMeshes.has(meshId)) {
-                this.gridManager.renderedMeshes.get(meshId).setStyle(this.gridManager.getTileStyle(this.currentTeam));
-            }
-            this.updateScoreUI();
-
-            // 2. Play sound effect & haptic feedback
-            this.playClaimSound();
-            this.triggerHaptic();
-
-            // 3. Async Supabase UPSERT sync
-            if (this.supabaseManager) {
-                try {
-                    await this.supabaseManager.claimTile(meshId, latIdx, lngIdx, this.currentTeam);
-                } catch (e) {
-                    console.warn('Supabase sync failed, tile remains saved locally:', e);
-                }
-            }
-        }
-    }
-
     }
 
     initMap() {
         this.map = L.map('map', {
-            zoomControl: false,
-            attributionControl: true,
-            doubleClickZoom: false,
-            minZoom: 1,
-            maxZoom: 20
-        }).setView(CONFIG.DEFAULT_CENTER, CONFIG.DEFAULT_ZOOM);
+            center: CONFIG.DEFAULT_CENTER,
+            zoom: CONFIG.DEFAULT_ZOOM,
+            minZoom: CONFIG.MIN_ZOOM,
+            maxZoom: CONFIG.MAX_ZOOM,
+            zoomControl: true,
+            attributionControl: false
+        });
 
-        L.control.zoom({ position: 'topright' }).addTo(this.map);
+        // Dark-inverted CartoDB tile layer
+        this.tileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+            maxZoom: 20,
+            subdomains: 'abcd'
+        }).addTo(this.map);
 
-        this.tileLayer = L.tileLayer(CONFIG.TILE_URL, CONFIG.TILE_OPTIONS);
-
-        // 地図表示設定の復元（デフォルトON）
-        this.isMapVisible = localStorage.getItem('territory_map_visible') !== 'false';
         const mapContainer = document.getElementById('map');
-
         if (this.isMapVisible) {
-            this.tileLayer.addTo(this.map);
             if (mapContainer) mapContainer.classList.remove('map-tiles-hidden');
         } else {
             if (mapContainer) mapContainer.classList.add('map-tiles-hidden');
         }
-        // Log stat claim (StatsManager handles throttling internally)
-        this.statsManager.recordTileClaim(isReclaimed, this.isDebugMode);
-
 
         this.updateMapVisibilityUI();
         this.updatePlayerMarker(CONFIG.DEFAULT_CENTER);
 
-        this.map.on('dragstart', () => {
-            this.isFollowingUser = false;
+        // Sync tiles on map pan/zoom
+        this.map.on('moveend', () => {
+            this.loadRemoteTiles();
+        });
+    }
+
+    initGrid() {
+        if (typeof GridManager !== 'undefined') {
+            this.gridManager = new GridManager(this.map, this);
+            this.loadRemoteTiles();
+        } else {
+            console.warn('GridManager is not defined.');
+        }
+    }
+
+    async loadRemoteTiles() {
+        if (!this.gridManager) return;
+        await this.gridManager.fetchAndSyncTiles();
+        this.updateScoreUI();
+    }
+
+    initSkinSelector() {
+        const savedSkin = localStorage.getItem('territory_skin') || 'default';
+        document.body.dataset.skin = savedSkin;
+        this.updateSkinBadge(savedSkin);
+
+        const skinButtons = document.querySelectorAll('.skin-btn');
+        skinButtons.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const targetSkin = e.currentTarget.dataset.skin;
+
+                // Non-default skins require Pro
+                if (targetSkin !== 'default' && !this.checkProAccess('限定スキン')) {
+                    return;
+                }
+
+                document.body.dataset.skin = targetSkin;
+                localStorage.setItem('territory_skin', targetSkin);
+                this.updateSkinBadge(targetSkin);
+
+                if (this.gridManager) {
+                    this.gridManager.redrawTiles();
+                }
+            });
+        });
+    }
+
+    updateSkinBadge(skin) {
+        const badge = document.getElementById('current-skin-badge');
+        if (!badge) return;
+        const labels = {
+            default: '標準 (Default)',
+            neon: 'ネオン (Neon)',
+            gold: 'ゴールド (Gold)',
+            pixel: 'レトロ (Pixel)'
+        };
+        badge.textContent = labels[skin] || skin;
+    }
+
+    initStatsModal() {
+        const modal = document.getElementById('stats-modal');
+        const openBtn = document.getElementById('btn-open-stats');
+        const closeBtn = document.getElementById('btn-close-stats');
+        const footerCloseBtn = document.getElementById('btn-stats-footer-close');
+
+        if (openBtn) {
+            openBtn.addEventListener('click', () => {
+                if (this.menuModal) this.menuModal.classList.add('hidden');
+                modal.classList.remove('hidden');
+                this.updateStatsDisplay();
+                this.switchStatsTab('my-stats');
+            });
+        }
+
+        const closeModal = () => modal.classList.add('hidden');
+        if (closeBtn) closeBtn.addEventListener('click', closeModal);
+        if (footerCloseBtn) footerCloseBtn.addEventListener('click', closeModal);
+
+        // Tab buttons
+        const tabs = ['my-stats', 'weekly-rank', 'lifetime-rank'];
+        tabs.forEach(tabKey => {
+            const btn = document.getElementById(`tab-${tabKey}`);
+            if (btn) {
+                btn.addEventListener('click', () => this.switchStatsTab(tabKey));
+            }
+        });
+
+        // Save Nickname
+        const saveNickBtn = document.getElementById('btn-save-nickname');
+        if (saveNickBtn) {
+            saveNickBtn.addEventListener('click', () => {
+                const input = document.getElementById('input-nickname');
+                if (input && this.statsManager) {
+                    this.statsManager.setNickname(input.value);
+                    alert('ニックネームを保存しました！');
+                    this.updateStatsDisplay();
+                }
+            });
+        }
+    }
+
+    async switchStatsTab(tabKey) {
+        const tabs = ['my-stats', 'weekly-rank', 'lifetime-rank'];
+        tabs.forEach(k => {
+            const btn = document.getElementById(`tab-${k}`);
+            const panel = document.getElementById(`panel-${k}`);
+            if (btn) {
+                if (k === tabKey) {
+                    btn.className = 'tab-btn active flex-1 py-1.5 rounded-lg border-b-2 border-amber-500 font-medium text-center text-amber-400';
+                } else {
+                    btn.className = 'tab-btn flex-1 py-1.5 rounded-lg border-b-2 border-transparent font-medium text-center text-zinc-400 hover:text-white';
+                }
+            }
+            if (panel) {
+                if (k === tabKey) panel.classList.remove('hidden');
+                else panel.classList.add('hidden');
+            }
+        });
+
+        if (tabKey === 'weekly-rank') {
+            await this.loadWeeklyRankings();
+        } else if (tabKey === 'lifetime-rank') {
+            await this.loadLifetimeRankings();
+        }
+    }
+
+    updateStatsDisplay() {
+        if (!this.statsManager) return;
+        const stats = this.statsManager.stats;
+        const nickInput = document.getElementById('input-nickname');
+        if (nickInput) nickInput.value = this.statsManager.nickname;
+
+        const tileEl = document.getElementById('stat-lifetime-tiles');
+        if (tileEl) tileEl.textContent = stats.lifetime_tiles.toLocaleString();
+
+        const areaEl = document.getElementById('stat-lifetime-area');
+        if (areaEl) {
+            const areaM2 = stats.lifetime_tiles * 10000;
+            areaEl.textContent = `${areaM2.toLocaleString()} m² (東京ドーム約 ${(areaM2 / 46755).toFixed(2)}個分)`;
+        }
+
+        const reclaimedEl = document.getElementById('stat-reclaimed-tiles');
+        if (reclaimedEl) reclaimedEl.textContent = stats.lifetime_reclaimed.toLocaleString();
+
+        const battleEl = document.getElementById('stat-battles-record');
+        if (battleEl) battleEl.textContent = `${stats.battles_won}勝 ${stats.battles_lost}敗`;
+    }
+
+    async loadWeeklyRankings() {
+        const listEl = document.getElementById('list-weekly-rank');
+        if (!listEl || !this.statsManager || !this.supabaseManager) return;
+
+        listEl.innerHTML = '<li class="text-zinc-500 text-center py-2">読み込み中...</li>';
+        const weekId = this.supabaseManager.getCurrentWeekId();
+        const data = await this.statsManager.getWeeklyLeaderboard(weekId);
+
+        if (!data || data.length === 0 || data[0].message) {
+            listEl.innerHTML = '<li class="text-zinc-500 text-center py-2">今週の記録はまだありません</li>';
+            return;
+        }
+
+        listEl.innerHTML = data.map((item, idx) => `
+            <li class="flex items-center justify-between py-1 border-b border-zinc-800">
+                <span class="font-bold ${idx < 3 ? 'text-amber-400' : 'text-zinc-300'}">${idx + 1}. ${item.nickname}</span>
+                <span class="font-mono text-zinc-400">${item.tiles_count} マス</span>
+            </li>
+        `).join('');
+    }
+
+    async loadLifetimeRankings() {
+        const listEl = document.getElementById('list-lifetime-rank');
+        if (!listEl || !this.statsManager) return;
+
+        listEl.innerHTML = '<li class="text-zinc-500 text-center py-2">読み込み中...</li>';
+        const data = await this.statsManager.getLifetimeLeaderboard();
+
+        if (!data || data.length === 0 || data[0].message) {
+            listEl.innerHTML = '<li class="text-zinc-500 text-center py-2">記録がありません</li>';
+            return;
+        }
+
+        listEl.innerHTML = data.map((item, idx) => `
+            <li class="flex items-center justify-between py-1 border-b border-zinc-800">
+                <span class="font-bold ${idx < 3 ? 'text-amber-400' : 'text-zinc-300'}">${idx + 1}. ${item.nickname}</span>
+                <span class="font-mono text-zinc-400">${item.lifetime_tiles} マス</span>
+            </li>
+        `).join('');
+    }
+
+    initProModal() {
+        const modal = document.getElementById('pro-modal');
+        const openBtn = document.getElementById('btn-open-pro-modal');
+        const closeBtn = document.getElementById('btn-close-pro');
+        const activateBtn = document.getElementById('btn-activate-pro');
+
+        if (openBtn) {
+            openBtn.addEventListener('click', () => {
+                if (this.menuModal) this.menuModal.classList.add('hidden');
+                modal.classList.remove('hidden');
+            });
+        }
+
+        const closeModal = () => modal.classList.add('hidden');
+        if (closeBtn) closeBtn.addEventListener('click', closeModal);
+
+        if (activateBtn) {
+            activateBtn.addEventListener('click', () => {
+                const input = document.getElementById('input-pro-code');
+                const code = input ? input.value : '';
+                if (this.proManager && this.proManager.activateCode(code)) {
+                    alert('🎉 Proサポーター機能が有効になりました！限定スキンとポスター出力をご利用いただけます。');
+                    modal.classList.add('hidden');
+                    this.renderTeamBadge();
+                    this.updateStatsDisplay();
+                } else {
+                    alert('無効なコードです。正しいアクティベーションコードを入力してください。');
+                }
+            });
+        }
+    }
+
+    checkProAccess(actionName) {
+        if (!this.proManager || !this.proManager.isPro()) {
+            alert(`${actionName}を利用するには、Proサポーターへのアップグレードが必要です！`);
+            const modal = document.getElementById('pro-modal');
+            if (modal) modal.classList.remove('hidden');
+            return false;
+        }
+        return true;
+    }
+
+    initExportButton() {
+        const exportBtn = document.getElementById('btn-export-poster');
+        if (!exportBtn) return;
+
+        exportBtn.addEventListener('click', async () => {
+            if (!this.checkProAccess('ポスター保存')) return;
+
+            const originalHtml = exportBtn.innerHTML;
+            exportBtn.innerHTML = '<span>⏳ ポスター生成中...</span>';
+            exportBtn.disabled = true;
+
+            try {
+                const weekId = this.supabaseManager.getCurrentWeekId();
+                await this.posterGenerator.exportWeeklyPoster(
+                    this.gridManager.claimedTilesCache,
+                    this.currentTeam,
+                    this.statsManager.nickname,
+                    weekId
+                );
+            } catch (err) {
+                console.error('Poster export failed:', err);
+                alert('ポスターの書き出しに失敗しました。');
+            } finally {
+                exportBtn.innerHTML = originalHtml;
+                exportBtn.disabled = false;
+            }
         });
     }
 
     toggleMapVisibility() {
         this.isMapVisible = !this.isMapVisible;
-        localStorage.setItem('territory_map_visible', this.isMapVisible ? 'true' : 'false');
-
         const mapContainer = document.getElementById('map');
         if (this.isMapVisible) {
-            if (!this.map.hasLayer(this.tileLayer)) {
-                this.tileLayer.addTo(this.map);
-            }
             if (mapContainer) mapContainer.classList.remove('map-tiles-hidden');
         } else {
-            if (this.map.hasLayer(this.tileLayer)) {
-                this.map.removeLayer(this.tileLayer);
-            }
             if (mapContainer) mapContainer.classList.add('map-tiles-hidden');
         }
-
         this.updateMapVisibilityUI();
     }
 
     updateMapVisibilityUI() {
-        if (!this.mapToggleDot || !this.mapToggleText || !this.btnToggleMap) return;
+        if (!this.btnToggleMap || !this.mapToggleDot || !this.mapToggleText) return;
 
         if (this.isMapVisible) {
             this.mapToggleDot.className = 'w-2 h-2 rounded-full bg-emerald-400';
@@ -264,115 +445,85 @@ class TerritoryWalkApp {
     }
 
     initDebugMode() {
-        // デバッグモード初期状態（デフォルトOFF）
-        this.isDebugMode = localStorage.getItem('territory_debug_mode') === 'true';
+        this.isDebugMode = false;
         this.updateDebugModeUI();
     }
 
     toggleDebugMode() {
         this.isDebugMode = !this.isDebugMode;
-        localStorage.setItem('territory_debug_mode', this.isDebugMode ? 'true' : 'false');
         this.updateDebugModeUI();
     }
 
     updateDebugModeUI() {
-        if (!this.debugToggleDot || !this.debugToggleText || !this.btnToggleDebug) return;
+        if (!this.btnToggleDebug || !this.debugToggleDot || !this.debugToggleText || !this.dpadContainer) return;
 
         if (this.isDebugMode) {
-            if (this.dpadContainer) this.dpadContainer.classList.remove('hidden');
             this.debugToggleDot.className = 'w-2 h-2 rounded-full bg-amber-400';
             this.debugToggleText.textContent = 'DEBUG: ON';
-            this.btnToggleDebug.className = 'px-3 py-1.5 rounded-lg border text-xs font-mono font-bold flex items-center gap-1.5 transition-all active:scale-95 bg-zinc-800 border-zinc-600 text-amber-300';
+            this.btnToggleDebug.className = 'px-3 py-1.5 rounded-lg border text-xs font-mono font-bold flex items-center gap-1.5 transition-all active:scale-95 bg-zinc-800 border-amber-500/80 text-amber-400';
+            this.dpadContainer.classList.remove('hidden');
         } else {
-            if (this.dpadContainer) this.dpadContainer.classList.add('hidden');
             this.debugToggleDot.className = 'w-2 h-2 rounded-full bg-zinc-600';
             this.debugToggleText.textContent = 'DEBUG: OFF';
             this.btnToggleDebug.className = 'px-3 py-1.5 rounded-lg border text-xs font-mono font-bold flex items-center gap-1.5 transition-all active:scale-95 bg-zinc-900 border-zinc-700 text-zinc-400';
+            this.dpadContainer.classList.add('hidden');
         }
     }
 
     swapTeam() {
-        this.currentTeam = this.currentTeam === 'black' ? 'white' : 'black';
-        localStorage.setItem('player_team', this.currentTeam);
-
+        const nextTeam = this.currentTeam === 'black' ? 'white' : 'black';
+        this.currentTeam = nextTeam;
+        localStorage.setItem('player_team', nextTeam);
         this.applyTheme();
-        this.renderTeamBadge();
-        this.updatePlayerMarker(this.currentPosition);
-        this.updateSwapButtonUI();
-        this.playClaimSound();
-        this.triggerHaptic();
+        this.updateScoreUI();
     }
 
     resetViewportScroll() {
-        window.scrollTo(0, 0);
-        if (document.documentElement) {
-            document.documentElement.scrollLeft = 0;
-            document.documentElement.scrollTop = 0;
-        }
-        if (document.body) {
-            document.body.scrollLeft = 0;
-            document.body.scrollTop = 0;
-        }
-        setTimeout(() => {
+        if (window.scrollX !== 0 || window.scrollY !== 0) {
             window.scrollTo(0, 0);
-            if (this.map) {
-                this.map.invalidateSize();
-            }
-        }, 150);
+        }
+        if (this.map) {
+            this.map.invalidateSize();
+        }
     }
 
     initRulesModal() {
-        const rulesRead = localStorage.getItem('territory_rules_read');
-        if (rulesRead !== 'true' && this.rulesModal) {
+        const hasSeenRules = localStorage.getItem('territory_rules_seen_v1');
+        if (!hasSeenRules && this.rulesModal) {
             this.rulesModal.classList.remove('hidden');
             this.resetViewportScroll();
         }
 
         if (this.btnCloseRules) {
             this.btnCloseRules.addEventListener('click', () => {
-                localStorage.setItem('territory_rules_read', 'true');
-                if (this.rulesModal) this.rulesModal.classList.add('hidden');
-                this.resetViewportScroll();
+                if (this.rulesModal) {
+                    this.rulesModal.classList.add('hidden');
+                    localStorage.setItem('territory_rules_seen_v1', 'true');
+                    this.resetViewportScroll();
+                }
             });
         }
     }
 
     initMenuModal() {
-        if (this.btnMenu && this.menuModal) {
-            this.btnMenu.addEventListener('click', () => {
-                this.menuModal.classList.remove('hidden');
-                this.resetViewportScroll();
-            });
-        }
+        if (!this.menuModal) return;
 
-        const closeModal = () => {
-            if (this.menuModal) this.menuModal.classList.add('hidden');
+        const openModal = () => {
+            this.menuModal.classList.remove('hidden');
             this.resetViewportScroll();
         };
 
+        const closeModal = () => {
+            this.menuModal.classList.add('hidden');
+            this.resetViewportScroll();
+        };
+
+        if (this.btnMenu) this.btnMenu.addEventListener('click', openModal);
         if (this.btnCloseMenu) this.btnCloseMenu.addEventListener('click', closeModal);
         if (this.btnModalCloseIcon) this.btnModalCloseIcon.addEventListener('click', closeModal);
 
-        if (this.btnToggleMap) {
-            this.btnToggleMap.addEventListener('click', () => {
-                this.toggleMapVisibility();
-            });
-        }
-
-        if (this.btnToggleDebug) {
-            this.btnToggleDebug.addEventListener('click', () => {
-                this.toggleDebugMode();
-            });
-        }
-
         if (this.btnOpenRules) {
             this.btnOpenRules.addEventListener('click', () => {
-        const isPro = this.proManager.isPro();
-        const nicknameEl = document.getElementById('input-nickname');
-        const badge = isPro ? this.proManager.getSupporterBadgeHtml() : '';
-        this.teamBadgeContainer.innerHTML = badge + (this.currentTeam === 'white' ? '...' : '...');
-        // Note: Actual rendering logic from previous steps merged...
-
                 closeModal();
                 if (this.rulesModal) {
                     this.rulesModal.classList.remove('hidden');
@@ -380,329 +531,29 @@ class TerritoryWalkApp {
                 }
             });
         }
-    }
 
-    initSupabase() {
-        if (typeof SupabaseManager !== 'undefined') {
-            this.supabaseManager = new SupabaseManager();
-        } else {
-            console.warn('SupabaseManager is not defined.');
+        if (this.btnToggleMap) {
+            this.btnToggleMap.addEventListener('click', () => this.toggleMapVisibility());
         }
-    }
 
-    initGrid() {
-    initStatsModal() {
-        const modal = document.getElementById('stats-modal');
-    initSkinSelector() {
-        const skin = localStorage.getItem('territory_skin') || 'default';
-        document.body.dataset.skin = skin;
-
-        document.querySelectorAll('.skin-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const newSkin = e.target.dataset.skin;
-                document.body.dataset.skin = newSkin;
-                localStorage.setItem('territory_skin', newSkin);
-                
-                if (this.gridManager) {
-                    this.gridManager.redrawTiles();
-                }
-            });
-        });
-    initProModal() {
-        const modal = document.getElementById('pro-modal');
-        const openBtn = document.getElementById('btn-open-pro-modal');
-        const closeBtn = document.getElementById('btn-close-pro');
-        const activateBtn = document.getElementById('btn-activate-pro');
-
-        openBtn.addEventListener('click', () => modal.classList.remove('hidden'));
-        closeBtn.addEventListener('click', () => modal.classList.add('hidden'));
-
-        activateBtn.addEventListener('click', () => {
-            const code = document.getElementById('input-pro-code').value;
-            if (this.proManager.activateCode(code)) {
-                alert('Pro機能が有効になりました！');
-                modal.classList.add('hidden');
-                this.renderTeamBadge();
-                this.updateStatsDisplay();
-            } else {
-                alert('無効なコードです');
-            }
-        });
-    }
-
-    checkProAccess(actionName) {
-        if (!this.proManager.isPro()) {
-            alert(`${actionName}にはPro版へのアップグレードが必要です！`);
-            document.getElementById('pro-modal').classList.remove('hidden');
-            return false;
-        }
-        return true;
-    }
-
-    }
-
-        const openBtn = document.getElementById('btn-open-stats');
-        const closeBtn = document.getElementById('btn-close-stats');
-        
-        openBtn.addEventListener('click', () => {
-            modal.classList.remove('hidden');
-    initExportButton() {
-        document.getElementById('btn-export-poster').addEventListener('click', async () => {
-            if (!this.checkProAccess('ポスター保存')) return;
-            
-            const btn = document.getElementById('btn-export-poster');
-            const originalText = btn.innerHTML;
-            btn.innerHTML = '<span>生成中...</span>';
-            btn.disabled = true;
-            
-            try {
-                const weekId = this.supabaseManager.getCurrentWeekId();
-                await this.posterGenerator.exportWeeklyPoster(
-                    this.gridManager.claimedTilesCache,
-                    this.currentTeam,
-                    this.statsManager.nickname,
-                    weekId
-                );
-            } catch (e) {
-                console.error('Poster export failed:', e);
-                alert('ポスターの書き出しに失敗しました');
-            } finally {
-                btn.innerHTML = originalText;
-                btn.disabled = false;
-            }
-        });
-    }
-
-            this.updateStatsDisplay();
-            this.switchTab('my-stats');
-        });
-        
-        closeBtn.addEventListener('click', () => modal.classList.add('hidden'));
-
-        document.getElementById('btn-save-nickname').addEventListener('click', () => {
-            const nick = document.getElementById('input-nickname').value;
-            this.statsManager.setNickname(nick);
-            alert('保存しました');
-            this.updateStatsDisplay();
-        });
-    }
-
-    async switchTab(tabId) {
-        const panels = ['panel-my-stats', 'panel-weekly-rank', 'panel-lifetime-rank'];
-        panels.forEach(p => document.getElementById(p).classList.add('hidden'));
-        document.getElementById(`panel-${tabId}`).classList.remove('hidden');
-        
-        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-        document.querySelector(`button[onclick="switchTab('${tabId}')"]`)?.classList.add('active');
-
-        if (tabId === 'weekly-rank') {
-            const list = await this.statsManager.getWeeklyLeaderboard(this.supabaseManager.getCurrentWeekId());
-            this.renderRanking('list-weekly-rank', list, 'tiles_count');
-        } else if (tabId === 'lifetime-rank') {
-            const list = await this.statsManager.getLifetimeLeaderboard();
-            this.renderRanking('list-lifetime-rank', list, 'lifetime_tiles');
-        }
-    }
-
-    renderRanking(containerId, list, field) {
-        const container = document.getElementById(containerId);
-        container.innerHTML = list.map((item, i) => `
-            <li class="flex justify-between">
-                <span>${i + 1}. ${item.nickname || '名もなき歩行者'}</span>
-                <span>${item[field] || 0}マス</span>
-            </li>
-        `).join('');
-    }
-
-    updateStatsDisplay() {
-        document.getElementById('stat-lifetime-tiles').textContent = this.statsManager.stats.lifetime_tiles;
-        document.getElementById('stat-lifetime-reclaimed').textContent = this.statsManager.stats.lifetime_reclaimed;
-        document.getElementById('input-nickname').value = this.statsManager.nickname;
-    }
-
-        if (typeof GridManager !== 'undefined') {
-            this.gridManager = new GridManager(this.map, this);
-    async loadRemoteTiles() {
-        if (!this.supabaseManager) return;
-        const bounds = this.map.getBounds();
-        const tiles = await this.supabaseManager.fetchTilesInBounds(
-            bounds.getSouth(),
-            bounds.getNorth(),
-            bounds.getWest(),
-            bounds.getEast()
-        );
-        if (this.gridManager) {
-            tiles.forEach(t => this.gridManager.claimedTilesCache.set(t.tile_id, t.team));
-            this.gridManager.updateGrids();
-            this.updateScoreUI();
-        }
-    }
-
-        } else {
-            console.warn('GridManager is not defined.');
+        if (this.btnToggleDebug) {
+            this.btnToggleDebug.addEventListener('click', () => this.toggleDebugMode());
         }
     }
 
     initGeolocation() {
-        if (!navigator.geolocation) {
-            this.updateGPSStatus('UNSUPPORTED', 'bg-red-500', 'text-red-400');
+        if (!('geolocation' in navigator)) {
+            this.updateGPSStatus('GPS: 非対応', 'bg-red-500', 'text-red-400');
             return;
         }
-
-    initExportButton() {
-        document.getElementById('btn-export-poster').addEventListener('click', async () => {
-            const btn = document.getElementById('btn-export-poster');
-            const originalText = btn.innerHTML;
-            btn.innerHTML = '<span>生成中...</span>';
-            btn.disabled = true;
-            
-            try {
-                const weekId = this.supabaseManager.getCurrentWeekId();
-                await this.posterGenerator.exportWeeklyPoster(
-                    this.gridManager.claimedTilesCache,
-                    this.currentTeam,
-                    this.statsManager.nickname,
-                    weekId
-                );
-    initProModal() {
-        const modal = document.getElementById('pro-modal');
-        const openBtn = document.getElementById('btn-open-pro-modal');
-        const closeBtn = document.getElementById('btn-close-pro');
-        const activateBtn = document.getElementById('btn-activate-pro');
-
-        openBtn.addEventListener('click', () => modal.classList.remove('hidden'));
-        closeBtn.addEventListener('click', () => modal.classList.add('hidden'));
-
-        activateBtn.addEventListener('click', () => {
-            const code = document.getElementById('input-pro-code').value;
-            if (this.proManager.activateCode(code)) {
-                alert('Pro機能が有効になりました！');
-                modal.classList.add('hidden');
-                this.updateStatsDisplay();
-                this.renderTeamBadge();
-            } else {
-                alert('無効なコードです');
-            }
-        });
-    }
-
-    checkProAccess(actionName) {
-        if (!this.proManager.isPro()) {
-            alert(`${actionName}にはPro版へのアップグレードが必要です！`);
-            document.getElementById('pro-modal').classList.remove('hidden');
-            return false;
-        }
-        return true;
-    }
-
-            } catch (e) {
-                console.error('Poster export failed:', e);
-                alert('ポスターの書き出しに失敗しました');
-            } finally {
-                btn.innerHTML = originalText;
-                btn.disabled = false;
-            }
-        });
-    }
 
         this.updateGPSStatus('GPS: 測位中...', 'bg-amber-400', 'text-amber-400');
 
         const options = {
             enableHighAccuracy: true,
-            timeout: 15000,
+            timeout: 10000,
             maximumAge: 0
         };
-
-    initStatsModal() {
-        const modal = document.getElementById('stats-modal');
-        const openBtn = document.getElementById('btn-open-stats');
-        const closeBtn = document.getElementById('btn-close-stats');
-        const footerCloseBtn = document.getElementById('btn-stats-footer-close');
-        
-        openBtn.addEventListener('click', () => {
-            modal.classList.remove('hidden');
-            this.updateStatsDisplay();
-        });
-        
-        const closeModal = () => modal.classList.add('hidden');
-        closeBtn.addEventListener('click', closeModal);
-        footerCloseBtn.addEventListener('click', closeModal);
-
-        // Tab switching
-        const tabs = ['my-stats', 'weekly-rank', 'lifetime-rank'];
-        tabs.forEach(tabId => {
-            document.getElementById(`tab-${tabId}`).addEventListener('click', (e) => {
-                tabs.forEach(t => {
-                    document.getElementById(`tab-${t}`).classList.remove('active');
-                    document.getElementById(`panel-${t}`).classList.add('hidden');
-                });
-                e.target.classList.add('active');
-                document.getElementById(`panel-${tabId}`).classList.remove('hidden');
-                this.loadTabData(tabId);
-            });
-        });
-
-        // Nickname save
-        document.getElementById('btn-save-nickname').addEventListener('click', () => {
-            const val = document.getElementById('input-nickname').value;
-            this.statsManager.setNickname(val);
-            alert('ニックネームを保存しました');
-            this.updateStatsDisplay();
-        });
-    }
-
-    async loadTabData(tabId) {
-        if (tabId === 'weekly-rank') {
-            const weekId = this.supabaseManager.getCurrentWeekId();
-            const list = await this.statsManager.fetchWeeklyRanking(weekId);
-    initSkinSelector() {
-        const skin = localStorage.getItem('territory_skin') || 'default';
-        document.body.dataset.skin = skin;
-
-        document.querySelectorAll('.skin-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const newSkin = e.target.dataset.skin;
-                document.body.dataset.skin = newSkin;
-                localStorage.setItem('territory_skin', newSkin);
-                
-                if (this.gridManager) {
-                    this.gridManager.redrawTiles();
-                }
-            });
-        });
-    }
-
-            this.renderList('list-weekly-rank', list, 'tiles_count');
-        } else if (tabId === 'lifetime-rank') {
-            const listLife = await this.statsManager.fetchLifetimeRanking();
-            this.renderList('list-lifetime-rank', listLife, 'lifetime_tiles');
-            const listRec = await this.statsManager.fetchReclaimRanking();
-            this.renderList('list-reclaim-rank', listRec, 'lifetime_reclaimed');
-        }
-    }
-
-    renderList(containerId, list, field) {
-        const container = document.getElementById(containerId);
-        container.innerHTML = list.map((item, i) => `
-            <div class="flex justify-between border-b border-zinc-800 py-1">
-                <span>${i+1}. ${item.nickname}</span>
-                <span class="font-bold">${item[field]}</span>
-            </div>
-        `).join('');
-    }
-
-    updateStatsDisplay() {
-        const stats = this.statsManager.stats;
-        document.getElementById('stat-lifetime-tiles').textContent = stats.lifetime_tiles;
-        document.getElementById('stat-lifetime-area').textContent = `${(stats.lifetime_tiles * 100).toLocaleString()} m² (東京ドーム約 ${(stats.lifetime_tiles * 100 / 46755).toFixed(2)}個分)`;
-        document.getElementById('stat-reclaimed-tiles').textContent = stats.lifetime_reclaimed;
-        document.getElementById('stat-battles-record').textContent = `${stats.battles_won}勝 ${stats.battles_lost}敗`;
-
-        const history = document.getElementById('container-battle-history');
-        history.innerHTML = stats.battle_history.map(h => `
-            <div class="text-[10px] text-zinc-500 border-b border-zinc-900">${h.weekId}: ${h.result} (${h.tiles}マス)</div>
-        `).join('');
-    }
 
         navigator.geolocation.getCurrentPosition(
             (position) => this.handlePositionUpdate(position, true),
@@ -717,174 +568,208 @@ class TerritoryWalkApp {
         );
     }
 
-    handlePositionUpdate(position, isInitial = false) {
-        const lat = position.coords.latitude;
-        const lng = position.coords.longitude;
-        this.currentPosition = [lat, lng];
+    handlePositionUpdate(position, isFirst = false) {
+        const { latitude, longitude } = position.coords;
+        this.virtualPos = [latitude, longitude];
 
-        if (this.latValEl) this.latValEl.textContent = lat.toFixed(4);
-        if (this.lngValEl) this.lngValEl.textContent = lng.toFixed(4);
+        this.updateGPSStatus('GPS: 測位中', 'bg-emerald-400', 'text-emerald-400');
+        this.updatePlayerMarker([latitude, longitude]);
 
-        this.updateGPSStatus('GPS ACTIVE', 'bg-emerald-400', 'text-emerald-400');
-        this.updatePlayerMarker(this.currentPosition);
-
-        if (isInitial || this.isFollowingUser) {
-            this.map.setView(this.currentPosition, Math.max(this.map.getZoom(), 16), { animate: true });
+        if (isFirst && this.map) {
+            this.map.setView([latitude, longitude], CONFIG.DEFAULT_ZOOM);
         }
 
-        this.processMeshAndClaim(lat, lng);
+        this.processMeshAndClaim(latitude, longitude);
     }
 
     handlePositionError(error) {
-        let errorMsg = 'GPS ERROR';
+        console.warn('Geolocation error:', error);
         switch (error.code) {
             case error.PERMISSION_DENIED:
-                errorMsg = 'GPS: 許可拒否';
+                this.updateGPSStatus('GPS: 拒否', 'bg-red-500', 'text-red-400');
                 break;
             case error.POSITION_UNAVAILABLE:
-                errorMsg = 'GPS: 位置不明';
+                this.updateGPSStatus('GPS: 圏外', 'bg-amber-500', 'text-amber-400');
                 break;
             case error.TIMEOUT:
-                errorMsg = 'GPS: タイムアウト';
+                this.updateGPSStatus('GPS: タイムアウト', 'bg-amber-500', 'text-amber-400');
                 break;
-        }
-        console.warn(`Geolocation error (${error.code}): ${error.message}`);
-        this.updateGPSStatus(errorMsg, 'bg-red-500', 'text-red-400');
-    }
-
-    updateGPSStatus(text, dotColorClass, textColorClass) {
-        if (this.gpsDotEl) {
-            this.gpsDotEl.className = `w-2.5 h-2.5 rounded-full ${dotColorClass} animate-pulse`;
-        }
-        if (this.gpsStatusIndicatorEl) {
-            this.gpsStatusIndicatorEl.title = text;
+            default:
+                this.updateGPSStatus('GPS: エラー', 'bg-red-500', 'text-red-400');
         }
     }
 
-    updatePlayerMarker(latLng) {
-        const isWhite = this.currentTeam === 'white';
-        const pulseClass = isWhite ? 'player-pulse-white' : 'player-pulse-black';
-        const dotClass = isWhite ? 'player-dot-white' : 'player-dot-black';
+    updateGPSStatus(label, dotClass, textClass) {
+        if (this.gpsDot) {
+            this.gpsDot.className = `w-2.5 h-2.5 rounded-full ${dotClass} animate-pulse`;
+        }
+        const indicator = document.getElementById('gps-status-indicator');
+        if (indicator) {
+            indicator.title = label;
+        }
+    }
 
-        const playerIcon = L.divIcon({
-            className: 'player-marker-container',
-            html: `<div class="${pulseClass}"></div><div class="${dotClass}"></div>`,
-            iconSize: [20, 20],
-            iconAnchor: [10, 10]
+    updatePlayerMarker(latlng) {
+        if (!this.map) return;
+
+        const pulseColor = this.currentTeam === 'white' ? '#ffffff' : '#000000';
+        const ringBorder = this.currentTeam === 'white' ? '#000000' : '#ffffff';
+
+        const customIcon = L.divIcon({
+            className: 'custom-player-marker',
+            html: `
+                <div class="relative flex items-center justify-center w-6 h-6">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style="background-color: ${pulseColor};"></span>
+                    <span class="relative inline-flex rounded-full h-4 w-4 shadow-md" style="background-color: ${pulseColor}; border: 2px solid ${ringBorder};"></span>
+                </div>
+            `,
+            iconSize: [24, 24],
+            iconAnchor: [12, 12]
         });
 
-        if (this.playerMarker) {
-            this.playerMarker.setLatLng(latLng);
-            this.playerMarker.setIcon(playerIcon);
+        if (!this.userMarker) {
+            this.userMarker = L.marker(latlng, { icon: customIcon, zIndexOffset: 1000 }).addTo(this.map);
         } else {
-            this.playerMarker = L.marker(latLng, { icon: playerIcon }).addTo(this.map);
-            this.playerMarker.bindPopup(`<div class="text-black font-bold text-xs uppercase">現在地 (${this.currentTeam} TEAM)</div>`);
+            this.userMarker.setLatLng(latlng);
+            this.userMarker.setIcon(customIcon);
         }
     }
 
     async processMeshAndClaim(lat, lng) {
         if (!this.gridManager) return;
-        await this.gridManager.onPlayerStep(lat, lng);
+
+        const { meshId, latIdx, lngIdx } = this.gridManager.getMeshIdFromLatLng(lat, lng);
+        const cachedTeam = this.gridManager.claimedTilesCache.get(meshId);
+
+        if (this.currentMeshId !== meshId || cachedTeam !== this.currentTeam) {
+            const isReclaimed = cachedTeam && cachedTeam !== this.currentTeam;
+            this.currentMeshId = meshId;
+
+            // 1. Immediate local UI update
+            this.gridManager.claimedTilesCache.set(meshId, this.currentTeam);
+            this.gridManager.saveTilesToStorage();
+
+            if (this.gridManager.renderedMeshes.has(meshId)) {
+                this.gridManager.renderedMeshes.get(meshId).setStyle(this.gridManager.getTileStyle(this.currentTeam));
+            } else {
+                this.gridManager.renderSingleTile(meshId, latIdx, lngIdx, this.currentTeam);
+            }
+
+            this.updateScoreUI();
+            this.playClaimSound();
+            this.triggerHaptic();
+
+            // 2. Stats logging
+            if (this.statsManager) {
+                this.statsManager.recordTileClaimed(isReclaimed);
+            }
+
+            // 3. Supabase online sync
+            if (this.supabaseManager) {
+                try {
+                    await this.supabaseManager.claimTile(meshId, latIdx, lngIdx, this.currentTeam);
+                } catch (e) {
+                    console.warn('Supabase claimTile sync failed:', e);
+                }
+            }
+        }
     }
 
     playClaimSound() {
         try {
-            if (!this.audioCtx) {
-                const AudioContext = window.AudioContext || window.webkitAudioContext;
-                if (AudioContext) {
-                    this.audioCtx = new AudioContext();
-                }
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            if (!AudioContext) return;
+
+            const ctx = new AudioContext();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+
+            if (this.currentTeam === 'white') {
+                osc.frequency.setValueAtTime(660, ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.1);
+            } else {
+                osc.frequency.setValueAtTime(330, ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.1);
             }
-            if (this.audioCtx) {
-                if (this.audioCtx.state === 'suspended') {
-                    this.audioCtx.resume();
-                }
-                const osc = this.audioCtx.createOscillator();
-                const gain = this.audioCtx.createGain();
-                osc.type = 'sine';
-                osc.frequency.setValueAtTime(587.33, this.audioCtx.currentTime);
-                osc.frequency.exponentialRampToValueAtTime(880, this.audioCtx.currentTime + 0.08);
 
-                gain.gain.setValueAtTime(0.15, this.audioCtx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.01, this.audioCtx.currentTime + 0.12);
+            gain.gain.setValueAtTime(0.08, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
 
-                osc.connect(gain);
-                gain.connect(this.audioCtx.destination);
-
-                osc.start();
-                osc.stop(this.audioCtx.currentTime + 0.12);
-            }
-        } catch (e) {}
+            osc.start();
+            osc.stop(ctx.currentTime + 0.12);
+        } catch (e) {
+            // Audio context policy
+        }
     }
 
     triggerHaptic() {
-        try {
-            if (navigator.vibrate) {
-                navigator.vibrate(30);
-            }
-        } catch (e) {}
+        if ('vibrate' in navigator) {
+            navigator.vibrate(15);
+        }
     }
 
     updateScoreUI() {
-        let whiteCount = 0;
-        let blackCount = 0;
+        if (!this.gridManager || !this.scoreBlackEl || !this.scoreWhiteEl || !this.barBlackEl || !this.barWhiteEl) return;
 
-        if (this.gridManager && this.gridManager.claimedTilesCache) {
-            for (const team of this.gridManager.claimedTilesCache.values()) {
-                if (team === 'white') whiteCount++;
-                else if (team === 'black') blackCount++;
-            }
+        let blackCount = 0;
+        let whiteCount = 0;
+
+        for (const team of this.gridManager.claimedTilesCache.values()) {
+            if (team === 'black') blackCount++;
+            else if (team === 'white') whiteCount++;
         }
 
-        const total = whiteCount + blackCount;
-        let whitePct = 50;
+        const total = blackCount + whiteCount;
         let blackPct = 50;
+        let whitePct = 50;
 
         if (total > 0) {
-            whitePct = Math.round((whiteCount / total) * 100);
-            blackPct = 100 - whitePct;
+            blackPct = Math.round((blackCount / total) * 100);
+            whitePct = 100 - blackPct;
         }
 
-        if (this.scoreBlackEl) this.scoreBlackEl.textContent = `${blackPct}%`;
-        if (this.scoreWhiteEl) this.scoreWhiteEl.textContent = `${whitePct}%`;
-        if (this.barBlackEl) this.barBlackEl.style.width = `${blackPct}%`;
-        if (this.barWhiteEl) this.barWhiteEl.style.width = `${whitePct}%`;
+        this.scoreBlackEl.textContent = `${blackPct}%`;
+        this.scoreWhiteEl.textContent = `${whitePct}%`;
+
+        this.barBlackEl.style.width = `${blackPct}%`;
+        this.barWhiteEl.style.width = `${whitePct}%`;
     }
 
     initDPad() {
-        const btnUp = document.getElementById('dpad-up');
-        const btnDown = document.getElementById('dpad-down');
-        const btnLeft = document.getElementById('dpad-left');
-        const btnRight = document.getElementById('dpad-right');
+        const stepLat = 0.0009; // 1 mesh north/south
+        const stepLng = this.gridManager ? this.gridManager.LNG_GRID : 0.00109868; // 1 mesh east/west
 
-        const stepLat = 0.0009;
-        const stepLng = stepLat / Math.cos(35.0 * Math.PI / 180);
+        const moveVirtual = (dLat, dLng) => {
+            this.virtualPos[0] += dLat;
+            this.virtualPos[1] += dLng;
 
-        const movePlayer = (dLat, dLng) => {
-            this.isFollowingUser = false;
-            this.currentPosition[0] += dLat;
-            this.currentPosition[1] += dLng;
-
-            if (this.latValEl) this.latValEl.textContent = this.currentPosition[0].toFixed(4);
-            if (this.lngValEl) this.lngValEl.textContent = this.currentPosition[1].toFixed(4);
-
-            this.updatePlayerMarker(this.currentPosition);
-            this.map.setView(this.currentPosition, this.map.getZoom(), { animate: true });
-
-            if (this.gridManager) {
-                this.gridManager.updateGrids();
+            this.updatePlayerMarker(this.virtualPos);
+            if (this.map) {
+                this.map.panTo(this.virtualPos, { animate: true, duration: 0.2 });
             }
-
-            this.processMeshAndClaim(this.currentPosition[0], this.currentPosition[1]);
+            this.processMeshAndClaim(this.virtualPos[0], this.virtualPos[1]);
         };
 
-        if (btnUp) btnUp.addEventListener('click', () => movePlayer(stepLat, 0));
-        if (btnDown) btnDown.addEventListener('click', () => movePlayer(-stepLat, 0));
-        if (btnLeft) btnLeft.addEventListener('click', () => movePlayer(0, -stepLng));
-        if (btnRight) btnRight.addEventListener('click', () => movePlayer(0, stepLng));
+        const bindButton = (id, dLat, dLng) => {
+            const btn = document.getElementById(id);
+            if (!btn) return;
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                moveVirtual(dLat, dLng);
+            });
+        };
+
+        bindButton('dpad-up', stepLat, 0);
+        bindButton('dpad-down', -stepLat, 0);
+        bindButton('dpad-left', 0, -stepLng);
+        bindButton('dpad-right', 0, stepLng);
 
         if (this.btnSwapTeam) {
-            this.btnSwapTeam.addEventListener('click', () => {
+            this.btnSwapTeam.addEventListener('click', (e) => {
+                e.preventDefault();
                 this.swapTeam();
             });
         }
@@ -893,112 +778,58 @@ class TerritoryWalkApp {
     initEvents() {
         if (this.btnRecenter) {
             this.btnRecenter.addEventListener('click', () => {
-                this.isFollowingUser = true;
-                if (this.currentPosition) {
-                    this.map.setView(this.currentPosition, Math.max(this.map.getZoom(), 16), { animate: true });
+                if (this.map && this.virtualPos) {
+                    this.map.setView(this.virtualPos, CONFIG.DEFAULT_ZOOM, { animate: true });
                 }
             });
         }
 
-        window.addEventListener('scroll', () => {
-            if (window.scrollX !== 0 || window.scrollY !== 0) {
-                window.scrollTo(0, 0);
-            }
-        }, { passive: true });
-
-        window.addEventListener('resize', () => {
-            this.resetViewportScroll();
-        });
-
-        window.addEventListener('orientationchange', () => {
-            this.resetViewportScroll();
-        });
+        window.addEventListener('resize', () => this.resetViewportScroll());
+        window.addEventListener('orientationchange', () => this.resetViewportScroll());
     }
 
     initResetCountdown() {
+        const seasonBadge = document.getElementById('menu-season-badge');
         const countdownEl = document.getElementById('menu-reset-countdown');
-        const badgeEl = document.getElementById('menu-season-badge');
-        if (!countdownEl) return;
 
         const updateTimer = () => {
             const now = new Date();
             const jstString = now.toLocaleString('en-US', { timeZone: 'Asia/Tokyo' });
-            const jstDate = new Date(jstString);
+            const jst = new Date(jstString);
 
-            // ISO週番号の算出
-            const tempDate = new Date(jstDate.getTime());
-            tempDate.setHours(0, 0, 0, 0);
-            tempDate.setDate(tempDate.getDate() + 3 - (tempDate.getDay() + 6) % 7);
-            const week1 = new Date(tempDate.getFullYear(), 0, 4);
-            const weekNum = 1 + Math.round(((tempDate.getTime() - week1.getTime()) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
-            if (badgeEl) badgeEl.textContent = `Week ${weekNum}`;
+            // Compute current ISO week
+            if (seasonBadge && this.supabaseManager) {
+                seasonBadge.textContent = this.supabaseManager.getCurrentWeekId();
+            }
 
-            // 次回月曜午前0時（JST）の算出
-            const dayOfWeek = jstDate.getDay();
-            const daysUntilMonday = (1 + 7 - dayOfWeek) % 7;
-
-            const nextMonday = new Date(jstDate);
-            nextMonday.setDate(jstDate.getDate() + (daysUntilMonday === 0 ? 7 : daysUntilMonday));
+            // Next Monday 00:00 JST
+            const nextMonday = new Date(jst);
+            const day = jst.getDay(); // 0 is Sunday, 1 is Monday
+            const daysUntilMonday = ((8 - day) % 7) || 7;
+            nextMonday.setDate(jst.getDate() + daysUntilMonday);
             nextMonday.setHours(0, 0, 0, 0);
 
-            const diffMs = nextMonday - jstDate;
+            const diffMs = nextMonday - jst;
             if (diffMs <= 0) {
-                countdownEl.textContent = 'リセット処理中...';
+                if (countdownEl) countdownEl.textContent = 'リセット中...';
                 return;
             }
 
-            const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-            const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-            const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+            const diffHrs = Math.floor(diffMs / 3600000);
+            const diffMins = Math.floor((diffMs % 3600000) / 60000);
+            const diffSecs = Math.floor((diffMs % 60000) / 1000);
 
-            if (days > 0) {
-                countdownEl.textContent = `リセットまで: あと${days}日${hours}時間${minutes}分`;
-            } else {
-                countdownEl.textContent = `リセットまで: あと${hours}時間${minutes}分`;
+            if (countdownEl) {
+                countdownEl.textContent = `リセットまで: ${diffHrs}時間${diffMins}分${diffSecs}秒`;
             }
         };
 
         updateTimer();
-        setInterval(updateTimer, 60000);
+        setInterval(updateTimer, 1000);
     }
 }
 
+// Auto-start on DOMContentLoaded
 document.addEventListener('DOMContentLoaded', () => {
-    window.territoryApp = new TerritoryWalkApp();
-});
-
-// iOS Safari 全画面ピンチズーム抑止（ウィンドウ全体の拡大を防ぎUIを完全固定）
-// Leafletの地図ピンチズームはtouchstart/touchmoveで動作するため地図のみスムーズにズームします
-document.addEventListener('gesturestart', (e) => {
-    e.preventDefault();
-}, { passive: false });
-
-document.addEventListener('gesturechange', (e) => {
-    e.preventDefault();
-}, { passive: false });
-
-document.addEventListener('gestureend', (e) => {
-    e.preventDefault();
-}, { passive: false });
-
-// iOS Safari ダブルタップズーム防止
-let lastTouchEnd = 0;
-document.addEventListener('touchend', (e) => {
-    const now = Date.now();
-    if (now - lastTouchEnd <= 300) {
-        if (!['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(e.target.tagName)) {
-            e.preventDefault();
-        }
-    }
-    lastTouchEnd = now;
-}, { passive: false });
-
-// 固定UI要素でのタッチスクロール・ゴムバンド現象の抑止
-['header', 'footer', '#dpad-container'].forEach((sel) => {
-    const el = document.querySelector(sel);
-    if (el) {
-        el.addEventListener('touchmove', (e) => {
-            e.preventDefault();
-        }, { passive: false });
-    }
+    window.app = new TerritoryWalkApp();
 });

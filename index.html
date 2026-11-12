@@ -9,9 +9,9 @@
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
     <!-- Custom CSS -->
-    <link rel="stylesheet" href="style.css?v=20261112v10">
+    <link rel="stylesheet" href="style.css?v=20261113v1">
 </head>
-<body class="bg-black text-white overflow-hidden overflow-x-hidden h-screen w-screen max-w-full flex flex-col m-0 p-0 select-none" data-theme="black">
+<body class="bg-black text-white overflow-hidden overflow-x-hidden h-screen w-screen max-w-full flex flex-col m-0 p-0 select-none" data-theme="black" data-skin="default">
 
     <!-- ヘッダー：2行構成（1行目: タイトル+チーム+MENU / 2行目: 点滅GPSランプ+全幅対戦パーセンテージバー） -->
     <header class="absolute top-0 left-0 right-0 z-[1000] bg-black/85 backdrop-blur-md border-b border-zinc-800 px-3 py-2 flex flex-col gap-2 text-xs select-none shadow-lg">
@@ -28,43 +28,9 @@
                 <div id="team-badge" class="flex items-center gap-1.5 bg-zinc-900 border border-zinc-700/60 px-2.5 py-1 rounded-full font-mono text-xs shadow-inner">
                     <!-- JSで動的切替: [●] Black または [○] White -->
                 </div>
-                <button id="btn-menu" class="bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-700 border border-zinc-700/80 text-zinc-200 px-2.5 py-1 rounded-lg text-xs font-mono font-bold flex items-center gap-1 shadow transition-all active:scale-95">
+                <button id="btn-menu" class="bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-700 border border-zinc-700/80 text-zinc-200 px-2.5 py-1 rounded-lg text-xs font-mono font-bold flex items-center gap-1.5 shadow transition-all active:scale-95">
                     <svg class="w-3.5 h-3.5 text-zinc-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <button id="btn-export-poster" class="w-full py-2 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 border border-zinc-700 text-amber-400 font-mono text-xs font-bold rounded-xl shadow transition-all active:scale-95 flex items-center justify-center gap-2">
-                    <span>🖼️ 週間陣地ポスター保存</span>
-                </button>
-            <div class="flex flex-col gap-2">
-                <button id="btn-open-stats" class="w-full bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 text-xs shadow-lg transition-all active:scale-95">
-                    <span>🏆 ランキング・マイ戦績</span>
-                </button>
-                <button id="btn-export-poster" class="w-full bg-amber-900/30 hover:bg-amber-900/50 border border-amber-700 text-amber-200 py-3 rounded-xl font-bold flex items-center justify-center gap-2 text-xs shadow-lg transition-all active:scale-95">
-                <button id="btn-open-pro-modal" class="w-full py-2 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 border border-zinc-700 text-amber-400 font-mono text-xs font-bold rounded-xl shadow transition-all active:scale-95 flex items-center justify-center gap-2">
-                    <span>⭐ Pro / サポーター</span>
-                </button>
-
-                    <span>🖼️ 週間陣地ポスター保存</span>
-                </button>
-            </div>
-                <button id="btn-open-pro-modal" class="w-full bg-amber-600 hover:bg-amber-500 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 text-xs shadow-lg transition-all active:scale-95">
-                    <span>⭐ Pro / サポーター</span>
-                </button>
-
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
-            <!-- スキン選択セクション -->
-            <div class="space-y-2 border-t border-zinc-800 pt-3">
-                <div class="font-bold text-white text-xs">🎨 マップ＆マステーマ</div>
-                <div class="grid grid-cols-2 gap-2">
-                    <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[10px] hover:border-white transition-all" data-skin="default">標準 (Default)</button>
-                    <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[10px] hover:border-white transition-all" data-skin="neon">ネオン (Neon)</button>
-                    <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[10px] hover:border-white transition-all" data-skin="gold">ゴールド (Gold)</button>
-                    <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[10px] hover:border-white transition-all" data-skin="pixel">レトロ (Pixel)</button>
-                </div>
-            </div>
-
-                <button id="btn-open-stats" class="w-full py-2 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 border border-zinc-700 text-amber-400 font-mono text-xs font-bold rounded-xl shadow transition-all active:scale-95 flex items-center justify-center gap-2">
-                    <span>🏆 ランキング・マイ戦績</span>
-                </button>
-
                     </svg>
                     <span>MENU</span>
                 </button>
@@ -77,17 +43,6 @@
             <div id="gps-status-indicator" class="flex items-center justify-center p-1 rounded-full bg-zinc-900/90 border border-zinc-800 shrink-0" title="GPS Status">
                 <span id="gps-dot" class="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse"></span>
             </div>
-            <!-- スキン選択セクション -->
-            <div class="space-y-2 border-t border-zinc-800 pt-3">
-                <div class="font-bold text-white text-xs">🎨 マップ＆マステーマ</div>
-                <div class="grid grid-cols-2 gap-2">
-                    <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[10px] hover:border-white transition-all" data-skin="default">標準 (Default)</button>
-                    <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[10px] hover:border-white transition-all" data-skin="neon">ネオン (Neon)</button>
-                    <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[10px] hover:border-white transition-all" data-skin="gold">ゴールド (Gold)</button>
-                    <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[10px] hover:border-white transition-all" data-skin="pixel">レトロ (Pixel)</button>
-                </div>
-            </div>
-
 
             <!-- 残り幅全体：Black vs White 対戦パーセンテージバー -->
             <div class="flex-1 flex items-center gap-2 bg-zinc-950/80 border border-zinc-800/80 px-2.5 py-1 rounded-xl">
@@ -95,16 +50,10 @@
                     <span class="w-2.5 h-2.5 rounded-full bg-black shadow-sm border border-zinc-500"></span>
                     <span class="text-[10px] text-zinc-400 font-mono hidden xs:inline">Black</span>
                     <span id="score-black" class="text-white font-mono font-bold text-xs">50%</span>
-    <!-- Pro Manager -->
-    <script src="pro.js"></script>
-
                 </div>
                 <div class="flex-1 h-3.5 bg-zinc-950 rounded-full overflow-hidden flex border border-zinc-600 shadow-inner">
                     <div id="bar-black" class="bg-black border-r-2 border-zinc-500 transition-all duration-500" style="width: 50%;"></div>
                     <div id="bar-white" class="bg-white transition-all duration-500" style="width: 50%;"></div>
-    <!-- Poster Generation Module -->
-    <script src="poster.js"></script>
-
                 </div>
                 <div class="flex items-center gap-1.5 shrink-0">
                     <span id="score-white" class="text-zinc-400 font-mono font-bold text-xs">50%</span>
@@ -117,228 +66,6 @@
 
     <!-- 地図コンテナ（全画面表示） -->
     <main id="map" class="flex-1 w-full h-full z-0"></main>
-
-    <!-- 右下：テスト用仮想散歩 D-Pad ＆ チーム切替デバッグ機能（MENUでON/OFF可能） -->
-    <div id="dpad-container" class="fixed bottom-24 right-4 z-[1000] bg-black/85 backdrop-blur-md border border-zinc-800 p-2.5 rounded-2xl shadow-2xl select-none flex flex-col items-center gap-1 hidden">
-    <!-- Pro Manager -->
-    <script src="pro.js"></script>
-    <!-- Stats Module -->
-    <script src="stats.js"></script>
-
-        <div class="text-[9px] text-zinc-400 font-mono tracking-wider mb-0.5">VIRTUAL D-PAD (DEBUG)</div>
-        <button id="dpad-up" class="w-10 h-10 bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-700 border border-zinc-700 text-white rounded-lg flex items-center justify-center font-bold text-sm shadow transition-all active:scale-95">▲</button>
-    <!-- Poster Generation Module -->
-    <script src="poster.js"></script>
-        <div class="flex items-center gap-6">
-            <button id="dpad-left" class="w-10 h-10 bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-700 border border-zinc-700 text-white rounded-lg flex items-center justify-center font-bold text-sm shadow transition-all active:scale-95">◀</button>
-            <div class="w-10 h-10 flex items-center justify-center bg-zinc-950 border border-zinc-800 rounded-lg text-zinc-400 text-xs font-mono">●</div>
-            <button id="dpad-right" class="w-10 h-10 bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-700 border border-zinc-700 text-white rounded-lg flex items-center justify-center font-bold text-sm shadow transition-all active:scale-95">▶</button>
-        </div>
-        <button id="dpad-down" class="w-10 h-10 bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-700 border border-zinc-700 text-white rounded-lg flex items-center justify-center font-bold text-sm shadow transition-all active:scale-95">▼</button>
-
-        <!-- デバッグ用チーム切替ボタン（Black ⇄ White） -->
-        <button id="btn-swap-team" class="w-full mt-1.5 py-1 px-2 bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-700 border border-zinc-700 text-[10px] font-mono text-zinc-300 rounded-lg flex items-center justify-center gap-1.5 shadow transition-all active:scale-95">
-    <!-- MENU モーダル -->
-    <div id="menu-modal" class="hidden fixed inset-0 z-[2000] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-        <div class="dark-glass-modal max-w-md w-full max-w-[calc(100vw-2rem)] rounded-2xl p-6 shadow-2xl flex flex-col gap-4 text-xs select-none">
-    <!-- 戦績＆ランキングモーダル -->
-    <div id="stats-modal" class="hidden fixed inset-0 z-[2000] bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
-        <div class="max-w-lg w-full bg-zinc-900 border border-zinc-700 rounded-2xl p-6 shadow-2xl flex flex-col gap-4 text-white">
-            <div class="flex justify-between items-center border-b border-zinc-700 pb-3">
-                <h2 class="font-bold text-amber-400">🏆 ランキング・マイ戦績</h2>
-                <button id="btn-close-stats" class="text-zinc-400 hover:text-white">✕</button>
-            </div>
-            
-            <div class="flex gap-2">
-                <button onclick="switchTab('my-stats')" class="tab-btn px-4 py-1 border-b-2 border-amber-500">マイ戦績</button>
-                <button onclick="switchTab('weekly-rank')" class="tab-btn px-4 py-1">今週のTOP10</button>
-                <button onclick="switchTab('lifetime-rank')" class="tab-btn px-4 py-1">歴代開拓王</button>
-            </div>
-
-            <div id="panel-my-stats" class="space-y-3">
-                <div class="flex items-center gap-2">
-                    <input id="input-nickname" type="text" placeholder="ニックネーム" class="flex-1 bg-zinc-950 border border-zinc-700 p-2 rounded">
-                    <button id="btn-save-nickname" class="bg-amber-600 px-4 py-2 rounded font-bold">保存</button>
-                </div>
-                <div class="text-sm">通算開拓数: <span id="stat-lifetime-tiles">0</span></div>
-                <div class="text-sm">通算奪還数: <span id="stat-lifetime-reclaimed">0</span></div>
-            </div>
-
-            <div id="panel-weekly-rank" class="hidden">
-                <ul id="list-weekly-rank" class="space-y-2"></ul>
-            </div>
-
-            <div id="panel-lifetime-rank" class="hidden">
-                <ul id="list-lifetime-rank" class="space-y-2"></ul>
-    <!-- Proモーダル -->
-    <div id="pro-modal" class="hidden fixed inset-0 z-[2000] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-        <div class="max-w-sm w-full bg-zinc-900 border border-zinc-700 rounded-2xl p-6 shadow-2xl flex flex-col gap-4 text-xs select-none">
-            <div class="flex items-center justify-between border-b border-zinc-800 pb-3">
-                <div class="font-bold text-sm text-amber-400 flex items-center gap-2">⭐ PRO SUPPORTER</div>
-                <button id="btn-close-pro" class="text-zinc-400 hover:text-white">✕</button>
-            </div>
-            <ul class="text-zinc-300 list-disc list-inside space-y-1.5 text-xs">
-                <li>限定スキン使い放題</li>
-                <li>陣地ポスター出力（高画質）</li>
-                <li>過去ログ無制限保存</li>
-                <li>★ サポーターバッジ付与</li>
-            </ul>
-            <div class="space-y-2">
-                <input id="input-pro-code" type="text" placeholder="コードを入力" class="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-white">
-                <button id="btn-activate-pro" class="w-full bg-amber-600 hover:bg-amber-500 text-white py-2 rounded-lg font-bold">解除する</button>
-            </div>
-            <button class="w-full bg-zinc-800 text-zinc-400 py-2 rounded-lg text-[10px]">Stripeで支援する（準備中）</button>
-        </div>
-    </div>
-
-            </div>
-        </div>
-    </div>
-
-            <div class="flex items-center justify-between border-b border-zinc-800 pb-3">
-                <div class="font-bold text-sm tracking-wider flex items-center gap-2">
-                    <span class="text-amber-400">❖</span> MENU & RULES
-                </div>
-                <button id="btn-close-menu" class="w-7 h-7 rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold flex items-center justify-center">✕</button>
-            </div>
-
-            <div class="flex flex-col gap-2">
-                <button id="btn-open-stats" class="w-full bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 text-xs shadow-lg transition-all active:scale-95">
-                    <span>🏆 ランキング・マイ戦績</span>
-                </button>
-            </div>
-
-            <div class="space-y-2 text-zinc-300 leading-relaxed text-[11px] overflow-y-auto max-h-60 pr-1">
-                <div class="font-bold text-white text-xs">【テリトリーウォークとは】</div>
-                <p>街を歩いて100m四方のメッシュを自分のチームカラー（白または黒）に染め上げるリアル歩行陣取りゲームです。</p>
-                <div class="font-bold text-white text-xs mt-2">【ルール】</div>
-                <ul class="list-disc list-inside space-y-1 text-zinc-400">
-                    <li>毎週月曜午前0時に全エリアがリセットされます。</li>
-                    <li>相手チームのマスを踏むと自分の色に奪還できます。</li>
-                    <li>チームは初回起動時に自動割り振りされます。</li>
-                </ul>
-            </div>
-        </div>
-    </div>
-    <!-- ランキング・マイ戦績モーダル -->
-    <div id="stats-modal" class="hidden fixed inset-0 z-[2000] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-        <div class="dark-glass-modal max-w-lg w-full max-w-[calc(100vw-2rem)] rounded-2xl p-5 shadow-2xl flex flex-col gap-4 text-xs select-none max-h-[90vh] overflow-hidden">
-            <!-- モーダルヘッダー -->
-            <div class="flex items-center justify-between border-b border-zinc-800 pb-3">
-                <div class="font-bold text-sm tracking-wider flex items-center gap-2 text-white">
-                    <span class="text-amber-400">🏆</span> LEADERBOARD & STATS
-                </div>
-                <button id="btn-close-stats" class="w-7 h-7 rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold flex items-center justify-center">✕</button>
-            </div>
-
-            <!-- タブバー -->
-            <div class="flex items-center gap-1.5 bg-zinc-950 p-1 rounded-xl border border-zinc-800 text-[11px]">
-                <button id="tab-my-stats" class="stats-tab-btn active flex-1 py-1.5 rounded-lg border border-transparent font-medium text-center text-zinc-400 hover:text-white">マイ戦績</button>
-                <button id="tab-weekly-rank" class="stats-tab-btn flex-1 py-1.5 rounded-lg border border-transparent font-medium text-center text-zinc-400 hover:text-white">今週のTOP10</button>
-                <button id="tab-lifetime-rank" class="stats-tab-btn flex-1 py-1.5 rounded-lg border border-transparent font-medium text-center text-zinc-400 hover:text-white">歴代ランキング</button>
-            </div>
-
-            <!-- パネルコンテナ -->
-            <div class="flex-1 overflow-y-auto pr-1 space-y-4">
-                <!-- タブ1: マイ戦績 -->
-                <div id="panel-my-stats" class="space-y-4">
-                    <div class="bg-zinc-900/80 border border-zinc-800 p-3 rounded-xl flex items-center gap-2">
-                        <input id="input-nickname" type="text" maxlength="20" placeholder="ニックネームを入力" class="flex-1 bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-1.5 text-white focus:outline-none focus:border-zinc-400 text-xs font-mono">
-                        <button id="btn-save-nickname" class="bg-zinc-100 hover:bg-white text-black font-bold px-3 py-1.5 rounded-lg text-xs transition-all active:scale-95">保存</button>
-                    </div>
-
-                    <div class="grid grid-cols-2 gap-2 font-mono">
-                        <div class="bg-zinc-900/80 border border-zinc-800 p-3 rounded-xl flex flex-col gap-1">
-                            <span class="text-zinc-500 text-[10px]">生涯開拓マス数</span>
-                            <div class="text-lg font-bold text-white"><span id="stat-lifetime-tiles">0</span> <span class="text-xs text-zinc-400">マス</span></div>
-                            <span id="stat-lifetime-area" class="text-[9px] text-zinc-400">0 m² (東京ドーム 0個分)</span>
-                        </div>
-                        <div class="bg-zinc-900/80 border border-zinc-800 p-3 rounded-xl flex flex-col gap-1">
-    <!-- Proモーダル -->
-    <div id="pro-modal" class="hidden fixed inset-0 z-[2000] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-        <div class="dark-glass-modal max-w-sm w-full rounded-2xl p-6 shadow-2xl flex flex-col gap-4 text-xs select-none">
-            <div class="flex items-center justify-between border-b border-zinc-800 pb-3">
-                <div class="font-bold text-sm text-amber-400 flex items-center gap-2">⭐ PRO SUPPORTER</div>
-                <button id="btn-close-pro" class="text-zinc-400">✕</button>
-            </div>
-            
-            <ul class="text-zinc-300 list-disc list-inside space-y-1.5">
-                <li>限定スキン使い放題</li>
-                <li>陣地ポスター出力（高画質）</li>
-                <li>過去ログ無制限保存</li>
-                <li>★ サポーターバッジ付与</li>
-            </ul>
-
-            <div class="space-y-2">
-                <input id="input-pro-code" type="text" placeholder="コードを入力" class="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-white">
-                <button id="btn-activate-pro" class="w-full bg-amber-600 text-white py-2 rounded-lg font-bold">解除する</button>
-            </div>
-            
-            <button class="w-full bg-zinc-800 text-zinc-400 py-2 rounded-lg text-[10px]">Stripeで支援する（準備中）</button>
-        </div>
-    </div>
-
-                            <span class="text-zinc-500 text-[10px]">オセロ奪還数</span>
-                            <div class="text-lg font-bold text-emerald-400"><span id="stat-reclaimed-tiles">0</span> <span class="text-xs text-zinc-400">マス</span></div>
-                            <span class="text-[9px] text-zinc-500">相手カラー塗り替え</span>
-                        </div>
-                    </div>
-
-                    <div class="bg-zinc-900/80 border border-zinc-800 p-3 rounded-xl flex items-center justify-between font-mono">
-                        <span class="text-zinc-400 text-xs">通算バトル戦績:</span>
-                        <span id="stat-battles-record" class="font-bold text-white text-sm">0勝 0敗</span>
-                    </div>
-
-                    <div class="space-y-1.5">
-                        <span class="text-zinc-400 text-[10px] font-bold tracking-wider">過去の週次バトル履歴</span>
-                        <div id="container-battle-history" class="space-y-1 max-h-32 overflow-y-auto pr-1">
-                            <!-- JSで動的描画 -->
-                        </div>
-                    </div>
-                </div>
-
-                <!-- タブ2: 今週のTOP10 -->
-                <div id="panel-weekly-rank" class="hidden space-y-3">
-                    <div id="my-weekly-rank" class="bg-zinc-900 border border-zinc-800 p-2.5 rounded-xl font-mono text-xs flex justify-between items-center">
-                        <span class="text-zinc-400">あなたの順位:</span>
-                        <span class="font-bold text-white">集計中...</span>
-                    </div>
-                    <div id="list-weekly-rank" class="space-y-1.5 font-mono text-xs">
-                        <!-- JSで動的描画 -->
-                    </div>
-                </div>
-
-                <!-- タブ3: 歴代ランキング -->
-                <div id="panel-lifetime-rank" class="hidden space-y-4">
-                    <div class="space-y-1.5">
-                        <span class="text-zinc-400 text-[10px] font-bold tracking-wider">👑 歴代開拓王 TOP10</span>
-                        <div id="list-lifetime-rank" class="space-y-1 font-mono text-xs">
-                            <!-- JSで動的描画 -->
-                        </div>
-                    </div>
-                    <div class="space-y-1.5 border-t border-zinc-800 pt-3">
-                        <span class="text-emerald-400 text-[10px] font-bold tracking-wider">⚔️ 歴代奪還王 TOP10</span>
-                        <div id="list-reclaim-rank" class="space-y-1 font-mono text-xs">
-                            <!-- JSで動的描画 -->
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- モーダルフッター -->
-            <div class="pt-2 border-t border-zinc-800 flex justify-end">
-                <button id="btn-stats-footer-close" class="bg-zinc-800 hover:bg-zinc-700 text-white font-bold px-4 py-2 rounded-xl text-xs transition-all active:scale-95">閉じる</button>
-            </div>
-        </div>
-    </div>
-
-
-    <!-- Stats & Ranking Module -->
-    <script src="stats.js"></script>
-            <span id="swap-team-icon" class="w-2 h-2 rounded-full bg-white"></span>
-            <span id="swap-team-text">SWAP: Black ⇄ White</span>
-        </button>
-    </div>
 
     <!-- 右下：独立した大型円形フローティング現在地（リセンター）ボタン -->
     <button id="btn-recenter" aria-label="現在地に戻る" title="現在地に戻る" class="fixed bottom-6 right-6 z-[1000] w-14 h-14 bg-black/90 hover:bg-zinc-900 active:bg-zinc-800 text-white border border-zinc-700/90 hover:border-zinc-500 rounded-full shadow-2xl flex items-center justify-center transition-all transform active:scale-95">
@@ -355,6 +82,24 @@
     <!-- 最下部中央クレジット（薄く邪魔にならないよう配置、タップ無効化） -->
     <div class="absolute bottom-2 left-0 right-0 z-[900] pointer-events-none text-center text-[10px] text-zinc-400 opacity-40 font-mono select-none">
         Created with ❤️ for お絵描き楽しも委員会（しょうだい）
+    </div>
+
+    <!-- 右下：テスト用仮想散歩 D-Pad ＆ チーム切替デバッグ機能（MENUでON/OFF可能） -->
+    <div id="dpad-container" class="fixed bottom-24 right-4 z-[1000] bg-black/85 backdrop-blur-md border border-zinc-800 p-2.5 rounded-2xl shadow-2xl select-none flex flex-col items-center gap-1 hidden">
+        <div class="text-[9px] text-zinc-400 font-mono tracking-wider mb-0.5">VIRTUAL D-PAD (DEBUG)</div>
+        <button id="dpad-up" class="w-10 h-10 bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-700 border border-zinc-700 text-white rounded-lg flex items-center justify-center font-bold text-sm shadow transition-all active:scale-95">▲</button>
+        <div class="flex items-center gap-6">
+            <button id="dpad-left" class="w-10 h-10 bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-700 border border-zinc-700 text-white rounded-lg flex items-center justify-center font-bold text-sm shadow transition-all active:scale-95">◀</button>
+            <div class="w-10 h-10 flex items-center justify-center bg-zinc-950 border border-zinc-800 rounded-lg text-zinc-400 text-xs font-mono">●</div>
+            <button id="dpad-right" class="w-10 h-10 bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-700 border border-zinc-700 text-white rounded-lg flex items-center justify-center font-bold text-sm shadow transition-all active:scale-95">▶</button>
+        </div>
+        <button id="dpad-down" class="w-10 h-10 bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-700 border border-zinc-700 text-white rounded-lg flex items-center justify-center font-bold text-sm shadow transition-all active:scale-95">▼</button>
+
+        <!-- デバッグ用チーム切替ボタン（Black ⇄ White） -->
+        <button id="btn-swap-team" class="w-full mt-1.5 py-1 px-2 bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-700 border border-zinc-700 text-[10px] font-mono text-zinc-300 rounded-lg flex items-center justify-center gap-1.5 shadow transition-all active:scale-95">
+            <span id="swap-team-icon" class="w-2 h-2 rounded-full bg-white"></span>
+            <span id="swap-team-text">SWAP: Black ⇄ White</span>
+        </button>
     </div>
 
     <!-- ルール説明モーダル（初回アクセス時自動表示 & MENUから再表示） -->
@@ -397,7 +142,7 @@
                     <span class="w-5 h-5 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-[11px] font-bold text-zinc-300 shrink-0">4</span>
                     <div>
                         <div class="font-bold text-white mb-0.5">MENUで自由にカスタマイズ</div>
-                        <div class="text-zinc-400 text-[11px]">右上のMENUから「地図のON/OFF（オセロ風漆黒表示）」や「デバッグ用D-PadのON/OFF」を設定できます。</div>
+                        <div class="text-zinc-400 text-[11px]">右上のMENUから「スキンテーマ変更」「ランキング確認」「地図ON/OFF」を設定できます。</div>
                     </div>
                 </div>
             </div>
@@ -408,9 +153,9 @@
         </div>
     </div>
 
-    <!-- メニューモーダル（チームリセット告知・地図ON/OFF・デバッグON/OFF・ルール再表示） -->
+    <!-- メニューモーダル -->
     <div id="menu-modal" class="fixed inset-0 z-[2000] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 overflow-x-hidden box-border hidden">
-        <div class="bg-zinc-900 border border-zinc-700/90 rounded-2xl max-w-[calc(100vw-2rem)] sm:max-w-sm w-full p-5 shadow-2xl flex flex-col gap-3.5 text-zinc-200 box-border overflow-x-hidden">
+        <div class="bg-zinc-900 border border-zinc-700/90 rounded-2xl max-w-[calc(100vw-2rem)] sm:max-w-sm w-full p-5 shadow-2xl flex flex-col gap-3.5 text-zinc-200 box-border overflow-x-hidden max-h-[90vh] overflow-y-auto">
             <div class="flex items-center justify-between border-b border-zinc-800 pb-2.5">
                 <div class="flex items-center gap-2">
                     <span class="w-2.5 h-2.5 rounded-full bg-white"></span>
@@ -432,6 +177,35 @@
                     <span id="menu-reset-countdown">リセットまで: 計算中...</span>
                 </div>
                 <div class="text-[10px] text-zinc-500 font-mono">毎週月曜 00:00 JST に全マスと陣営がリセットされます</div>
+            </div>
+
+            <!-- スキンテーマ選択セクション -->
+            <div class="space-y-2 bg-zinc-950/80 border border-zinc-800 rounded-xl p-2.5">
+                <div class="font-bold text-white text-xs flex items-center justify-between">
+                    <span>🎨 マップ＆マステーマ</span>
+                    <span id="current-skin-badge" class="text-[10px] text-zinc-400 font-mono">標準</span>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[10px] hover:border-white transition-all active:scale-95" data-skin="default">標準 (Default)</button>
+                    <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[10px] hover:border-white transition-all active:scale-95 text-cyan-400" data-skin="neon">ネオン (Neon)</button>
+                    <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[10px] hover:border-white transition-all active:scale-95 text-amber-400" data-skin="gold">ゴールド (Gold)</button>
+                    <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[10px] hover:border-white transition-all active:scale-95 text-lime-400" data-skin="pixel">レトロ (Pixel)</button>
+                </div>
+            </div>
+
+            <!-- メインアクションボタン一覧 -->
+            <div class="flex flex-col gap-2">
+                <button id="btn-open-stats" class="w-full py-2.5 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 border border-zinc-700 text-amber-400 font-mono text-xs font-bold rounded-xl shadow transition-all active:scale-95 flex items-center justify-center gap-2">
+                    <span>🏆 ランキング・マイ戦績</span>
+                </button>
+
+                <button id="btn-export-poster" class="w-full py-2.5 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 border border-zinc-700 text-amber-400 font-mono text-xs font-bold rounded-xl shadow transition-all active:scale-95 flex items-center justify-center gap-2">
+                    <span>🖼️ 週間陣地ポスター保存</span>
+                </button>
+
+                <button id="btn-open-pro-modal" class="w-full py-2.5 bg-amber-600 hover:bg-amber-500 text-white font-mono text-xs font-bold rounded-xl shadow transition-all active:scale-95 flex items-center justify-center gap-2">
+                    <span>⭐ Pro / サポーター</span>
+                </button>
             </div>
 
             <!-- 表示・動作設定（地図ON/OFF & デバッグON/OFF） -->
@@ -473,14 +247,121 @@
                 </button>
             </div>
 
-            <!-- クレジット -->
-            <div class="text-center text-[10px] text-zinc-500 font-mono">
-                Created for お絵描き楽しも委員会（しょうだい）
-            </div>
-
             <button id="btn-close-menu" class="w-full py-2.5 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 border border-zinc-700 text-white font-bold font-mono text-xs rounded-xl shadow transition-all active:scale-95">
                 閉じる
             </button>
+        </div>
+    </div>
+
+    <!-- ランキング・マイ戦績モーダル -->
+    <div id="stats-modal" class="hidden fixed inset-0 z-[2000] bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="bg-zinc-900 border border-zinc-700/90 rounded-2xl max-w-lg w-full max-w-[calc(100vw-2rem)] p-5 shadow-2xl flex flex-col gap-4 text-xs select-none max-h-[90vh] overflow-hidden">
+            <!-- モーダルヘッダー -->
+            <div class="flex items-center justify-between border-b border-zinc-800 pb-3">
+                <div class="font-bold text-sm tracking-wider flex items-center gap-2 text-white">
+                    <span class="text-amber-400">🏆</span> LEADERBOARD & STATS
+                </div>
+                <button id="btn-close-stats" class="w-7 h-7 rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold flex items-center justify-center">✕</button>
+            </div>
+
+            <!-- タブバー -->
+            <div class="flex items-center gap-1.5 bg-zinc-950 p-1 rounded-xl border border-zinc-800 text-[11px]">
+                <button id="tab-my-stats" class="tab-btn active flex-1 py-1.5 rounded-lg border-b-2 border-amber-500 font-medium text-center text-amber-400">マイ戦績</button>
+                <button id="tab-weekly-rank" class="tab-btn flex-1 py-1.5 rounded-lg border-b-2 border-transparent font-medium text-center text-zinc-400 hover:text-white">今週のTOP10</button>
+                <button id="tab-lifetime-rank" class="tab-btn flex-1 py-1.5 rounded-lg border-b-2 border-transparent font-medium text-center text-zinc-400 hover:text-white">歴代ランキング</button>
+            </div>
+
+            <!-- パネルコンテナ -->
+            <div class="flex-1 overflow-y-auto pr-1 space-y-4">
+                <!-- タブ1: マイ戦績 -->
+                <div id="panel-my-stats" class="space-y-4">
+                    <div class="bg-zinc-950/80 border border-zinc-800 p-3 rounded-xl flex items-center gap-2">
+                        <input id="input-nickname" type="text" maxlength="20" placeholder="ニックネームを入力" class="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-1.5 text-white focus:outline-none focus:border-zinc-400 text-xs font-mono">
+                        <button id="btn-save-nickname" class="bg-zinc-100 hover:bg-white text-black font-bold px-3 py-1.5 rounded-lg text-xs transition-all active:scale-95">保存</button>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-2 font-mono">
+                        <div class="bg-zinc-950/80 border border-zinc-800 p-3 rounded-xl flex flex-col gap-1">
+                            <span class="text-zinc-500 text-[10px]">生涯開拓マス数</span>
+                            <div class="text-lg font-bold text-white"><span id="stat-lifetime-tiles">0</span> <span class="text-xs text-zinc-400">マス</span></div>
+                            <span id="stat-lifetime-area" class="text-[9px] text-zinc-400">0 m²</span>
+                        </div>
+                        <div class="bg-zinc-950/80 border border-zinc-800 p-3 rounded-xl flex flex-col gap-1">
+                            <span class="text-zinc-500 text-[10px]">オセロ奪還数</span>
+                            <div class="text-lg font-bold text-emerald-400"><span id="stat-reclaimed-tiles">0</span> <span class="text-xs text-zinc-400">マス</span></div>
+                            <span class="text-[9px] text-zinc-500">相手カラー塗り替え</span>
+                        </div>
+                    </div>
+
+                    <div class="bg-zinc-950/80 border border-zinc-800 p-3 rounded-xl flex items-center justify-between font-mono">
+                        <span class="text-zinc-400 text-xs">通算バトル戦績:</span>
+                        <span id="stat-battles-record" class="font-bold text-white text-sm">0勝 0敗</span>
+                    </div>
+
+                    <div class="space-y-1.5">
+                        <span class="text-zinc-400 text-[10px] font-bold tracking-wider">過去の週次バトル履歴</span>
+                        <div id="container-battle-history" class="space-y-1 max-h-32 overflow-y-auto pr-1">
+                            <!-- JSで動的描画 -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- タブ2: 今週のTOP10 -->
+                <div id="panel-weekly-rank" class="hidden space-y-3">
+                    <div id="my-weekly-rank" class="bg-zinc-950 border border-zinc-800 p-2.5 rounded-xl font-mono text-xs flex justify-between items-center">
+                        <span class="text-zinc-400">あなたの順位:</span>
+                        <span class="font-bold text-white">集計中...</span>
+                    </div>
+                    <ul id="list-weekly-rank" class="space-y-1.5 font-mono text-xs">
+                        <!-- JSで動的描画 -->
+                    </ul>
+                </div>
+
+                <!-- タブ3: 歴代ランキング -->
+                <div id="panel-lifetime-rank" class="hidden space-y-4">
+                    <div class="space-y-1.5">
+                        <span class="text-zinc-400 text-[10px] font-bold tracking-wider">👑 歴代開拓王 TOP10</span>
+                        <ul id="list-lifetime-rank" class="space-y-1 font-mono text-xs">
+                            <!-- JSで動的描画 -->
+                        </ul>
+                    </div>
+                    <div class="space-y-1.5 border-t border-zinc-800 pt-3">
+                        <span class="text-emerald-400 text-[10px] font-bold tracking-wider">⚔️ 歴代奪還王 TOP10</span>
+                        <ul id="list-reclaim-rank" class="space-y-1 font-mono text-xs">
+                            <!-- JSで動的描画 -->
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- モーダルフッター -->
+            <div class="pt-2 border-t border-zinc-800 flex justify-end">
+                <button id="btn-stats-footer-close" class="bg-zinc-800 hover:bg-zinc-700 text-white font-bold px-4 py-2 rounded-xl text-xs transition-all active:scale-95">閉じる</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Proモーダル -->
+    <div id="pro-modal" class="hidden fixed inset-0 z-[2000] bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="bg-zinc-900 border border-zinc-700/90 rounded-2xl max-w-sm w-full p-6 shadow-2xl flex flex-col gap-4 text-xs select-none">
+            <div class="flex items-center justify-between border-b border-zinc-800 pb-3">
+                <div class="font-bold text-sm text-amber-400 flex items-center gap-2">⭐ PRO SUPPORTER</div>
+                <button id="btn-close-pro" class="text-zinc-400 hover:text-white text-sm font-bold">✕</button>
+            </div>
+            
+            <ul class="text-zinc-300 list-disc list-inside space-y-1.5 text-xs">
+                <li>限定スキン使い放題（ネオン・ゴールド・レトロ）</li>
+                <li>陣地ポスター出力（高画質PNG）</li>
+                <li>過去ログ無制限保存</li>
+                <li>★ サポーターゴールドバッジ付与</li>
+            </ul>
+
+            <div class="space-y-2">
+                <input id="input-pro-code" type="text" placeholder="コードを入力 (例: SHODAI-PRO)" class="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-white font-mono">
+                <button id="btn-activate-pro" class="w-full bg-amber-600 hover:bg-amber-500 text-white py-2 rounded-lg font-bold">解除する</button>
+            </div>
+            
+            <button class="w-full bg-zinc-800 text-zinc-400 py-2 rounded-lg text-[10px]">Stripeで支援する（準備中）</button>
         </div>
     </div>
 
@@ -488,11 +369,13 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <!-- Supabase JS v2 CDN -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <!-- Supabase Client Module -->
-    <script src="supabase.js?v=20261112v9"></script>
-    <!-- Grid Calculation & Render Module -->
-    <script src="grid.js?v=20261112v10"></script>
+    <!-- Feature Modules -->
+    <script src="poster.js"></script>
+    <script src="pro.js"></script>
+    <script src="stats.js"></script>
+    <script src="supabase.js?v=20261113v1"></script>
+    <script src="grid.js?v=20261113v1"></script>
     <!-- Main Application Logic -->
-    <script src="app.js?v=20261112v10"></script>
+    <script src="app.js?v=20261113v1"></script>
 </body>
 </html>

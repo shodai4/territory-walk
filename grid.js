@@ -1,48 +1,50 @@
 /**
  * TERRITORY WALK - grid.js
- * 100m Mesh Grid Calculation & Layer Render Module
- * ナスカの地上絵モード：未開拓空マス描画を全廃し、塗られたマスのみを描画することで
- * 日本全体・広域ズーム（zoom 1〜22）でもスマホで超軽量・高速描画を実現
+ * 100m Quad Mesh Calculation, Tile State Management, Dynamic Styling & Leaflet Grid Layer
  */
 
 class GridManager {
-    constructor(mapInstance, appInstance) {
-        this.map = mapInstance;
+    constructor(map, appInstance) {
+        this.map = map;
         this.app = appInstance;
-        this.gridLayerGroup = L.layerGroup().addTo(this.map);
-        this.renderedMeshes = new Map();
-        this.claimedTilesCache = new Map();
 
-        this.LAT_GRID = 0.0009; // 約100m四方の緯度グリッド（固定）
-        // 日本（本州・関西〜関東 緯度約35.0度）を基準とする固定経度グリッド幅
-        // 緯度ごとに動的計算すると上下行間で経度境界がズレてレンガ積み状になるため、
-        // 経度グリッド幅を一律固定定数化して完全な直交格子（チェス盤・オセロ盤）を実現
-        this.BASE_LAT = 35.0; // 日本基準緯度
-        this.LNG_GRID = this.LAT_GRID / Math.cos(this.BASE_LAT * Math.PI / 180); // 約0.00109868度
+        // Base 100m mesh constants for Japan (Latitude ~35.0 deg)
+        this.LAT_GRID = 0.0009; // ~100m in latitude
+        this.LNG_GRID = this.LAT_GRID / Math.cos(35.0 * Math.PI / 180); // ~0.00109868 degrees in longitude
+
+        // In-memory cache for fast lookup
+        this.claimedTilesCache = new Map(); // meshId -> 'white' | 'black'
+        this.renderedMeshes = new Map();     // meshId -> L.Rectangle layer
+
+        this.gridLayerGroup = L.layerGroup().addTo(this.map);
 
         this.checkWeekReset();
         this.loadTilesFromStorage();
         this.initEventListeners();
-        this.updateGrids();
     }
 
+    /**
+     * Compute integer mesh indices (latIdx, lngIdx) from lat/lng
+     */
     getMeshIndices(lat, lng) {
         const latIdx = Math.floor(lat / this.LAT_GRID);
         const lngIdx = Math.floor(lng / this.LNG_GRID);
         return { latIdx, lngIdx };
     }
 
+    /**
+     * Compute bounding box for a given mesh coordinate
+     */
     getMeshBounds(latIdx, lngIdx) {
         const south = latIdx * this.LAT_GRID;
-        const north = (latIdx + 1) * this.LAT_GRID;
+        const north = south + this.LAT_GRID;
         const west = lngIdx * this.LNG_GRID;
-        const east = (lngIdx + 1) * this.LNG_GRID;
-
-        return L.latLngBounds([south, west], [north, east]);
+        const east = west + this.LNG_GRID;
+        return [[south, west], [north, east]];
     }
 
     getMeshId(latIdx, lngIdx) {
-        return `${latIdx}_${lngIdx}`;
+        return `tile_${latIdx}_${lngIdx}`;
     }
 
     getMeshIdFromLatLng(lat, lng) {
@@ -51,30 +53,27 @@ class GridManager {
     }
 
     checkWeekReset() {
-        const currentWeek = this.app?.supabaseManager?.getCurrentWeekId() || 'default-week';
-        const savedWeek = localStorage.getItem('territory_saved_week');
-        const gridVersion = localStorage.getItem('territory_grid_version');
+        if (!this.app || !this.app.supabaseManager) return;
+        const currentWeek = this.app.supabaseManager.getCurrentWeekId();
+        const savedWeek = localStorage.getItem('territory_current_week');
 
-        // グリッド計算式更新（チェス盤完全格子化 v2）または週リセット時にキャッシュクリア
-        if ((savedWeek && savedWeek !== currentWeek) || gridVersion !== 'v2_fixed_grid') {
+        if (savedWeek && savedWeek !== currentWeek) {
+            console.log(`Weekly reset detected: ${savedWeek} -> ${currentWeek}`);
             localStorage.removeItem('territory_claimed_tiles');
             this.claimedTilesCache.clear();
-            this.gridLayerGroup.clearLayers();
-            this.renderedMeshes.clear();
         }
-        localStorage.setItem('territory_saved_week', currentWeek);
-        localStorage.setItem('territory_grid_version', 'v2_fixed_grid');
+        localStorage.setItem('territory_current_week', currentWeek);
     }
 
     loadTilesFromStorage() {
         try {
-            const saved = localStorage.getItem('territory_claimed_tiles');
-            if (saved) {
-                const obj = JSON.parse(saved);
-                for (const [k, v] of Object.entries(obj)) {
-                    if (v === 'white' || v === 'black') {
-                        this.claimedTilesCache.set(k, v);
-                    }
+            const raw = localStorage.getItem('territory_claimed_tiles');
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed)) {
+                    parsed.forEach(([id, team]) => {
+                        this.claimedTilesCache.set(id, team);
+                    });
                 }
             }
         } catch (e) {
@@ -84,11 +83,8 @@ class GridManager {
 
     saveTilesToStorage() {
         try {
-            const obj = {};
-            for (const [k, v] of this.claimedTilesCache.entries()) {
-                obj[k] = v;
-            }
-            localStorage.setItem('territory_claimed_tiles', JSON.stringify(obj));
+            const arr = Array.from(this.claimedTilesCache.entries());
+            localStorage.setItem('territory_claimed_tiles', JSON.stringify(arr));
         } catch (e) {
             console.warn('Failed to save tiles to localStorage:', e);
         }
@@ -100,6 +96,7 @@ class GridManager {
             if (throttleTimer) return;
             throttleTimer = setTimeout(() => {
                 this.updateGrids();
+                this.fetchAndSyncTiles();
                 throttleTimer = null;
             }, 100);
         };
@@ -108,78 +105,65 @@ class GridManager {
         this.map.on('zoomend', onMapChange);
     }
 
+    /**
+     * Sync remote tiles within visible bounds from Supabase
+     */
     async fetchAndSyncTiles() {
         if (!this.app || !this.app.supabaseManager) return;
 
         try {
-    redrawTiles() {
-        for (const [meshId, rectangle] of this.renderedMeshes.entries()) {
-            const team = this.claimedTilesCache.get(meshId);
-            rectangle.setStyle(this.getTileStyle(team));
-        }
-    }
+            const bounds = this.map.getBounds();
+            const tiles = await this.app.supabaseManager.fetchTilesInBounds(
+                bounds.getSouth(),
+                bounds.getNorth(),
+                bounds.getWest(),
+                bounds.getEast()
+            );
 
-    getTileStyle(team) {
-        const skin = document.body.dataset.skin || 'default';
-        const styles = {
-            default: {
-                white: { color: '#ffffff', weight: 1.5, fillOpacity: 0.65, fillColor: '#ffffff' },
-                black: { color: '#000000', weight: 1.5, fillOpacity: 0.75, fillColor: '#000000' },
-                unclaimed: { color: '#71717a', weight: 1, fillOpacity: 0.02, fillColor: '#ffffff' }
-            },
-            neon: {
-                white: { color: '#083344', weight: 1.5, fillOpacity: 0.8, fillColor: '#06b6d4' },
-                black: { color: '#3b0764', weight: 1.5, fillOpacity: 0.8, fillColor: '#a855f7' },
-                unclaimed: { color: '#334155', weight: 1, fillOpacity: 0.05, fillColor: '#1e293b' }
-            },
-            gold: {
-                white: { color: '#ca8a04', weight: 1.5, fillOpacity: 0.7, fillColor: '#fef08a' },
-                black: { color: '#eab308', weight: 1.5, fillOpacity: 0.8, fillColor: '#18181b' },
-                unclaimed: { color: '#71717a', weight: 1, fillOpacity: 0.05, fillColor: '#27272a' }
-            },
-            pixel: {
-                white: { color: '#3f6212', weight: 1.5, fillOpacity: 0.8, fillColor: '#bef264' },
-                black: { color: '#14532d', weight: 1.5, fillOpacity: 0.8, fillColor: '#365314' },
-                unclaimed: { color: '#4d7c0f', weight: 1, fillOpacity: 0.1, fillColor: '#365314' }
+            if (tiles && tiles.length > 0) {
+                let updated = false;
+                tiles.forEach(tile => {
+                    if (this.claimedTilesCache.get(tile.tile_id) !== tile.team) {
+                        this.claimedTilesCache.set(tile.tile_id, tile.team);
+                        updated = true;
+                    }
+                });
+                if (updated) {
+                    this.updateGrids();
+                    this.saveTilesToStorage();
+                    if (this.app) this.app.updateScoreUI();
+                }
             }
-        };
-
-        const theme = styles[skin] || styles.default;
-        const base = team === 'white' ? theme.white : (team === 'black' ? theme.black : theme.unclaimed);
-        
-        return { ...base, opacity: 0.9, interactive: false };
-    }
-
-    redrawTiles() {
-        // Redraw tiles by refreshing style based on current skin
-        for (const [meshId, rectangle] of this.renderedMeshes.entries()) {
-            const team = this.claimedTilesCache.get(meshId);
-            rectangle.setStyle(this.getTileStyle(team));
+        } catch (e) {
+            console.warn('Failed to sync remote tiles:', e);
         }
     }
 
+    /**
+     * Get style definition for tile based on team and current active skin
+     */
     getTileStyle(team) {
         const skin = document.body.dataset.skin || 'default';
         const styles = {
             default: {
-                white: { color: '#ffffff', weight: 1.5, fillOpacity: 0.65, fillColor: '#ffffff' },
-                black: { color: '#000000', weight: 1.5, fillOpacity: 0.75, fillColor: '#000000' },
-                unclaimed: { color: '#71717a', weight: 1, fillOpacity: 0.02, fillColor: '#ffffff' }
+                white: { color: '#000000', weight: 1.5, fillOpacity: 0.85, fillColor: '#ffffff' },
+                black: { color: '#71717a', weight: 1.5, fillOpacity: 0.90, fillColor: '#09090b' },
+                unclaimed: { color: '#3f3f46', weight: 1, fillOpacity: 0.02, fillColor: '#ffffff' }
             },
             neon: {
-                white: { color: '#083344', weight: 1.5, fillOpacity: 0.8, fillColor: '#06b6d4' },
-                black: { color: '#3b0764', weight: 1.5, fillOpacity: 0.8, fillColor: '#a855f7' },
+                white: { color: '#083344', weight: 1.5, fillOpacity: 0.85, fillColor: '#06b6d4' },
+                black: { color: '#3b0764', weight: 1.5, fillOpacity: 0.85, fillColor: '#a855f7' },
                 unclaimed: { color: '#334155', weight: 1, fillOpacity: 0.05, fillColor: '#1e293b' }
             },
             gold: {
-                white: { color: '#ca8a04', weight: 1.5, fillOpacity: 0.7, fillColor: '#fef08a' },
-                black: { color: '#eab308', weight: 1.5, fillOpacity: 0.8, fillColor: '#18181b' },
+                white: { color: '#ca8a04', weight: 1.5, fillOpacity: 0.85, fillColor: '#fef08a' },
+                black: { color: '#eab308', weight: 1.5, fillOpacity: 0.90, fillColor: '#18181b' },
                 unclaimed: { color: '#71717a', weight: 1, fillOpacity: 0.05, fillColor: '#27272a' }
             },
             pixel: {
-                white: { color: '#3f6212', weight: 1.5, fillOpacity: 0.8, fillColor: '#bef264' },
-                black: { color: '#14532d', weight: 1.5, fillOpacity: 0.8, fillColor: '#365314' },
-                unclaimed: { color: '#4d7c0f', weight: 1, fillOpacity: 0.1, fillColor: '#365314' }
+                white: { color: '#3f6212', weight: 1.5, fillOpacity: 0.85, fillColor: '#bef264' },
+                black: { color: '#14532d', weight: 1.5, fillOpacity: 0.85, fillColor: '#365314' },
+                unclaimed: { color: '#4d7c0f', weight: 1, fillOpacity: 0.08, fillColor: '#365314' }
             }
         };
 
@@ -193,170 +177,84 @@ class GridManager {
         };
     }
 
-            const bounds = this.map.getBounds();
-            const tiles = await this.app.supabaseManager.fetchTilesInBounds(
-                bounds.getSouth(),
-                bounds.getNorth(),
-                bounds.getWest(),
-                bounds.getEast()
-            );
-
-            let updated = false;
-            if (Array.isArray(tiles)) {
-                tiles.forEach(tile => {
-                    if (tile && tile.tile_id && tile.team) {
-                        if (this.claimedTilesCache.get(tile.tile_id) !== tile.team) {
-                            this.claimedTilesCache.set(tile.tile_id, tile.team);
-                            updated = true;
-                        }
-                    }
-                });
-            }
-
-            if (updated) {
-                this.saveTilesToStorage();
-                if (this.app.updateScoreUI) {
-                    this.app.updateScoreUI();
-                }
-            }
-        } catch (e) {
-            console.warn('Tile sync failed or running offline:', e);
+    /**
+     * Redraw all rendered tiles based on current skin
+     */
+    redrawTiles() {
+        for (const [meshId, rectangle] of this.renderedMeshes.entries()) {
+            const team = this.claimedTilesCache.get(meshId);
+            rectangle.setStyle(this.getTileStyle(team));
         }
     }
 
     /**
-     * 広域ズーム（ナスカの地上絵モード）対応グリッド更新
-     * 空マスは一切生成せず、開拓済みタイルのみを高速描画
+     * Render tiles in view.
+     * Render claimed tiles across all zoom levels like Nazca lines.
      */
-    async updateGrids() {
-        await this.fetchAndSyncTiles();
-
-        const bounds = this.map.getBounds().pad(0.2);
+    updateGrids() {
+        const bounds = this.map.getBounds();
         const currentZoom = this.map.getZoom();
-        const isDistant = currentZoom < 13;
-        const activeMeshIds = new Set();
 
+        const south = bounds.getSouth();
+        const north = bounds.getNorth();
+        const west = bounds.getWest();
+        const east = bounds.getEast();
+
+        const minLatIdx = Math.floor(south / this.LAT_GRID);
+        const maxLatIdx = Math.floor(north / this.LAT_GRID);
+        const minLngIdx = Math.floor(west / this.LNG_GRID);
+        const maxLngIdx = Math.floor(east / this.LNG_GRID);
+
+        const currentVisibleMeshes = new Set();
+
+        // 1. Render all claimed tiles (even if zoomed out)
         for (const [meshId, team] of this.claimedTilesCache.entries()) {
-            if (team !== 'white' && team !== 'black') continue;
+            const parts = meshId.split('_');
+            if (parts.length === 3) {
+                const latIdx = parseInt(parts[1], 10);
+                const lngIdx = parseInt(parts[2], 10);
 
-            const [latIdxStr, lngIdxStr] = meshId.split('_');
-            const latIdx = parseInt(latIdxStr, 10);
-            const lngIdx = parseInt(lngIdxStr, 10);
-            const meshBounds = this.getMeshBounds(latIdx, lngIdx);
-
-            // 画面内に入るマスのみ描画（引きズーム時は広範囲が全て対象になる）
-            if (bounds.intersects(meshBounds)) {
-                activeMeshIds.add(meshId);
-                const style = this.getTileStyle(team, currentZoom);
-
-                if (this.renderedMeshes.has(meshId)) {
-                    const rect = this.renderedMeshes.get(meshId);
-                    if (rect._team !== team || rect._isDistant !== isDistant) {
-                        rect.setStyle(style);
-                        rect._team = team;
-                        rect._isDistant = isDistant;
-                    }
-                } else {
-                    const rect = L.rectangle(meshBounds, style);
-                    rect._team = team;
-                    rect._isDistant = isDistant;
-                    this.gridLayerGroup.addLayer(rect);
-                    this.renderedMeshes.set(meshId, rect);
+                if (latIdx >= minLatIdx - 1 && latIdx <= maxLatIdx + 1 &&
+                    lngIdx >= minLngIdx - 1 && lngIdx <= maxLngIdx + 1) {
+                    
+                    currentVisibleMeshes.add(meshId);
+                    this.renderSingleTile(meshId, latIdx, lngIdx, team);
                 }
             }
         }
 
-        // 画面外に外れたマスをクリーンアップ
-        for (const [meshId, rect] of this.renderedMeshes.entries()) {
-            if (!activeMeshIds.has(meshId)) {
-                this.gridLayerGroup.removeLayer(rect);
+        // 2. Render unclaimed empty grid only when zoomed in close (zoom >= 16)
+        if (currentZoom >= 16) {
+            for (let latIdx = minLatIdx; latIdx <= maxLatIdx; latIdx++) {
+                for (let lngIdx = minLngIdx; lngIdx <= maxLngIdx; lngIdx++) {
+                    const meshId = this.getMeshId(latIdx, lngIdx);
+                    currentVisibleMeshes.add(meshId);
+                    if (!this.renderedMeshes.has(meshId)) {
+                        this.renderSingleTile(meshId, latIdx, lngIdx, this.claimedTilesCache.get(meshId));
+                    }
+                }
+            }
+        }
+
+        // 3. Remove meshes that moved out of viewport
+        for (const [meshId, rectangle] of this.renderedMeshes.entries()) {
+            if (!currentVisibleMeshes.has(meshId)) {
+                this.gridLayerGroup.removeLayer(rectangle);
                 this.renderedMeshes.delete(meshId);
             }
         }
     }
 
-    /**
-     * 白マス・黒マスのスタイル定義
-     * 地図ON（ダーク反転）時も地図OFF（漆黒）時もオセロのように鮮明に際立つ境界線と配色
-     */
-    getTileStyle(team, currentZoom = 16) {
-        const isDistant = currentZoom < 13;
-        const strokeWidth = isDistant ? 0.8 : 1.5;
-
-        if (team === 'white') {
-            return {
-                color: '#000000', // 白マスにクッキリした黒枠（オセロ白コマ調）
-                weight: strokeWidth,
-                opacity: 1.0,
-                fillColor: '#ffffff',
-                fillOpacity: 0.92,
-                interactive: false
-            };
-        } else if (team === 'black') {
-            return {
-                color: '#71717a', // 黒マスにZinc-500の明るい輪郭枠（ダーク背景でも埋もれない）
-                weight: strokeWidth,
-                opacity: 1.0,
-                fillColor: '#09090b',
-                fillOpacity: 0.95,
-                interactive: false
-            };
-        }
-        return null;
-    }
-
-    renderSingleTile(meshId, team) {
-        const [latIdxStr, lngIdxStr] = meshId.split('_');
-        const latIdx = parseInt(latIdxStr, 10);
-        const lngIdx = parseInt(lngIdxStr, 10);
-        const meshBounds = this.getMeshBounds(latIdx, lngIdx);
-        const currentZoom = this.map.getZoom();
-        const style = this.getTileStyle(team, currentZoom);
-
+    renderSingleTile(meshId, latIdx, lngIdx, team) {
         if (this.renderedMeshes.has(meshId)) {
             const rect = this.renderedMeshes.get(meshId);
-            rect.setStyle(style);
-            rect._team = team;
-            rect._isDistant = currentZoom < 13;
-        } else {
-            const rect = L.rectangle(meshBounds, style);
-            rect._team = team;
-            rect._isDistant = currentZoom < 13;
-            this.gridLayerGroup.addLayer(rect);
-            this.renderedMeshes.set(meshId, rect);
-        }
-    }
-
-    async onPlayerStep(lat, lng) {
-        if (!this.app) return;
-
-        const { meshId, latIdx, lngIdx } = this.getMeshIdFromLatLng(lat, lng);
-        const currentTeam = this.app.currentTeam;
-
-        if (this.claimedTilesCache.get(meshId) === currentTeam) {
+            rect.setStyle(this.getTileStyle(team));
             return;
         }
 
-        this.claimedTilesCache.set(meshId, currentTeam);
-        this.renderSingleTile(meshId, currentTeam);
-        this.saveTilesToStorage();
-
-        if (this.app.playClaimSound) {
-            this.app.playClaimSound();
-        }
-        if (this.app.triggerHaptic) {
-            this.app.triggerHaptic();
-        }
-        if (this.app.updateScoreUI) {
-            this.app.updateScoreUI();
-        }
-
-        if (this.app.supabaseManager) {
-            try {
-                await this.app.supabaseManager.claimTile(meshId, latIdx, lngIdx, currentTeam);
-            } catch (err) {
-                console.warn('Supabase claimTile offline/error:', err);
-            }
-        }
+        const bounds = this.getMeshBounds(latIdx, lngIdx);
+        const rect = L.rectangle(bounds, this.getTileStyle(team));
+        rect.addTo(this.gridLayerGroup);
+        this.renderedMeshes.set(meshId, rect);
     }
 }
