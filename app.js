@@ -31,9 +31,16 @@ class TerritoryWalkApp {
         this.isDebugMode = false;
 
         this.initTeam();
+        this.initDPad();
+        this.initResetCountdown();
+        this.initSkinSelector();
         this.initDOM();
         this.initMap();
         this.initSupabase();
+        this.isDebugMode = false;
+        this.statsManager = new StatsManager(this.supabaseManager, this);
+        
+        this.initStatsModal();
         this.initGrid();
         this.initGeolocation();
         this.initEvents();
@@ -151,6 +158,9 @@ class TerritoryWalkApp {
         } else {
             if (mapContainer) mapContainer.classList.add('map-tiles-hidden');
         }
+        // Log stat claim (StatsManager handles throttling internally)
+        this.statsManager.recordTileClaim(isReclaimed, this.isDebugMode);
+
 
         this.updateMapVisibilityUI();
         this.updatePlayerMarker(CONFIG.DEFAULT_CENTER);
@@ -336,6 +346,97 @@ class TerritoryWalkApp {
             timeout: 15000,
             maximumAge: 0
         };
+
+    initStatsModal() {
+        const modal = document.getElementById('stats-modal');
+        const openBtn = document.getElementById('btn-open-stats');
+        const closeBtn = document.getElementById('btn-close-stats');
+        const footerCloseBtn = document.getElementById('btn-stats-footer-close');
+        
+        openBtn.addEventListener('click', () => {
+            modal.classList.remove('hidden');
+            this.updateStatsDisplay();
+        });
+        
+        const closeModal = () => modal.classList.add('hidden');
+        closeBtn.addEventListener('click', closeModal);
+        footerCloseBtn.addEventListener('click', closeModal);
+
+        // Tab switching
+        const tabs = ['my-stats', 'weekly-rank', 'lifetime-rank'];
+        tabs.forEach(tabId => {
+            document.getElementById(`tab-${tabId}`).addEventListener('click', (e) => {
+                tabs.forEach(t => {
+                    document.getElementById(`tab-${t}`).classList.remove('active');
+                    document.getElementById(`panel-${t}`).classList.add('hidden');
+                });
+                e.target.classList.add('active');
+                document.getElementById(`panel-${tabId}`).classList.remove('hidden');
+                this.loadTabData(tabId);
+            });
+        });
+
+        // Nickname save
+        document.getElementById('btn-save-nickname').addEventListener('click', () => {
+            const val = document.getElementById('input-nickname').value;
+            this.statsManager.setNickname(val);
+            alert('ニックネームを保存しました');
+            this.updateStatsDisplay();
+        });
+    }
+
+    async loadTabData(tabId) {
+        if (tabId === 'weekly-rank') {
+            const weekId = this.supabaseManager.getCurrentWeekId();
+            const list = await this.statsManager.fetchWeeklyRanking(weekId);
+    initSkinSelector() {
+        const skin = localStorage.getItem('territory_skin') || 'default';
+        document.body.dataset.skin = skin;
+
+        document.querySelectorAll('.skin-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const newSkin = e.target.dataset.skin;
+                document.body.dataset.skin = newSkin;
+                localStorage.setItem('territory_skin', newSkin);
+                
+                if (this.gridManager) {
+                    this.gridManager.redrawTiles();
+                }
+            });
+        });
+    }
+
+            this.renderList('list-weekly-rank', list, 'tiles_count');
+        } else if (tabId === 'lifetime-rank') {
+            const listLife = await this.statsManager.fetchLifetimeRanking();
+            this.renderList('list-lifetime-rank', listLife, 'lifetime_tiles');
+            const listRec = await this.statsManager.fetchReclaimRanking();
+            this.renderList('list-reclaim-rank', listRec, 'lifetime_reclaimed');
+        }
+    }
+
+    renderList(containerId, list, field) {
+        const container = document.getElementById(containerId);
+        container.innerHTML = list.map((item, i) => `
+            <div class="flex justify-between border-b border-zinc-800 py-1">
+                <span>${i+1}. ${item.nickname}</span>
+                <span class="font-bold">${item[field]}</span>
+            </div>
+        `).join('');
+    }
+
+    updateStatsDisplay() {
+        const stats = this.statsManager.stats;
+        document.getElementById('stat-lifetime-tiles').textContent = stats.lifetime_tiles;
+        document.getElementById('stat-lifetime-area').textContent = `${(stats.lifetime_tiles * 100).toLocaleString()} m² (東京ドーム約 ${(stats.lifetime_tiles * 100 / 46755).toFixed(2)}個分)`;
+        document.getElementById('stat-reclaimed-tiles').textContent = stats.lifetime_reclaimed;
+        document.getElementById('stat-battles-record').textContent = `${stats.battles_won}勝 ${stats.battles_lost}敗`;
+
+        const history = document.getElementById('container-battle-history');
+        history.innerHTML = stats.battle_history.map(h => `
+            <div class="text-[10px] text-zinc-500 border-b border-zinc-900">${h.weekId}: ${h.result} (${h.tiles}マス)</div>
+        `).join('');
+    }
 
         navigator.geolocation.getCurrentPosition(
             (position) => this.handlePositionUpdate(position, true),

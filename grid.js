@@ -112,6 +112,49 @@ class GridManager {
         if (!this.app || !this.app.supabaseManager) return;
 
         try {
+    redrawTiles() {
+        // Redraw tiles by refreshing style based on current skin
+        for (const [meshId, rectangle] of this.renderedMeshes.entries()) {
+            const team = this.claimedTilesCache.get(meshId);
+            rectangle.setStyle(this.getTileStyle(team));
+        }
+    }
+
+    getTileStyle(team) {
+        const skin = document.body.dataset.skin || 'default';
+        const styles = {
+            default: {
+                white: { color: '#ffffff', weight: 1.5, fillOpacity: 0.65, fillColor: '#ffffff' },
+                black: { color: '#000000', weight: 1.5, fillOpacity: 0.75, fillColor: '#000000' },
+                unclaimed: { color: '#71717a', weight: 1, fillOpacity: 0.02, fillColor: '#ffffff' }
+            },
+            neon: {
+                white: { color: '#083344', weight: 1.5, fillOpacity: 0.8, fillColor: '#06b6d4' },
+                black: { color: '#3b0764', weight: 1.5, fillOpacity: 0.8, fillColor: '#a855f7' },
+                unclaimed: { color: '#334155', weight: 1, fillOpacity: 0.05, fillColor: '#1e293b' }
+            },
+            gold: {
+                white: { color: '#ca8a04', weight: 1.5, fillOpacity: 0.7, fillColor: '#fef08a' },
+                black: { color: '#eab308', weight: 1.5, fillOpacity: 0.8, fillColor: '#18181b' },
+                unclaimed: { color: '#71717a', weight: 1, fillOpacity: 0.05, fillColor: '#27272a' }
+            },
+            pixel: {
+                white: { color: '#3f6212', weight: 1.5, fillOpacity: 0.8, fillColor: '#bef264' },
+                black: { color: '#14532d', weight: 1.5, fillOpacity: 0.8, fillColor: '#365314' },
+                unclaimed: { color: '#4d7c0f', weight: 1, fillOpacity: 0.1, fillColor: '#365314' }
+            }
+        };
+
+        const theme = styles[skin] || styles.default;
+        const base = team === 'white' ? theme.white : (team === 'black' ? theme.black : theme.unclaimed);
+        
+        return {
+            ...base,
+            opacity: 0.9,
+            interactive: false
+        };
+    }
+
             const bounds = this.map.getBounds();
             const tiles = await this.app.supabaseManager.fetchTilesInBounds(
                 bounds.getSouth(),

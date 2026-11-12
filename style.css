@@ -1,3 +1,7 @@
+*, *::before, *::after {
+    box-sizing: border-box;
+}
+
 /* Territory Walk - Custom Styles */
 
 /* Universal Box-Sizing & Viewport Containment */
@@ -8,6 +12,8 @@
 /* Reset & Fullscreen Map */
 html, body {
     margin: 0;
+    overflow-x: hidden;
+
     padding: 0;
     width: 100%;
     width: 100vw;
@@ -121,6 +127,38 @@ header {
 }
 
 .player-pulse-white {
+
+/* Modal UI & Leaderboard Tab Active Styles */
+.stats-tab-btn {
+    transition: all 0.2s ease-in-out;
+}
+
+.stats-tab-btn.active {
+    background-color: #ffffff !important;
+
+/* Skin Overrides */
+body[data-skin="neon"] .dark-glass-modal { border-color: #a855f7; }
+body[data-skin="gold"] .dark-glass-modal { border-color: #eab308; }
+body[data-skin="pixel"] .dark-glass-modal { border-color: #84cc16; }
+
+body[data-skin="neon"] .skin-btn[data-skin="neon"] { border-color: #a855f7; color: #a855f7; }
+body[data-skin="gold"] .skin-btn[data-skin="gold"] { border-color: #eab308; color: #eab308; }
+body[data-skin="pixel"] .skin-btn[data-skin="pixel"] { border-color: #84cc16; color: #84cc16; }
+
+    color: #000000 !important;
+    border-color: #ffffff !important;
+    font-weight: 700 !important;
+    box-shadow: 0 4px 12px rgba(255, 255, 255, 0.25);
+}
+
+/* Glassmorphism Dark Modal Container */
+.dark-glass-modal {
+    background: rgba(10, 10, 10, 0.92);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(63, 63, 70, 0.6);
+}
+
     position: absolute;
     width: 40px;
     height: 40px;
