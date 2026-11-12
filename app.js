@@ -30,6 +30,15 @@ class TerritoryWalkApp {
         this.isMapVisible = true;
         this.isDebugMode = false;
 
+        this.posterGenerator = new PosterGenerator(this);
+        this.proManager = new ProManager();
+
+        this.initDPad();
+        this.initResetCountdown();
+        this.initProModal();
+        this.initSkinSelector();
+        this.initExportButton();
+
         this.initTeam();
         this.initDPad();
         this.initResetCountdown();
@@ -308,6 +317,12 @@ class TerritoryWalkApp {
 
         if (this.btnOpenRules) {
             this.btnOpenRules.addEventListener('click', () => {
+        const isPro = this.proManager.isPro();
+        const nicknameEl = document.getElementById('input-nickname');
+        const badge = isPro ? this.proManager.getSupporterBadgeHtml() : '';
+        this.teamBadgeContainer.innerHTML = badge + (this.currentTeam === 'white' ? '...' : '...');
+        // Note: Actual rendering logic from previous steps merged...
+
                 closeModal();
                 if (this.rulesModal) {
                     this.rulesModal.classList.remove('hidden');
@@ -338,6 +353,62 @@ class TerritoryWalkApp {
             this.updateGPSStatus('UNSUPPORTED', 'bg-red-500', 'text-red-400');
             return;
         }
+
+    initExportButton() {
+        document.getElementById('btn-export-poster').addEventListener('click', async () => {
+            const btn = document.getElementById('btn-export-poster');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<span>生成中...</span>';
+            btn.disabled = true;
+            
+            try {
+                const weekId = this.supabaseManager.getCurrentWeekId();
+                await this.posterGenerator.exportWeeklyPoster(
+                    this.gridManager.claimedTilesCache,
+                    this.currentTeam,
+                    this.statsManager.nickname,
+                    weekId
+                );
+    initProModal() {
+        const modal = document.getElementById('pro-modal');
+        const openBtn = document.getElementById('btn-open-pro-modal');
+        const closeBtn = document.getElementById('btn-close-pro');
+        const activateBtn = document.getElementById('btn-activate-pro');
+
+        openBtn.addEventListener('click', () => modal.classList.remove('hidden'));
+        closeBtn.addEventListener('click', () => modal.classList.add('hidden'));
+
+        activateBtn.addEventListener('click', () => {
+            const code = document.getElementById('input-pro-code').value;
+            if (this.proManager.activateCode(code)) {
+                alert('Pro機能が有効になりました！');
+                modal.classList.add('hidden');
+                this.updateStatsDisplay();
+                this.renderTeamBadge();
+            } else {
+                alert('無効なコードです');
+            }
+        });
+    }
+
+    checkProAccess(actionName) {
+        if (!this.proManager.isPro()) {
+            alert(`${actionName}にはPro版へのアップグレードが必要です！`);
+            document.getElementById('pro-modal').classList.remove('hidden');
+            return false;
+        }
+        return true;
+    }
+
+            } catch (e) {
+                console.error('Poster export failed:', e);
+                alert('ポスターの書き出しに失敗しました');
+            } finally {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        });
+    }
 
         this.updateGPSStatus('GPS: 測位中...', 'bg-amber-400', 'text-amber-400');
 
