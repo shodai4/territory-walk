@@ -127,6 +127,19 @@ header {
 
 /* Modal UI */
 .tab-btn { color: #a1a1aa; }
+
+/* Skin Overrides */
+body[data-skin="neon"] .dark-glass-modal, 
+body[data-skin="neon"] .bg-zinc-900 { border-color: #a855f7; }
+body[data-skin="gold"] .dark-glass-modal, 
+body[data-skin="gold"] .bg-zinc-900 { border-color: #eab308; }
+body[data-skin="pixel"] .dark-glass-modal, 
+body[data-skin="pixel"] .bg-zinc-900 { border-color: #84cc16; }
+
+body[data-skin="neon"] .skin-btn[data-skin="neon"] { border-color: #a855f7; color: #a855f7; }
+body[data-skin="gold"] .skin-btn[data-skin="gold"] { border-color: #eab308; color: #eab308; }
+body[data-skin="pixel"] .skin-btn[data-skin="pixel"] { border-color: #84cc16; color: #84cc16; }
+
 .tab-btn.active { color: #fbbf24; border-bottom: 2px solid #fbbf24; }
 
 }

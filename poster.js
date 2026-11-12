@@ -22,24 +22,23 @@ class PosterGenerator {
 
         // 2. Title & Subtitle
         ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 64px monospace';
+        ctx.font = 'bold 64px sans-serif';
         ctx.fillText('TERRITORY WALK', 80, 120);
 
         ctx.fillStyle = '#71717a';
         ctx.font = '24px monospace';
         ctx.fillText('WEEKLY CONQUEST ARCHIVE // ' + weekId, 80, 160);
 
-        // 3. Grid Visualization (simplified capture)
-        // Note: For actual grid representation, we map the claimedTilesCache to the canvas
+        // 3. Grid Visualization
         if (gridTiles && gridTiles.size > 0) {
             ctx.shadowBlur = 15;
             ctx.shadowColor = team === 'white' ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.2)';
             
-            // Simplified grid distribution logic
             const entries = Array.from(gridTiles.entries());
             entries.forEach(([id, t], index) => {
                 const x = 100 + (index % 10) * 100;
                 const y = 300 + Math.floor(index / 10) * 100;
+                if (y > 1300) return;
                 ctx.fillStyle = t === team ? '#ffffff' : '#27272a';
                 ctx.fillRect(x, y, 80, 80);
             });
@@ -48,7 +47,7 @@ class PosterGenerator {
 
         // 4. Footer Information
         ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 32px monospace';
+        ctx.font = 'bold 32px sans-serif';
         ctx.fillText(`PLAYER: ${nickname}`, 80, 1450);
         ctx.fillText(`TEAM: ${team.toUpperCase()}`, 80, 1490);
         

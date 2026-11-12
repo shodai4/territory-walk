@@ -31,6 +31,13 @@ class TerritoryWalkApp {
         this.isDebugMode = false;
 
         window.switchTab = (tabId) => this.switchTab(tabId);
+        this.proManager = new ProManager();
+
+        this.posterGenerator = new PosterGenerator(this);
+        this.initExportButton();
+        this.initProModal();
+
+        this.initSkinSelector();
 
         this.statsManager = new StatsManager(this.supabaseManager, this);
         this.initStatsModal();
@@ -386,11 +393,86 @@ class TerritoryWalkApp {
     initGrid() {
     initStatsModal() {
         const modal = document.getElementById('stats-modal');
+    initSkinSelector() {
+        const skin = localStorage.getItem('territory_skin') || 'default';
+        document.body.dataset.skin = skin;
+
+        document.querySelectorAll('.skin-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const newSkin = e.target.dataset.skin;
+                document.body.dataset.skin = newSkin;
+                localStorage.setItem('territory_skin', newSkin);
+                
+                if (this.gridManager) {
+                    this.gridManager.redrawTiles();
+                }
+            });
+        });
+    initProModal() {
+        const modal = document.getElementById('pro-modal');
+        const openBtn = document.getElementById('btn-open-pro-modal');
+        const closeBtn = document.getElementById('btn-close-pro');
+        const activateBtn = document.getElementById('btn-activate-pro');
+
+        openBtn.addEventListener('click', () => modal.classList.remove('hidden'));
+        closeBtn.addEventListener('click', () => modal.classList.add('hidden'));
+
+        activateBtn.addEventListener('click', () => {
+            const code = document.getElementById('input-pro-code').value;
+            if (this.proManager.activateCode(code)) {
+                alert('Pro機能が有効になりました！');
+                modal.classList.add('hidden');
+                this.renderTeamBadge();
+                this.updateStatsDisplay();
+            } else {
+                alert('無効なコードです');
+            }
+        });
+    }
+
+    checkProAccess(actionName) {
+        if (!this.proManager.isPro()) {
+            alert(`${actionName}にはPro版へのアップグレードが必要です！`);
+            document.getElementById('pro-modal').classList.remove('hidden');
+            return false;
+        }
+        return true;
+    }
+
+    }
+
         const openBtn = document.getElementById('btn-open-stats');
         const closeBtn = document.getElementById('btn-close-stats');
         
         openBtn.addEventListener('click', () => {
             modal.classList.remove('hidden');
+    initExportButton() {
+        document.getElementById('btn-export-poster').addEventListener('click', async () => {
+            if (!this.checkProAccess('ポスター保存')) return;
+            
+            const btn = document.getElementById('btn-export-poster');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<span>生成中...</span>';
+            btn.disabled = true;
+            
+            try {
+                const weekId = this.supabaseManager.getCurrentWeekId();
+                await this.posterGenerator.exportWeeklyPoster(
+                    this.gridManager.claimedTilesCache,
+                    this.currentTeam,
+                    this.statsManager.nickname,
+                    weekId
+                );
+            } catch (e) {
+                console.error('Poster export failed:', e);
+                alert('ポスターの書き出しに失敗しました');
+            } finally {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        });
+    }
+
             this.updateStatsDisplay();
             this.switchTab('my-stats');
         });
