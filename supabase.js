@@ -93,10 +93,11 @@ class SupabaseManager {
         }
 
         const LAT_GRID = 0.0009;
+        const LNG_GRID = LAT_GRID / Math.cos(35.0 * Math.PI / 180);
         const minLatIdx = Math.floor(minLat / LAT_GRID) - 1;
         const maxLatIdx = Math.floor(maxLat / LAT_GRID) + 1;
-        const minLngIdx = Math.floor(minLng / 0.001) - 2;
-        const maxLngIdx = Math.floor(maxLng / 0.001) + 2;
+        const minLngIdx = Math.floor(minLng / LNG_GRID) - 2;
+        const maxLngIdx = Math.floor(maxLng / LNG_GRID) + 2;
 
         try {
             const { data, error } = await this.client

@@ -234,16 +234,36 @@ class TerritoryWalkApp {
         this.triggerHaptic();
     }
 
+    resetViewportScroll() {
+        window.scrollTo(0, 0);
+        if (document.documentElement) {
+            document.documentElement.scrollLeft = 0;
+            document.documentElement.scrollTop = 0;
+        }
+        if (document.body) {
+            document.body.scrollLeft = 0;
+            document.body.scrollTop = 0;
+        }
+        setTimeout(() => {
+            window.scrollTo(0, 0);
+            if (this.map) {
+                this.map.invalidateSize();
+            }
+        }, 150);
+    }
+
     initRulesModal() {
         const rulesRead = localStorage.getItem('territory_rules_read');
         if (rulesRead !== 'true' && this.rulesModal) {
             this.rulesModal.classList.remove('hidden');
+            this.resetViewportScroll();
         }
 
         if (this.btnCloseRules) {
             this.btnCloseRules.addEventListener('click', () => {
                 localStorage.setItem('territory_rules_read', 'true');
                 if (this.rulesModal) this.rulesModal.classList.add('hidden');
+                this.resetViewportScroll();
             });
         }
     }
@@ -252,11 +272,13 @@ class TerritoryWalkApp {
         if (this.btnMenu && this.menuModal) {
             this.btnMenu.addEventListener('click', () => {
                 this.menuModal.classList.remove('hidden');
+                this.resetViewportScroll();
             });
         }
 
         const closeModal = () => {
             if (this.menuModal) this.menuModal.classList.add('hidden');
+            this.resetViewportScroll();
         };
 
         if (this.btnCloseMenu) this.btnCloseMenu.addEventListener('click', closeModal);
@@ -277,7 +299,10 @@ class TerritoryWalkApp {
         if (this.btnOpenRules) {
             this.btnOpenRules.addEventListener('click', () => {
                 closeModal();
-                if (this.rulesModal) this.rulesModal.classList.remove('hidden');
+                if (this.rulesModal) {
+                    this.rulesModal.classList.remove('hidden');
+                    this.resetViewportScroll();
+                }
             });
         }
     }
@@ -466,6 +491,7 @@ class TerritoryWalkApp {
         const btnRight = document.getElementById('dpad-right');
 
         const stepLat = 0.0009;
+        const stepLng = stepLat / Math.cos(35.0 * Math.PI / 180);
 
         const movePlayer = (dLat, dLng) => {
             this.isFollowingUser = false;
@@ -487,18 +513,8 @@ class TerritoryWalkApp {
 
         if (btnUp) btnUp.addEventListener('click', () => movePlayer(stepLat, 0));
         if (btnDown) btnDown.addEventListener('click', () => movePlayer(-stepLat, 0));
-        if (btnLeft) {
-            btnLeft.addEventListener('click', () => {
-                const stepLng = stepLat / Math.cos(this.currentPosition[0] * Math.PI / 180);
-                movePlayer(0, -stepLng);
-            });
-        }
-        if (btnRight) {
-            btnRight.addEventListener('click', () => {
-                const stepLng = stepLat / Math.cos(this.currentPosition[0] * Math.PI / 180);
-                movePlayer(0, stepLng);
-            });
-        }
+        if (btnLeft) btnLeft.addEventListener('click', () => movePlayer(0, -stepLng));
+        if (btnRight) btnRight.addEventListener('click', () => movePlayer(0, stepLng));
 
         if (this.btnSwapTeam) {
             this.btnSwapTeam.addEventListener('click', () => {
@@ -517,10 +533,18 @@ class TerritoryWalkApp {
             });
         }
 
-        window.addEventListener('resize', () => {
-            if (this.map) {
-                this.map.invalidateSize();
+        window.addEventListener('scroll', () => {
+            if (window.scrollX !== 0 || window.scrollY !== 0) {
+                window.scrollTo(0, 0);
             }
+        }, { passive: true });
+
+        window.addEventListener('resize', () => {
+            this.resetViewportScroll();
+        });
+
+        window.addEventListener('orientationchange', () => {
+            this.resetViewportScroll();
         });
     }
 

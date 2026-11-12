@@ -13,7 +13,12 @@ class GridManager {
         this.renderedMeshes = new Map();
         this.claimedTilesCache = new Map();
 
-        this.LAT_GRID = 0.0009; // 約100m四方の緯度グリッド
+        this.LAT_GRID = 0.0009; // 約100m四方の緯度グリッド（固定）
+        // 日本（本州・関西〜関東 緯度約35.0度）を基準とする固定経度グリッド幅
+        // 緯度ごとに動的計算すると上下行間で経度境界がズレてレンガ積み状になるため、
+        // 経度グリッド幅を一律固定定数化して完全な直交格子（チェス盤・オセロ盤）を実現
+        this.BASE_LAT = 35.0; // 日本基準緯度
+        this.LNG_GRID = this.LAT_GRID / Math.cos(this.BASE_LAT * Math.PI / 180); // 約0.00109868度
 
         this.checkWeekReset();
         this.loadTilesFromStorage();
@@ -23,19 +28,15 @@ class GridManager {
 
     getMeshIndices(lat, lng) {
         const latIdx = Math.floor(lat / this.LAT_GRID);
-        const lngGrid = this.LAT_GRID / Math.cos(lat * Math.PI / 180);
-        const lngIdx = Math.floor(lng / lngGrid);
+        const lngIdx = Math.floor(lng / this.LNG_GRID);
         return { latIdx, lngIdx };
     }
 
     getMeshBounds(latIdx, lngIdx) {
-        const centerLat = (latIdx + 0.5) * this.LAT_GRID;
-        const lngGrid = this.LAT_GRID / Math.cos(centerLat * Math.PI / 180);
-
         const south = latIdx * this.LAT_GRID;
         const north = (latIdx + 1) * this.LAT_GRID;
-        const west = lngIdx * lngGrid;
-        const east = (lngIdx + 1) * lngGrid;
+        const west = lngIdx * this.LNG_GRID;
+        const east = (lngIdx + 1) * this.LNG_GRID;
 
         return L.latLngBounds([south, west], [north, east]);
     }
@@ -52,13 +53,17 @@ class GridManager {
     checkWeekReset() {
         const currentWeek = this.app?.supabaseManager?.getCurrentWeekId() || 'default-week';
         const savedWeek = localStorage.getItem('territory_saved_week');
-        if (savedWeek && savedWeek !== currentWeek) {
+        const gridVersion = localStorage.getItem('territory_grid_version');
+
+        // グリッド計算式更新（チェス盤完全格子化 v2）または週リセット時にキャッシュクリア
+        if ((savedWeek && savedWeek !== currentWeek) || gridVersion !== 'v2_fixed_grid') {
             localStorage.removeItem('territory_claimed_tiles');
             this.claimedTilesCache.clear();
             this.gridLayerGroup.clearLayers();
             this.renderedMeshes.clear();
         }
         localStorage.setItem('territory_saved_week', currentWeek);
+        localStorage.setItem('territory_grid_version', 'v2_fixed_grid');
     }
 
     loadTilesFromStorage() {

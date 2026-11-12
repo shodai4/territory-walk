@@ -9,9 +9,9 @@
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
     <!-- Custom CSS -->
-    <link rel="stylesheet" href="style.css?v=20261112v8">
+    <link rel="stylesheet" href="style.css?v=20261112v9">
 </head>
-<body class="bg-black text-white overflow-hidden h-screen w-screen flex flex-col m-0 p-0 select-none" data-theme="black">
+<body class="bg-black text-white overflow-hidden overflow-x-hidden h-screen w-screen max-w-full flex flex-col m-0 p-0 select-none" data-theme="black">
 
     <!-- ヘッダー：2行構成（1行目: タイトル+チーム+MENU / 2行目: 点滅GPSランプ+全幅対戦パーセンテージバー） -->
     <header class="absolute top-0 left-0 right-0 z-[1000] bg-black/85 backdrop-blur-md border-b border-zinc-800 px-3 py-2 flex flex-col gap-2 text-xs select-none shadow-lg">
@@ -103,8 +103,8 @@
     </div>
 
     <!-- ルール説明モーダル（初回アクセス時自動表示 & MENUから再表示） -->
-    <div id="rules-modal" class="fixed inset-0 z-[2000] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 hidden">
-        <div class="bg-zinc-900 border border-zinc-700/90 rounded-2xl max-w-sm w-full p-5 shadow-2xl flex flex-col gap-4 text-zinc-200">
+    <div id="rules-modal" class="fixed inset-0 z-[2000] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 overflow-x-hidden box-border hidden">
+        <div class="bg-zinc-900 border border-zinc-700/90 rounded-2xl max-w-[calc(100vw-2rem)] sm:max-w-sm w-full p-5 shadow-2xl flex flex-col gap-4 text-zinc-200 box-border overflow-x-hidden">
             <div class="flex items-center justify-between border-b border-zinc-800 pb-3">
                 <div class="flex items-center gap-2">
                     <span class="w-2.5 h-2.5 rounded-full bg-white animate-pulse"></span>
@@ -154,8 +154,8 @@
     </div>
 
     <!-- メニューモーダル（チームリセット告知・地図ON/OFF・デバッグON/OFF・ルール再表示） -->
-    <div id="menu-modal" class="fixed inset-0 z-[2000] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 hidden">
-        <div class="bg-zinc-900 border border-zinc-700/90 rounded-2xl max-w-sm w-full p-5 shadow-2xl flex flex-col gap-3.5 text-zinc-200">
+    <div id="menu-modal" class="fixed inset-0 z-[2000] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 overflow-x-hidden box-border hidden">
+        <div class="bg-zinc-900 border border-zinc-700/90 rounded-2xl max-w-[calc(100vw-2rem)] sm:max-w-sm w-full p-5 shadow-2xl flex flex-col gap-3.5 text-zinc-200 box-border overflow-x-hidden">
             <div class="flex items-center justify-between border-b border-zinc-800 pb-2.5">
                 <div class="flex items-center gap-2">
                     <span class="w-2.5 h-2.5 rounded-full bg-white"></span>
@@ -234,10 +234,10 @@
     <!-- Supabase JS v2 CDN -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <!-- Supabase Client Module -->
-    <script src="supabase.js"></script>
+    <script src="supabase.js?v=20261112v9"></script>
     <!-- Grid Calculation & Render Module -->
-    <script src="grid.js?v=20261112v7"></script>
+    <script src="grid.js?v=20261112v9"></script>
     <!-- Main Application Logic -->
-    <script src="app.js?v=20261112v7"></script>
+    <script src="app.js?v=20261112v9"></script>
 </body>
 </html>
