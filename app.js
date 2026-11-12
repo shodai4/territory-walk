@@ -6,7 +6,7 @@
 const CONFIG = {
     DEFAULT_CENTER: [34.6654, 135.6268], // 東花園駅周辺（東大阪市）
     DEFAULT_ZOOM: 16,
-    TILE_URL: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+    TILE_URL: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
     TILE_OPTIONS: {
         maxZoom: 19,
         subdomains: 'abcd',

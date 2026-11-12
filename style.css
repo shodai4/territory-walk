@@ -134,3 +134,8 @@ footer {
 }
 
 
+
+/* Monotone Grayscale Tile Filter for Street Map */
+.leaflet-tile-pane {
+    filter: grayscale(100%) contrast(115%) brightness(0.95);
+}
