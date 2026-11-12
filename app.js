@@ -52,6 +52,13 @@ class TerritoryWalkApp {
             localStorage.setItem('player_team', savedTeam);
         }
         this.currentTeam = savedTeam;
+        this.applyTheme();
+    }
+
+    applyTheme() {
+        if (document.body) {
+            document.body.dataset.theme = this.currentTeam;
+        }
     }
 
     initDOM() {
@@ -219,6 +226,7 @@ class TerritoryWalkApp {
         this.currentTeam = this.currentTeam === 'black' ? 'white' : 'black';
         localStorage.setItem('player_team', this.currentTeam);
 
+        this.applyTheme();
         this.renderTeamBadge();
         this.updatePlayerMarker(this.currentPosition);
         this.updateSwapButtonUI();
