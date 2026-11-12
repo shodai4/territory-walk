@@ -143,10 +143,10 @@ class TerritoryWalkApp {
             attributionControl: false
         });
 
-        // Dark-inverted CartoDB tile layer
-        this.tileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-            maxZoom: 20,
-            subdomains: 'abcd'
+        // Dark-inverted OpenStreetMap tile layer (100% free, no API key required)
+        this.tileLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         }).addTo(this.map);
 
         const mapContainer = document.getElementById('map');
