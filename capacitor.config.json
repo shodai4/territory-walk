@@ -1,0 +1,6 @@
+{
+  "appId": "com.oekaki.territorywalk",
+  "appName": "TerritoryWalk",
+  "webDir": ".",
+  "bundledWebRuntime": false
+}
