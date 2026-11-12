@@ -47,10 +47,35 @@ class TerritoryWalkApp {
         this.initResetCountdown();
         this.initRealtimeSync();
 
+        // Check Daily Login Bonus
+        const bonus = this.statsManager.checkDailyLoginBonus();
+        if (bonus.isNew) {
+            setTimeout(() => {
+                this.showToast(`DAILY BONUS: 連続ログイン ${bonus.streak}日目達成！`);
+            }, 1200);
+        }
+
         // Periodic polling fallback (every 8s) to ensure other players' tiles appear even without map drag
         setInterval(() => {
             this.loadRemoteTiles();
         }, 8000);
+    }
+
+    showToast(message) {
+        let toast = document.getElementById('app-toast');
+        if (!toast) {
+            toast = document.createElement('div');
+            toast.id = 'app-toast';
+            toast.className = 'fixed top-14 left-1/2 -translate-x-1/2 z-[3000] bg-zinc-900/95 border border-amber-500/80 text-amber-300 text-xs font-mono px-4 py-2 rounded-xl shadow-2xl backdrop-blur transition-all duration-300 pointer-events-none opacity-0';
+            document.body.appendChild(toast);
+        }
+        toast.textContent = message;
+        toast.classList.remove('opacity-0');
+        toast.classList.add('opacity-100');
+        setTimeout(() => {
+            toast.classList.remove('opacity-100');
+            toast.classList.add('opacity-0');
+        }, 3000);
     }
 
     initTeam() {
@@ -214,7 +239,7 @@ class TerritoryWalkApp {
     }
 
     cycleSkin() {
-        const skins = ['default', 'neon', 'gold', 'pixel'];
+        const skins = ['default', 'neon', 'gold', 'crimson', 'sakura', 'pixel'];
         const current = document.body.dataset.skin || 'default';
         const nextIdx = (skins.indexOf(current) + 1) % skins.length;
         const nextSkin = skins[nextIdx];
@@ -237,6 +262,8 @@ class TerritoryWalkApp {
             default: 'SKIN: 標準',
             neon: 'SKIN: ネオン',
             gold: 'SKIN: ゴールド',
+            crimson: 'SKIN: 紅蓮',
+            sakura: 'SKIN: サクラ',
             pixel: 'SKIN: レトロ'
         };
         textEl.textContent = labels[skin] || 'SKIN: ' + skin;
@@ -249,6 +276,8 @@ class TerritoryWalkApp {
             default: '標準 (Default)',
             neon: 'ネオン (Neon)',
             gold: 'ゴールド (Gold)',
+            crimson: '紅蓮 (Crimson)',
+            sakura: 'サクラ (Sakura)',
             pixel: 'レトロ (Pixel)'
         };
         badge.textContent = labels[skin] || skin;
@@ -282,14 +311,33 @@ class TerritoryWalkApp {
             }
         });
 
-        // Save Nickname
+        // Save Nickname (表示名)
         const saveNickBtn = document.getElementById('btn-save-nickname');
         if (saveNickBtn) {
-            saveNickBtn.addEventListener('click', () => {
+            saveNickBtn.addEventListener('click', async () => {
                 const input = document.getElementById('input-nickname');
                 if (input && this.statsManager) {
-                    this.statsManager.setNickname(input.value);
-                    alert('ニックネームを保存しました！');
+                    saveNickBtn.disabled = true;
+                    saveNickBtn.textContent = '保存中...';
+                    await this.statsManager.setNickname(input.value);
+                    saveNickBtn.textContent = '保存完了';
+                    this.showToast('表示名を更新しました');
+                    setTimeout(() => {
+                        saveNickBtn.textContent = '保存';
+                        saveNickBtn.disabled = false;
+                    }, 1200);
+                    this.updateStatsDisplay();
+                }
+            });
+        }
+
+        // Title Select
+        const titleSelect = document.getElementById('select-active-title');
+        if (titleSelect) {
+            titleSelect.addEventListener('change', (e) => {
+                if (this.statsManager) {
+                    this.statsManager.setActiveTitle(e.target.value);
+                    this.showToast(e.target.value ? `称号を [${e.target.value}] にセットしました` : '称号を解除しました');
                     this.updateStatsDisplay();
                 }
             });
@@ -327,6 +375,21 @@ class TerritoryWalkApp {
         const nickInput = document.getElementById('input-nickname');
         if (nickInput) nickInput.value = this.statsManager.nickname;
 
+        const titleSelect = document.getElementById('select-active-title');
+        if (titleSelect && this.statsManager.unlockedTitles) {
+            const currentTitle = this.statsManager.activeTitle || '';
+            titleSelect.innerHTML = '<option value="">(称号なし)</option>' +
+                this.statsManager.unlockedTitles.map(t => 
+                    `<option value="${t}" ${t === currentTitle ? 'selected' : ''}>[${t}]</option>`
+                ).join('');
+        }
+
+        const streakEl = document.getElementById('stat-login-streak');
+        if (streakEl) {
+            const streak = localStorage.getItem('tw_login_streak') || '1';
+            streakEl.textContent = `${streak}日目 (本日受取済)`;
+        }
+
         const tileEl = document.getElementById('stat-lifetime-tiles');
         if (tileEl) tileEl.textContent = stats.lifetime_tiles.toLocaleString();
 
@@ -356,12 +419,16 @@ class TerritoryWalkApp {
             return;
         }
 
-        listEl.innerHTML = data.map((item, idx) => `
-            <li class="flex items-center justify-between py-1 border-b border-zinc-800">
-                <span class="font-bold ${idx < 3 ? 'text-amber-400' : 'text-zinc-300'}">${idx + 1}. ${item.nickname}</span>
+        listEl.innerHTML = data.map((item, idx) => {
+            const isMe = item.user_id === this.statsManager.userId || item.nickname === this.statsManager.nickname;
+            return `
+            <li class="flex items-center justify-between py-1.5 px-2 rounded border-b border-zinc-800 ${isMe ? 'bg-amber-500/10 border-amber-500/40' : ''}">
+                <span class="font-bold ${idx < 3 ? 'text-amber-400' : 'text-zinc-300'}">
+                    ${idx + 1}. ${item.nickname} ${isMe ? '<span class="text-[9px] bg-amber-400 text-black px-1.5 py-0.5 rounded font-bold ml-1">YOU</span>' : ''}
+                </span>
                 <span class="font-mono text-zinc-400">${item.tiles_count} マス</span>
-            </li>
-        `).join('');
+            </li>`;
+        }).join('');
     }
 
     async loadLifetimeRankings() {
@@ -376,12 +443,16 @@ class TerritoryWalkApp {
             return;
         }
 
-        listEl.innerHTML = data.map((item, idx) => `
-            <li class="flex items-center justify-between py-1 border-b border-zinc-800">
-                <span class="font-bold ${idx < 3 ? 'text-amber-400' : 'text-zinc-300'}">${idx + 1}. ${item.nickname}</span>
+        listEl.innerHTML = data.map((item, idx) => {
+            const isMe = item.user_id === this.statsManager.userId || item.nickname === this.statsManager.nickname;
+            return `
+            <li class="flex items-center justify-between py-1.5 px-2 rounded border-b border-zinc-800 ${isMe ? 'bg-amber-500/10 border-amber-500/40' : ''}">
+                <span class="font-bold ${idx < 3 ? 'text-amber-400' : 'text-zinc-300'}">
+                    ${idx + 1}. ${item.nickname} ${isMe ? '<span class="text-[9px] bg-amber-400 text-black px-1.5 py-0.5 rounded font-bold ml-1">YOU</span>' : ''}
+                </span>
                 <span class="font-mono text-zinc-400">${item.lifetime_tiles} マス</span>
-            </li>
-        `).join('');
+            </li>`;
+        }).join('');
     }
 
     initProModal() {

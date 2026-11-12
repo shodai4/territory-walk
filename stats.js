@@ -10,14 +10,82 @@ class StatsManager {
 
         this.userId = this.getOrCreateUserId();
         this.nickname = localStorage.getItem('tw_nickname') || '名もなき歩行者';
+        this.unlockedTitles = this.loadUnlockedTitles();
+        this.activeTitle = localStorage.getItem('tw_active_title') || '';
         
         this.stats = this.loadLocalStats();
         this.pendingSyncTiles = 0;
         this.pendingSyncReclaimed = 0;
+
+        this.checkMilestoneTitles();
         
         setInterval(() => {
             this.flushSyncBuffer();
         }, 60000);
+    }
+
+    loadUnlockedTitles() {
+        try {
+            const raw = localStorage.getItem('tw_unlocked_titles');
+            return raw ? JSON.parse(raw) : ['初陣'];
+        } catch (e) {
+            return ['初陣'];
+        }
+    }
+
+    checkDailyLoginBonus() {
+        const today = new Date().toISOString().split('T')[0];
+        const lastLogin = localStorage.getItem('tw_last_login');
+        let streak = parseInt(localStorage.getItem('tw_login_streak') || '0', 10);
+
+        if (lastLogin !== today) {
+            const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+            streak = (lastLogin === yesterday) ? (streak + 1) : 1;
+
+            localStorage.setItem('tw_last_login', today);
+            localStorage.setItem('tw_login_streak', streak.toString());
+
+            if (streak >= 3) this.unlockTitle('日課の達人');
+            if (streak >= 7) this.unlockTitle('継続の鬼');
+
+            return { isNew: true, streak: streak };
+        }
+        return { isNew: false, streak: streak || 1 };
+    }
+
+    checkMilestoneTitles() {
+        if (this.stats.lifetime_tiles >= 1) this.unlockTitle('初陣');
+        if (this.stats.lifetime_reclaimed >= 1) this.unlockTitle('オセロスナイパー');
+        if (this.stats.lifetime_tiles >= 10) this.unlockTitle('街の探索者');
+        if (this.stats.lifetime_reclaimed >= 10) this.unlockTitle('奪還マスター');
+        if (this.stats.lifetime_tiles >= 50) this.unlockTitle('東大阪の覇者');
+        if (this.stats.lifetime_tiles >= 100) this.unlockTitle('ナスカの地上絵師');
+    }
+
+    unlockTitle(titleName) {
+        if (!this.unlockedTitles.includes(titleName)) {
+            this.unlockedTitles.push(titleName);
+            localStorage.setItem('tw_unlocked_titles', JSON.stringify(this.unlockedTitles));
+            if (!this.activeTitle) {
+                this.setActiveTitle(titleName);
+            }
+            if (this.app && this.app.showToast) {
+                this.app.showToast(`称号獲得: [${titleName}]`);
+            }
+        }
+    }
+
+    setActiveTitle(titleName) {
+        this.activeTitle = titleName;
+        localStorage.setItem('tw_active_title', titleName);
+        this.syncUserProfileImmediate();
+    }
+
+    getFormattedDisplayName() {
+        if (this.activeTitle) {
+            return `[${this.activeTitle}] ${this.nickname}`;
+        }
+        return this.nickname;
     }
 
     getOrCreateUserId() {
@@ -31,10 +99,43 @@ class StatsManager {
         return uid;
     }
 
-    setNickname(name) {
+    async setNickname(name) {
         if (!name || typeof name !== 'string') return;
         this.nickname = name.trim().substring(0, 20) || '名もなき歩行者';
         localStorage.setItem('tw_nickname', this.nickname);
+        await this.syncUserProfileImmediate();
+    }
+
+    async syncUserProfileImmediate() {
+        if (!this.supabaseManager || !this.supabaseManager.client) return;
+
+        try {
+            const weekId = this.supabaseManager.getCurrentWeekId();
+            const myTeam = this.app && this.app.currentTeam ? this.app.currentTeam : 'black';
+
+            // 1. Upsert territory_users
+            const formattedName = this.getFormattedDisplayName();
+            await this.supabaseManager.client.from('territory_users').upsert({
+                user_id: this.userId,
+                nickname: formattedName,
+                team: myTeam,
+                lifetime_tiles: this.stats.lifetime_tiles,
+                lifetime_reclaimed: this.stats.lifetime_reclaimed,
+                battles_won: this.stats.battles_won,
+                battles_lost: this.stats.battles_lost,
+                updated_at: new Date().toISOString()
+            }, { onConflict: 'user_id' });
+
+            // 2. Update territory_weekly_rankings
+            await this.supabaseManager.client.from('territory_weekly_rankings').update({
+                nickname: formattedName,
+                updated_at: new Date().toISOString()
+            }).eq('week_id', weekId).eq('user_id', this.userId);
+
+            console.log('[Stats] Nickname and stats synced to Supabase:', formattedName);
+        } catch (e) {
+            console.warn('[Stats] Failed to sync nickname immediately:', e);
+        }
     }
 
     loadLocalStats() {
@@ -63,6 +164,7 @@ class StatsManager {
             this.stats.lifetime_reclaimed += 1;
         }
         this.saveLocalStats();
+        this.checkMilestoneTitles();
 
         this.pendingSyncTiles += 1;
         if (isReclaimed) {
@@ -129,7 +231,7 @@ class StatsManager {
         }
         const { data } = await this.supabaseManager.client
             .from('territory_weekly_rankings')
-            .select('nickname, tiles_count')
+            .select('user_id, nickname, tiles_count')
             .eq('week_id', weekId)
             .order('tiles_count', { ascending: false })
             .limit(10);
@@ -142,7 +244,7 @@ class StatsManager {
         }
         const { data } = await this.supabaseManager.client
             .from('territory_users')
-            .select('nickname, lifetime_tiles')
+            .select('user_id, nickname, lifetime_tiles')
             .order('lifetime_tiles', { ascending: false })
             .limit(10);
         return data || [];

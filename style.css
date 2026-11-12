@@ -124,49 +124,6 @@ header {
     0% { transform: scale(0.95); opacity: 0.8; background: rgba(0, 0, 0, 0.7); }
     50% { transform: scale(1.5); opacity: 0.2; background: rgba(0, 0, 0, 0.9); }
     100% { transform: scale(0.95); opacity: 0.8; background: rgba(0, 0, 0, 0.7); }
-
-/* Modal UI */
-.tab-btn { color: #a1a1aa; }
-
-/* Skin Overrides */
-body[data-skin="neon"] .dark-glass-modal, 
-body[data-skin="neon"] .bg-zinc-900 { border-color: #a855f7; }
-body[data-skin="gold"] .dark-glass-modal, 
-body[data-skin="gold"] .bg-zinc-900 { border-color: #eab308; }
-body[data-skin="pixel"] .dark-glass-modal, 
-body[data-skin="pixel"] .bg-zinc-900 { border-color: #84cc16; }
-
-body[data-skin="neon"] .skin-btn[data-skin="neon"] { border-color: #a855f7; color: #a855f7; }
-body[data-skin="gold"] .skin-btn[data-skin="gold"] { border-color: #eab308; color: #eab308; }
-body[data-skin="pixel"] .skin-btn[data-skin="pixel"] { border-color: #84cc16; color: #84cc16; }
-
-.tab-btn.active { color: #fbbf24; border-bottom: 2px solid #fbbf24; }
-
-}
-
-.player-pulse-white {
-
-/* Modal UI & Leaderboard Tab Active Styles */
-.stats-tab-btn {
-    transition: all 0.2s ease-in-out;
-}
-
-.stats-tab-btn.active {
-    background-color: #ffffff !important;
-
-/* Skin Overrides */
-body[data-skin="neon"] .dark-glass-modal { border-color: #a855f7; }
-body[data-skin="gold"] .dark-glass-modal { border-color: #eab308; }
-body[data-skin="pixel"] .dark-glass-modal { border-color: #84cc16; }
-
-body[data-skin="neon"] .skin-btn[data-skin="neon"] { border-color: #a855f7; color: #a855f7; }
-body[data-skin="gold"] .skin-btn[data-skin="gold"] { border-color: #eab308; color: #eab308; }
-body[data-skin="pixel"] .skin-btn[data-skin="pixel"] { border-color: #84cc16; color: #84cc16; }
-
-    color: #000000 !important;
-    border-color: #ffffff !important;
-    font-weight: 700 !important;
-    box-shadow: 0 4px 12px rgba(255, 255, 255, 0.25);
 }
 
 /* Glassmorphism Dark Modal Container */
@@ -177,14 +134,54 @@ body[data-skin="pixel"] .skin-btn[data-skin="pixel"] { border-color: #84cc16; co
     border: 1px solid rgba(63, 63, 70, 0.6);
 }
 
-    position: absolute;
-    width: 40px;
-    height: 40px;
-    left: -10px;
-    top: -10px;
-    border-radius: 50%;
-    animation: pulse-white 2s infinite ease-in-out;
+/* Modal UI & Leaderboard Tab Active Styles */
+.tab-btn {
+    color: #a1a1aa;
+    transition: all 0.2s ease-in-out;
 }
+
+.tab-btn.active {
+    color: #fbbf24;
+    border-bottom: 2px solid #fbbf24;
+}
+
+/* Accordion details/summary clean styling */
+summary::-webkit-details-marker {
+    display: none !important;
+}
+summary {
+    list-style: none !important;
+}
+
+/* 6 Skin Theme Overrides */
+body[data-skin="neon"] .dark-glass-modal, body[data-skin="neon"] #dpad-container, body[data-skin="neon"] #btn-recenter {
+    border-color: rgba(6, 182, 212, 0.6) !important;
+    box-shadow: 0 0 20px rgba(6, 182, 212, 0.2);
+}
+body[data-skin="gold"] .dark-glass-modal, body[data-skin="gold"] #dpad-container, body[data-skin="gold"] #btn-recenter {
+    border-color: rgba(234, 179, 8, 0.6) !important;
+    box-shadow: 0 0 20px rgba(234, 179, 8, 0.2);
+}
+body[data-skin="crimson"] .dark-glass-modal, body[data-skin="crimson"] #dpad-container, body[data-skin="crimson"] #btn-recenter {
+    border-color: rgba(239, 68, 68, 0.6) !important;
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.2);
+}
+body[data-skin="sakura"] .dark-glass-modal, body[data-skin="sakura"] #dpad-container, body[data-skin="sakura"] #btn-recenter {
+    border-color: rgba(244, 114, 182, 0.6) !important;
+    box-shadow: 0 0 20px rgba(244, 114, 182, 0.2);
+}
+body[data-skin="pixel"] .dark-glass-modal, body[data-skin="pixel"] #dpad-container, body[data-skin="pixel"] #btn-recenter {
+    border-color: rgba(132, 204, 22, 0.6) !important;
+    box-shadow: 0 0 20px rgba(132, 204, 22, 0.2);
+}
+
+body[data-skin="neon"] .skin-btn[data-skin="neon"] { border-color: #06b6d4; color: #06b6d4; font-weight: bold; }
+body[data-skin="gold"] .skin-btn[data-skin="gold"] { border-color: #eab308; color: #eab308; font-weight: bold; }
+body[data-skin="crimson"] .skin-btn[data-skin="crimson"] { border-color: #ef4444; color: #ef4444; font-weight: bold; }
+body[data-skin="sakura"] .skin-btn[data-skin="sakura"] { border-color: #f472b6; color: #f472b6; font-weight: bold; }
+body[data-skin="pixel"] .skin-btn[data-skin="pixel"] { border-color: #84cc16; color: #84cc16; font-weight: bold; }
+
+.player-pulse-white {
 
 .player-pulse-black {
     position: absolute;

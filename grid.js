@@ -152,13 +152,23 @@ class GridManager {
             },
             neon: {
                 white: { color: '#083344', weight: 1.5, fillOpacity: 0.85, fillColor: '#06b6d4' },
-                black: { color: '#3b0764', weight: 1.5, fillOpacity: 0.85, fillColor: '#a855f7' },
+                black: { color: '#4a044e', weight: 1.5, fillOpacity: 0.85, fillColor: '#d946ef' },
                 unclaimed: { color: '#334155', weight: 1, fillOpacity: 0.05, fillColor: '#1e293b' }
             },
             gold: {
                 white: { color: '#ca8a04', weight: 1.5, fillOpacity: 0.85, fillColor: '#fef08a' },
                 black: { color: '#eab308', weight: 1.5, fillOpacity: 0.90, fillColor: '#18181b' },
                 unclaimed: { color: '#71717a', weight: 1, fillOpacity: 0.05, fillColor: '#27272a' }
+            },
+            crimson: {
+                white: { color: '#9a3412', weight: 1.5, fillOpacity: 0.85, fillColor: '#fb923c' },
+                black: { color: '#991b1b', weight: 1.5, fillOpacity: 0.88, fillColor: '#ef4444' },
+                unclaimed: { color: '#431407', weight: 1, fillOpacity: 0.05, fillColor: '#1c1917' }
+            },
+            sakura: {
+                white: { color: '#0f766e', weight: 1.5, fillOpacity: 0.85, fillColor: '#2dd4bf' },
+                black: { color: '#be185d', weight: 1.5, fillOpacity: 0.85, fillColor: '#f472b6' },
+                unclaimed: { color: '#831843', weight: 1, fillOpacity: 0.05, fillColor: '#18181b' }
             },
             pixel: {
                 white: { color: '#3f6212', weight: 1.5, fillOpacity: 0.85, fillColor: '#bef264' },
