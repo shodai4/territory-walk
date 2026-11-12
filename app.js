@@ -82,7 +82,8 @@ class TerritoryWalkApp {
     initMap() {
         this.map = L.map('map', {
             zoomControl: false,
-            attributionControl: true
+            attributionControl: true,
+            doubleClickZoom: false
         }).setView(CONFIG.DEFAULT_CENTER, CONFIG.DEFAULT_ZOOM);
 
         L.control.zoom({ position: 'topright' }).addTo(this.map);
@@ -373,3 +374,16 @@ class TerritoryWalkApp {
 document.addEventListener('DOMContentLoaded', () => {
     window.territoryApp = new TerritoryWalkApp();
 });
+
+// iOS Safari ダブルタップズーム防止（2本指ピンチ操作は維持）
+let lastTouchEnd = 0;
+document.addEventListener('touchend', (e) => {
+    const now = Date.now();
+    if (now - lastTouchEnd <= 300) {
+        // フォーム入力などでなければダブルタップ拡大を防止
+        if (!['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) {
+            e.preventDefault();
+        }
+    }
+    lastTouchEnd = now;
+}, { passive: false });

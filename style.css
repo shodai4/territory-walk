@@ -139,3 +139,14 @@ footer {
 .leaflet-tile-pane {
     filter: grayscale(100%) contrast(115%) brightness(0.95);
 }
+
+/* Prevent Double-Tap Zoom while keeping Pinch Zoom */
+html, body, #map {
+    touch-action: manipulation !important;
+}
+
+button, #dpad-container, #dpad-container button, header, footer {
+    touch-action: manipulation !important;
+    -webkit-user-select: none !important;
+    user-select: none !important;
+}
