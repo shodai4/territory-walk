@@ -154,25 +154,25 @@ class GridManager {
             return {
                 color: '#ffffff',
                 weight: 1.5,
-                opacity: 0.9,
+                opacity: 0.95,
                 fillColor: '#ffffff',
-                fillOpacity: 0.65,
+                fillOpacity: 0.7,
                 interactive: false
             };
         } else if (team === 'black') {
             return {
-                color: '#000000',
+                color: '#52525b', // Zinc-600 の明確な境界線（ダーク背景・街路樹マップ両方でくっきり視認）
                 weight: 1.5,
-                opacity: 0.9,
-                fillColor: '#000000',
-                fillOpacity: 0.75,
+                opacity: 0.95,
+                fillColor: '#09090b',
+                fillOpacity: 0.85,
                 interactive: false
             };
         } else {
             return {
-                color: '#71717a',
+                color: '#3f3f46',
                 weight: 1,
-                opacity: 0.35,
+                opacity: 0.25,
                 fillColor: '#ffffff',
                 fillOpacity: 0.02,
                 interactive: false
