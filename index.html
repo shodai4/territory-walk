@@ -100,6 +100,12 @@
             <span id="swap-team-icon" class="w-2 h-2 rounded-full bg-white"></span>
             <span id="swap-team-text">SWAP: Black ⇄ White</span>
         </button>
+
+        <!-- デバッグ用スキン切替ボタン（Default ⇄ Neon ⇄ Gold ⇄ Pixel） -->
+        <button id="btn-cycle-skin" class="w-full mt-1 py-1 px-2 bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-700 border border-zinc-700 text-[10px] font-mono text-amber-400 rounded-lg flex items-center justify-center gap-1.5 shadow transition-all active:scale-95">
+            <span>🎨</span>
+            <span id="cycle-skin-text">SKIN: 標準</span>
+        </button>
     </div>
 
     <!-- ルール説明モーダル（初回アクセス時自動表示 & MENUから再表示） -->
@@ -373,9 +379,9 @@
     <script src="poster.js"></script>
     <script src="pro.js"></script>
     <script src="stats.js"></script>
-    <script src="supabase.js?v=20261113v2"></script>
-    <script src="grid.js?v=20261113v2"></script>
+    <script src="supabase.js?v=20261113v3"></script>
+    <script src="grid.js?v=20261113v3"></script>
     <!-- Main Application Logic -->
-    <script src="app.js?v=20261113v2"></script>
+    <script src="app.js?v=20261113v3"></script>
 </body>
 </html>

@@ -45,6 +45,12 @@ class TerritoryWalkApp {
         this.initDPad();
         this.initEvents();
         this.initResetCountdown();
+        this.initRealtimeSync();
+
+        // Periodic polling fallback (every 8s) to ensure other players' tiles appear even without map drag
+        setInterval(() => {
+            this.loadRemoteTiles();
+        }, 8000);
     }
 
     initTeam() {
@@ -190,20 +196,50 @@ class TerritoryWalkApp {
             btn.addEventListener('click', (e) => {
                 const targetSkin = e.currentTarget.dataset.skin;
 
-                // Non-default skins require Pro
-                if (targetSkin !== 'default' && !this.checkProAccess('限定スキン')) {
+                // Non-default skins require Pro unless in Debug Mode
+                if (targetSkin !== 'default' && !this.isDebugMode && !this.checkProAccess('限定スキン')) {
                     return;
                 }
 
                 document.body.dataset.skin = targetSkin;
                 localStorage.setItem('territory_skin', targetSkin);
                 this.updateSkinBadge(targetSkin);
+                this.updateCycleSkinButtonUI();
 
                 if (this.gridManager) {
                     this.gridManager.redrawTiles();
                 }
             });
         });
+    }
+
+    cycleSkin() {
+        const skins = ['default', 'neon', 'gold', 'pixel'];
+        const current = document.body.dataset.skin || 'default';
+        const nextIdx = (skins.indexOf(current) + 1) % skins.length;
+        const nextSkin = skins[nextIdx];
+
+        document.body.dataset.skin = nextSkin;
+        localStorage.setItem('territory_skin', nextSkin);
+        this.updateSkinBadge(nextSkin);
+        this.updateCycleSkinButtonUI();
+
+        if (this.gridManager) {
+            this.gridManager.redrawTiles();
+        }
+    }
+
+    updateCycleSkinButtonUI() {
+        const textEl = document.getElementById('cycle-skin-text');
+        if (!textEl) return;
+        const skin = document.body.dataset.skin || 'default';
+        const labels = {
+            default: 'SKIN: 標準',
+            neon: 'SKIN: ネオン',
+            gold: 'SKIN: ゴールド',
+            pixel: 'SKIN: レトロ'
+        };
+        textEl.textContent = labels[skin] || 'SKIN: ' + skin;
     }
 
     updateSkinBadge(skin) {
@@ -381,6 +417,11 @@ class TerritoryWalkApp {
     }
 
     checkProAccess(actionName) {
+        if (this.isDebugMode) {
+            console.log(`[Debug Mode] Pro restriction bypassed for: ${actionName}`);
+            return true;
+        }
+
         if (!this.proManager || !this.proManager.isPro()) {
             alert(`${actionName}を利用するには、Proサポーターへのアップグレードが必要です！`);
             const modal = document.getElementById('pro-modal');
@@ -773,6 +814,14 @@ class TerritoryWalkApp {
                 this.swapTeam();
             });
         }
+
+        const btnCycleSkin = document.getElementById('btn-cycle-skin');
+        if (btnCycleSkin) {
+            btnCycleSkin.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.cycleSkin();
+            });
+        }
     }
 
     initEvents() {
@@ -826,6 +875,37 @@ class TerritoryWalkApp {
 
         updateTimer();
         setInterval(updateTimer, 1000);
+    }
+
+    initRealtimeSync() {
+        if (!this.supabaseManager || !this.supabaseManager.client) return;
+
+        try {
+            this.realtimeChannel = this.supabaseManager.client
+                .channel('territory_tiles_live')
+                .on(
+                    'postgres_changes',
+                    { event: '*', schema: 'public', table: 'territory_tiles' },
+                    (payload) => {
+                        if (payload.new && this.gridManager) {
+                            const tile = payload.new;
+                            const current = this.gridManager.claimedTilesCache.get(tile.tile_id);
+                            if (current !== tile.team) {
+                                console.log('[Realtime Sync] Remote tile claimed:', tile.tile_id, tile.team);
+                                this.gridManager.claimedTilesCache.set(tile.tile_id, tile.team);
+                                this.gridManager.saveTilesToStorage();
+                                this.gridManager.updateGrids();
+                                this.updateScoreUI();
+                            }
+                        }
+                    }
+                )
+                .subscribe((status) => {
+                    console.log('[Realtime Sync Status]', status);
+                });
+        } catch (e) {
+            console.warn('Supabase Realtime subscription error:', e);
+        }
     }
 }
 
