@@ -9,7 +9,7 @@
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
     <!-- Custom CSS -->
-    <link rel="stylesheet" href="style.css?v=20261113v23">
+    <link rel="stylesheet" href="style.css?v=20261113v24">
 </head>
 <body class="bg-black text-white overflow-hidden overflow-x-hidden h-screen w-screen max-w-full flex flex-col m-0 p-0 select-none" data-theme="black" data-skin="default">
 
@@ -603,16 +603,16 @@
 
                 <!-- 対戦比率ゲージバー（Black vs Whiteの増減が一目でわかる太型バー） -->
                 <div class="bg-zinc-950 p-3 rounded-xl border border-zinc-800 space-y-2">
-                    <div class="flex items-center justify-between text-xs font-mono font-bold">
-                        <div class="flex items-center gap-1.5 text-zinc-300">
-                            <span class="w-2.5 h-2.5 rounded-full bg-black border border-zinc-500 shadow-sm"></span>
-                            <span>Black</span>
-                            <span id="result-score-black" class="text-white ml-1">50%</span>
+                    <div class="flex items-center justify-between text-[11px] sm:text-xs font-mono font-bold whitespace-nowrap min-w-0 gap-2">
+                        <div class="flex items-center gap-1 sm:gap-1.5 text-zinc-300 min-w-0 shrink-0">
+                            <span class="w-2.5 h-2.5 rounded-full bg-black border border-zinc-500 shadow-sm shrink-0"></span>
+                            <span class="shrink-0">Black</span>
+                            <span id="result-score-black" class="text-white ml-1 shrink-0">50%</span>
                         </div>
-                        <div class="flex items-center gap-1.5 text-zinc-300">
-                            <span id="result-score-white" class="text-white mr-1">50%</span>
-                            <span>White</span>
-                            <span class="w-2.5 h-2.5 rounded-full bg-white border border-zinc-300 shadow-sm"></span>
+                        <div class="flex items-center gap-1 sm:gap-1.5 text-zinc-300 min-w-0 shrink-0 justify-end">
+                            <span id="result-score-white" class="text-white mr-1 shrink-0">50%</span>
+                            <span class="shrink-0">White</span>
+                            <span class="w-2.5 h-2.5 rounded-full bg-white border border-zinc-300 shadow-sm shrink-0"></span>
                         </div>
                     </div>
                     <div class="w-full h-6 bg-zinc-900 rounded-lg overflow-hidden flex border border-zinc-700 shadow-inner relative">
@@ -699,11 +699,11 @@
                                 </div>
                                 <div class="text-[11px] text-zinc-300 mt-1 break-words">5秒のスポンサー動画を視聴して、すぐにコインを獲得できます。</div>
                             </div>
-                            <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 text-[10px] font-mono font-bold shrink-0">+50 COIN</span>
+                            <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 text-[10px] font-mono font-bold shrink-0">+500 COIN</span>
                         </div>
                         <button id="btn-watch-reward-ad" class="w-full py-2 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-black font-bold font-mono text-xs rounded-lg shadow transition-all active:scale-95 flex items-center justify-center gap-1.5 mt-1 box-border">
                             <svg class="w-3.5 h-3.5 text-black shrink-0" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-                            <span class="truncate">動画を視聴して +50 COIN を獲得</span>
+                            <span class="truncate">動画を視聴して +500 COIN を獲得</span>
                         </button>
                     </div>
 
@@ -716,11 +716,11 @@
                                 </div>
                                 <div class="text-[11px] text-zinc-400 mt-1 break-words">本日の戦況や招待コードをXへシェアしてコインを獲得できます。</div>
                             </div>
-                            <span class="px-2 py-0.5 rounded bg-zinc-800 text-amber-400 text-[10px] font-mono font-bold shrink-0">+30 COIN</span>
+                            <span class="px-2 py-0.5 rounded bg-zinc-800 text-amber-400 text-[10px] font-mono font-bold shrink-0">+300 COIN</span>
                         </div>
                         <button id="btn-x-share-shop" class="w-full py-2 bg-zinc-100 hover:bg-white text-black font-bold font-mono text-xs rounded-lg shadow transition-all active:scale-95 flex items-center justify-center gap-1.5 mt-1 box-border">
                             <svg class="w-3.5 h-3.5 text-black shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
-                            <span class="truncate">Xで戦績をシェアして +30 COIN 獲得</span>
+                            <span class="truncate">Xで戦績をシェアして +300 COIN 獲得</span>
                         </button>
                     </div>
 
@@ -729,9 +729,9 @@
                         <div class="flex items-start justify-between gap-2 min-w-0">
                             <div class="min-w-0 flex-1">
                                 <div class="font-bold text-xs text-white truncate">友達招待ボーナス</div>
-                                <div class="text-[11px] text-zinc-400 mt-0.5 break-words">招待した側・された側の双方に +150 COIN プレゼント！</div>
+                                <div class="text-[11px] text-zinc-400 mt-0.5 break-words">招待した側・された側の双方に +1,000 COIN プレゼント！</div>
                             </div>
-                            <span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-[10px] font-mono font-bold shrink-0">双方 +150 C</span>
+                            <span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-[10px] font-mono font-bold shrink-0">双方 +1000 C</span>
                         </div>
 
                         <!-- 自分の招待コード -->
@@ -890,7 +890,7 @@
             <div class="space-y-1.5">
                 <div class="flex justify-between items-center font-mono text-[11px]">
                     <span id="reward-ad-timer" class="text-zinc-300 font-bold">リワード付与まで: 5秒</span>
-                    <span class="text-amber-400 font-bold">+50 COIN</span>
+                    <span class="text-amber-400 font-bold">+500 COIN</span>
                 </div>
                 <div class="w-full h-2 bg-zinc-950 rounded-full overflow-hidden border border-zinc-800">
                     <div id="reward-ad-progress" class="h-full bg-gradient-to-r from-amber-500 to-amber-300 transition-all duration-100" style="width: 0%;"></div>
@@ -899,7 +899,7 @@
 
             <!-- リワード受取ボタン（カウントダウン終了後に表示） -->
             <button id="btn-claim-ad-reward" class="hidden w-full py-2.5 bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-black font-bold font-mono text-xs rounded-xl shadow-lg transition-all active:scale-95 flex items-center justify-center gap-1.5">
-                <span>+50 COIN を受け取る</span>
+                <span>+500 COIN を受け取る</span>
             </button>
         </div>
     </div>
@@ -937,16 +937,16 @@
     <!-- Supabase JS v2 CDN -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <!-- Feature Modules -->
-    <script src="poster.js?v=20261113v23"></script>
-    <script src="pro.js?v=20261113v23"></script>
-    <script src="search.js?v=20261113v23"></script>
-    <script src="coins.js?v=20261113v23"></script>
-    <script src="admob.js?v=20261113v23"></script>
-    <script src="iap.js?v=20261113v23"></script>
-    <script src="stats.js?v=20261113v23"></script>
-    <script src="supabase.js?v=20261113v23"></script>
-    <script src="grid.js?v=20261113v23"></script>
+    <script src="poster.js?v=20261113v24"></script>
+    <script src="pro.js?v=20261113v24"></script>
+    <script src="search.js?v=20261113v24"></script>
+    <script src="coins.js?v=20261113v24"></script>
+    <script src="admob.js?v=20261113v24"></script>
+    <script src="iap.js?v=20261113v24"></script>
+    <script src="stats.js?v=20261113v24"></script>
+    <script src="supabase.js?v=20261113v24"></script>
+    <script src="grid.js?v=20261113v24"></script>
     <!-- Main Application Logic -->
-    <script src="app.js?v=20261113v23"></script>
+    <script src="app.js?v=20261113v24"></script>
 </body>
 </html>

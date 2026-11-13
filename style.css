@@ -445,5 +445,17 @@ button, a, input, select, .btn-action {
     border: 1px solid #3f3f46 !important;
 }
 
+/* Season Result Team Ratio Label No-Wrap Protection */
+#weekly-result-modal #result-score-black,
+#weekly-result-modal #result-score-white {
+    white-space: nowrap !important;
+    word-break: keep-all !important;
+}
+
+#weekly-result-modal .font-mono {
+    font-variant-numeric: tabular-nums;
+}
+
+
 
 

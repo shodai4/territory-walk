@@ -12,27 +12,46 @@ class IAPManager {
         // App Store Connect Product IDs
         this.products = {
             'pack-120': {
-                id: 'com.shodai.territorywalk.coins300',
-                coins: 300,
+                id: 'com.shodai.territorywalk.coins1000',
+                coins: 1000,
                 price: '¥120',
                 title: 'ビギナーパック'
             },
+            'pack-500': {
+                id: 'com.shodai.territorywalk.coins4500',
+                coins: 4500,
+                price: '¥500',
+                title: 'スタンダードパック'
+            },
+            'pack-1500': {
+                id: 'com.shodai.territorywalk.coins14000',
+                coins: 14000,
+                price: '¥1,500',
+                title: 'プレミアムパック'
+            },
+            'pack-5000': {
+                id: 'com.shodai.territorywalk.coins50000',
+                coins: 50000,
+                price: '¥5,000',
+                title: 'アルティメットパック'
+            },
+            // Backward compatibility aliases
             'pack-300': {
-                id: 'com.shodai.territorywalk.coins900',
-                coins: 900,
-                price: '¥300',
+                id: 'com.shodai.territorywalk.coins4500',
+                coins: 4500,
+                price: '¥500',
                 title: 'スタンダードパック'
             },
             'pack-600': {
-                id: 'com.shodai.territorywalk.coins2200',
-                coins: 2200,
-                price: '¥600',
+                id: 'com.shodai.territorywalk.coins14000',
+                coins: 14000,
+                price: '¥1,500',
                 title: 'プレミアムパック'
             },
             'pack-1200': {
-                id: 'com.shodai.territorywalk.coins5000',
-                coins: 5000,
-                price: '¥1,200',
+                id: 'com.shodai.territorywalk.coins50000',
+                coins: 50000,
+                price: '¥5,000',
                 title: 'アルティメットパック'
             },
             'ad-free': {

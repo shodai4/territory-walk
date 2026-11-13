@@ -21,42 +21,51 @@ class CoinManager {
         this.adTimer = null;
         this.adSecondsLeft = 5;
 
-        // 1. Tile & Grid Skins Catalog (Simplified, Minimal Color Descriptions)
+        // 1. Tile & Grid Skins Catalog (Graduated Pricing by Rarity & Vibrant Colors)
         this.SKINS = {
             default: { id: 'default', name: '標準', cost: 0, desc: '白と黒のオセロカラー', class: 'text-zinc-200' },
-            pixel: { id: 'pixel', name: 'レトロ', cost: 100, desc: 'ライムグリーンとダーク', class: 'text-lime-400' },
-            sakura: { id: 'sakura', name: 'サクラ', cost: 150, desc: '桜ピンクと翡翠ミント', class: 'text-pink-400' },
-            monochrome: { id: 'monochrome', name: 'モノトーン', cost: 150, desc: '完全白黒の濃淡', class: 'text-slate-300' },
-            crimson: { id: 'crimson', name: '紅蓮', cost: 200, desc: '深紅とダーク', class: 'text-orange-400' },
-            neon: { id: 'neon', name: 'ネオン', cost: 250, desc: 'シアンとマゼンタ', class: 'text-cyan-400' },
-            gold: { id: 'gold', name: 'ゴールド', cost: 500, desc: 'シャンパンゴールド', class: 'text-amber-400' },
-            cyberpunk: { id: 'cyberpunk', name: 'サイバー', cost: 800, desc: 'パープルとブルー', class: 'text-purple-400' }
+            pixel: { id: 'pixel', name: 'レトロ', cost: 1000, desc: 'ライムグリーンとダーク', class: 'text-lime-400' },
+            sakura: { id: 'sakura', name: 'サクラ', cost: 2500, desc: '桜ピンクと翡翠ミント', class: 'text-pink-400' },
+            monochrome: { id: 'monochrome', name: 'モノトーン', cost: 4500, desc: '完全白黒の濃淡', class: 'text-slate-300' },
+            crimson: { id: 'crimson', name: '紅蓮', cost: 8000, desc: '深紅とダーク', class: 'text-orange-400' },
+            neon: { id: 'neon', name: 'ネオン', cost: 14000, desc: 'シアンとマゼンタ', class: 'text-cyan-400' },
+            gold: { id: 'gold', name: 'ゴールド', cost: 28000, desc: 'シャンパンゴールド', class: 'text-amber-400' },
+            cyberpunk: { id: 'cyberpunk', name: 'サイバー', cost: 50000, desc: 'パープルとブルー', class: 'text-purple-400' }
         };
 
-        // 2. Exclusive Shop Titles Catalog (Rebalanced Price Hierarchy)
+        // 2. Exclusive Shop Titles Catalog (15 Tiers: 1,000 - 50,000 COIN)
         this.TITLES = {
-            '夜の徘徊者': { name: '夜の徘徊者', cost: 150, desc: '月明かりの街を静寂に歩く者' },
-            '地図の魔術師': { name: '地図の魔術師', cost: 200, desc: '幾何学の境界を操る達人' },
-            'ストリートファイター': { name: 'ストリートファイター', cost: 300, desc: '幾多の奪還戦を制した猛者' },
-            'コイン長者': { name: 'コイン長者', cost: 400, desc: '歩きとリワードで富を築いた者' },
-            'ナスカの末裔': { name: 'ナスカの末裔', cost: 500, desc: '大地に壮大な紋様を刻む者' },
-            'ウォーキングレジェンド': { name: 'ウォーキングレジェンド', cost: 800, desc: '歩行陣取りの頂点を極めし伝説' }
+            '深夜の徘徊者': { name: '深夜の徘徊者', cost: 1000, desc: '月明かりの街を静寂に歩く者' },
+            '路地裏の案内人': { name: '路地裏の案内人', cost: 1300, desc: '大通りを外れ、未知の小径を行く者' },
+            '朝露のウォーカー': { name: '朝露のウォーカー', cost: 1700, desc: '早朝の澄んだ空気を胸に一歩を踏み出す者' },
+            '地図の魔術師': { name: '地図の魔術師', cost: 2200, desc: '幾何学の境界を操る達人' },
+            'コンパスの導き手': { name: 'コンパスの導き手', cost: 2800, desc: '羅針盤の示すままに未知のエリアへ踏み出す者' },
+            '境界線の支配者': { name: '境界線の支配者', cost: 3500, desc: '隣り合う陣地の狭間を巧みに制する者' },
+            'ストリートファイター': { name: 'ストリートファイター', cost: 4300, desc: '幾多の奪還戦を制した猛者' },
+            '市街地の戦術家': { name: '市街地の戦術家', cost: 5200, desc: '街の構造を読み解き効率よく陣地を広げる者' },
+            '戦術の立案者': { name: '戦術の立案者', cost: 6500, desc: '盤面全体を見渡し最適解を導く頭脳' },
+            'コイン長者': { name: 'コイン長者', cost: 8000, desc: '歩きとリワードで莫大な富を築いた者' },
+            '孤高の開拓王': { name: '孤高の開拓王', cost: 11000, desc: '誰にも頼らず己の足跡だけで帝国を築く者' },
+            'ナスカの末裔': { name: 'ナスカの末裔', cost: 15000, desc: '大地に壮大な紋様を刻む者' },
+            '天駆ける旅人': { name: '天駆ける旅人', cost: 22000, desc: '果てなき地平を追い求める永遠の冒険者' },
+            'ウォーキングレジェンド': { name: 'ウォーキングレジェンド', cost: 35000, desc: '歩行陣取りの頂点を極めし伝説' },
+            'テラ・コンクエスター': { name: 'テラ・コンクエスター', cost: 50000, desc: 'すべての大地を塗り替える絶対的覇者（最上位）' }
         };
 
         // 3. Special Perks Catalog (Rebalanced Price Hierarchy)
         this.PERKS = {
-            'poster_ticket': { id: 'poster_ticket', name: '週間ポスター書き出し (1回分)', cost: 50, desc: '今週の陣地をA4アートポスターPNG保存' },
-            'pin_neon': { id: 'pin_neon', name: '現在地ピン: シアン光彩パルス', cost: 300, desc: '現在地マーカーに強いネオン発光エフェクト' },
-            'pin_gold': { id: 'pin_gold', name: '現在地ピン: 黄金オーラ', cost: 500, desc: '現在地マーカーが黄金の輝きを放つ' },
-            'poster_permanent': { id: 'poster_permanent', name: 'ポスター書き出し無制限パス', cost: 800, desc: 'いつでも何度でもポスター保存が可能に' }
+            'poster_ticket': { id: 'poster_ticket', name: '週間ポスター書き出し (1回分)', cost: 500, desc: '今週の陣地をA4アートポスターPNG保存' },
+            'pin_neon': { id: 'pin_neon', name: '現在地ピン: シアン光彩パルス', cost: 5000, desc: '現在地マーカーに強いネオン発光エフェクト' },
+            'pin_gold': { id: 'pin_gold', name: '現在地ピン: 黄金オーラ', cost: 15000, desc: '現在地マーカーが黄金の輝きを放つ' },
+            'poster_permanent': { id: 'poster_permanent', name: 'ポスター書き出し無制限パス', cost: 30000, desc: 'いつでも何度でもポスター保存が可能に' }
         };
 
-        // 4. In-App Purchase Coin Packs Catalog (Dramatically Increased Rates & Value)
+        // 4. In-App Purchase Coin Packs Catalog (5,000 Yen = 50,000 COIN Standard)
         this.PACKS = {
-            'beginner': { id: 'beginner', name: 'ビギナーパック', yen: 120, coins: 300, bonus: '+150%増量', desc: 'テーマや称号を手軽にアンロック' },
-            'standard': { id: 'standard', name: 'スタンダードパック', yen: 300, coins: 900, bonus: '+157%増量', desc: '人気スキンや限定称号をしっかり解放' },
-            'premium': { id: 'premium', name: 'プレミアムパック', yen: 600, coins: 2200, bonus: '+193%増量 (1番人気)', desc: 'ゴールドスキンや無制限パスに最適' },
-            'ultimate': { id: 'ultimate', name: 'アルティメットパック', yen: 1200, coins: 5000, bonus: '+212%増量 (最大お得)', desc: '全コンテンツを一気に揃える超特大セット' }
+            'beginner': { id: 'beginner', name: 'ビギナーパック', yen: 120, coins: 1000, bonus: '8.33 C/円', desc: '入門スキンや入門称号を即座に購入可能' },
+            'standard': { id: 'standard', name: 'スタンダードパック', yen: 500, coins: 4500, bonus: '9.00 C/円', desc: 'サクラ・モノトーンスキンや中級称号を購入可能' },
+            'premium': { id: 'premium', name: 'プレミアムパック', yen: 1500, coins: 14000, bonus: '9.33 C/円 (1番人気)', desc: 'ネオンスキンや上位称号を一気に獲得可能' },
+            'ultimate': { id: 'ultimate', name: 'アルティメットパック', yen: 5000, coins: 50000, bonus: '10.00 C/円 (最高効率)', desc: '最上位サイバーや最高峰称号テラ・コンクエスターを即座に獲得' }
         };
 
         // 5. Ad-Free Permanent Pass
@@ -69,7 +78,7 @@ class CoinManager {
 
         // Global callback for external AdSense / AdMob Rewarded Video completion
         window.onRewardedAdCompleted = (amount) => {
-            this.addCoins(amount || 50, '外部動画広告リワード');
+            this.addCoins(amount || 500, '外部動画広告リワード');
         };
 
         this.initDOM();
@@ -421,9 +430,9 @@ class CoinManager {
 
         // Tier definition:
         // 0-9: Step 1 (Normal) +0C
-        // 10-29: Step 2 (Boost) +1C
-        // 30-49: Step 3 (Master) +2C
-        // 50+: Step 4 (Legend) +3C
+        // 10-29: Step 2 (Boost) +10C
+        // 30-49: Step 3 (Master) +20C
+        // 50+: Step 4 (Legend) +30C
         let tier = 1;
         let bonusCoins = 0;
         let tierName = '通常ステップ';
@@ -431,18 +440,18 @@ class CoinManager {
 
         if (todayCount >= 50) {
             tier = 4;
-            bonusCoins = 3;
-            tierName = '歩行レジェンド (+3C)';
+            bonusCoins = 30;
+            tierName = '歩行レジェンド (+30C)';
             nextTarget = null;
         } else if (todayCount >= 30) {
             tier = 3;
-            bonusCoins = 2;
-            tierName = '散歩マスター (+2C)';
+            bonusCoins = 20;
+            tierName = '散歩マスター (+20C)';
             nextTarget = 50;
         } else if (todayCount >= 10) {
             tier = 2;
-            bonusCoins = 1;
-            tierName = '歩行ブースト (+1C)';
+            bonusCoins = 10;
+            tierName = '歩行ブースト (+10C)';
             nextTarget = 30;
         }
 
@@ -477,14 +486,14 @@ class CoinManager {
     // --- Tile Walking Hook with Underdog Comeback & Step-Up Bonus ---
     onTileClaimed(isReclaimed) {
         const stepInfo = this.incrementTodayClaimCount();
-        const stepBonus = stepInfo.bonusCoins; // +0, +1, +2, +3
+        const stepBonus = stepInfo.bonusCoins; // +0, +10, +20, +30
 
-        let base = isReclaimed ? 2 : 1;
+        let base = isReclaimed ? 20 : 10;
         let isComeback = false;
 
         // Comeback Bonus: Tile reclaiming when user is underdog (<= 40% territory)
         if (isReclaimed && this.app && this.app.isUnderdogTeam && this.app.isUnderdogTeam()) {
-            base = 4; // 2x double coin bonus
+            base = 40; // 2x double coin bonus (40 COIN)
             isComeback = true;
         }
 
@@ -496,7 +505,7 @@ class CoinManager {
 
         if (this.app && this.app.showToast) {
             if (isComeback) {
-                const sub = stepBonus > 0 ? `劣勢2倍 (+4C) ＋ 歩行ブースト (+${stepBonus}C)` : '獲得コイン2倍 (+4 COIN)';
+                const sub = stepBonus > 0 ? `劣勢2倍 (+40C) ＋ 歩行ブースト (+${stepBonus}C)` : '獲得コイン2倍 (+40 COIN)';
                 this.app.showToast('劣勢逆転ボーナス発動！', sub);
             } else if (stepBonus > 0) {
                 this.app.showToast(
@@ -556,7 +565,7 @@ class CoinManager {
 
         if (canEarn) {
             localStorage.setItem('tw_last_x_share_date', today);
-            this.addCoins(30, 'Xシェアボーナス');
+            this.addCoins(300, 'Xシェアボーナス');
             this.renderEarnPanel();
             if (this.app && this.app.updateStatsXShareButton) {
                 this.app.updateStatsXShareButton();
@@ -694,19 +703,19 @@ class CoinManager {
         if (btnWatchAd) {
             btnWatchAd.addEventListener('click', () => {
                 if (this.isAdFree()) {
-                    this.addCoins(50, '動画リワード (Ad-Free スキップ)');
+                    this.addCoins(500, '動画リワード (Ad-Free スキップ)');
                     this.updateCoinUI();
                     if (this.app && this.app.showToast) {
-                        this.app.showToast('【Ad-Free特典】動画スキップ！', '+50 COIN を即時獲得しました');
+                        this.app.showToast('【Ad-Free特典】動画スキップ！', '+500 COIN を即時獲得しました');
                     }
                     return;
                 }
                 if (this.app && this.app.adMobManager && this.app.adMobManager.isNative) {
                     this.app.adMobManager.showRewardVideo(() => {
-                        this.addCoins(50, 'AdMob動画リワード');
+                        this.addCoins(500, 'AdMob動画リワード');
                         this.updateCoinUI();
                         if (this.app && this.app.showToast) {
-                            this.app.showToast('動画リワード獲得！', '+50 COIN を獲得しました');
+                            this.app.showToast('動画リワード獲得！', '+500 COIN を獲得しました');
                         }
                     });
                 } else {
@@ -804,7 +813,7 @@ class CoinManager {
                 btnXShare.className = 'w-full py-2 bg-zinc-100 hover:bg-white text-black font-bold font-mono text-xs rounded-lg shadow transition-all active:scale-95 flex items-center justify-center gap-1.5';
                 btnXShare.innerHTML = `
                     <svg class="w-3.5 h-3.5 text-black" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
-                    <span>Xで戦績をシェアして +30 COIN 獲得</span>
+                    <span>Xで戦績をシェアして +300 COIN 獲得</span>
                 `;
             } else {
                 btnXShare.disabled = true;
@@ -1177,7 +1186,7 @@ class CoinManager {
 
         if (claimBtn) {
             claimBtn.addEventListener('click', () => {
-                this.addCoins(50, '動画広告リワード');
+                this.addCoins(500, '動画広告リワード');
                 if (modal) modal.classList.add('hidden');
                 this.updateCoinUI();
             });

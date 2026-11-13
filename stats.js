@@ -37,7 +37,14 @@ class StatsManager {
     loadUnlockedTitles() {
         try {
             const raw = localStorage.getItem('tw_unlocked_titles');
-            return raw ? JSON.parse(raw) : ['初陣'];
+            let titles = raw ? JSON.parse(raw) : ['初陣'];
+            if (!Array.isArray(titles)) titles = ['初陣'];
+            // 廃止された地域名称号（東大阪の覇者）をエリアウォーカーへ安全マイグレーション
+            const migrated = titles.map(t => (t === '東大阪の覇者' ? 'エリアウォーカー' : t));
+            const uniqueTitles = Array.from(new Set(migrated));
+            if (!uniqueTitles.includes('初陣')) uniqueTitles.unshift('初陣');
+            localStorage.setItem('tw_unlocked_titles', JSON.stringify(uniqueTitles));
+            return uniqueTitles;
         } catch (e) {
             return ['初陣'];
         }
@@ -58,16 +65,30 @@ class StatsManager {
             localStorage.setItem('tw_login_streak', streak.toString());
             localStorage.setItem('tw_total_login_days', totalDays.toString());
 
-            // 連続ログイン称号
+            // 連続ログイン実績称号（全15段階）
             if (streak >= 3) this.unlockTitle('三日坊主返上');
+            if (streak >= 5) this.unlockTitle('習慣の芽生え');
             if (streak >= 7) this.unlockTitle('週間ウォーカー');
+            if (streak >= 10) this.unlockTitle('二桁の軌跡');
             if (streak >= 14) this.unlockTitle('継続の達人');
+            if (streak >= 21) this.unlockTitle('三週の鉄人');
             if (streak >= 30) this.unlockTitle('月間マイスター');
+            if (streak >= 40) this.unlockTitle('40日の歩み');
+            if (streak >= 50) this.unlockTitle('季節の巡り手');
+            if (streak >= 75) this.unlockTitle('75日の求道者');
+            if (streak >= 100) this.unlockTitle('百日の求道者');
+            if (streak >= 150) this.unlockTitle('150日の旅人');
+            if (streak >= 180) this.unlockTitle('半年の覇者');
+            if (streak >= 250) this.unlockTitle('250日の鉄人');
+            if (streak >= 365) this.unlockTitle('一年の一番星');
 
-            // 通算ログイン称号
+            // 通算ログイン実績称号（全6段階）
+            if (totalDays >= 1) this.unlockTitle('散歩ビギナー');
             if (totalDays >= 7) this.unlockTitle('初級散歩人');
             if (totalDays >= 30) this.unlockTitle('常連開拓者');
+            if (totalDays >= 50) this.unlockTitle('リピーター');
             if (totalDays >= 100) this.unlockTitle('百戦錬磨');
+            if (totalDays >= 200) this.unlockTitle('永世ウォーカー');
 
             return { isNew: true, streak: streak, totalDays: totalDays };
         }
@@ -75,12 +96,51 @@ class StatsManager {
     }
 
     checkMilestoneTitles() {
-        if (this.stats.lifetime_tiles >= 1) this.unlockTitle('初陣');
-        if (this.stats.lifetime_reclaimed >= 1) this.unlockTitle('オセロスナイパー');
-        if (this.stats.lifetime_tiles >= 10) this.unlockTitle('街の探索者');
-        if (this.stats.lifetime_reclaimed >= 10) this.unlockTitle('奪還マスター');
-        if (this.stats.lifetime_tiles >= 50) this.unlockTitle('東大阪の覇者');
-        if (this.stats.lifetime_tiles >= 100) this.unlockTitle('ナスカの地上絵師');
+        const tiles = this.stats.lifetime_tiles || 0;
+        const reclaimed = this.stats.lifetime_reclaimed || 0;
+
+        // 1. 累計開拓マス実績（全12段階・エンドコンテンツ仕様）
+        if (tiles >= 1) this.unlockTitle('初陣');
+        if (tiles >= 10) this.unlockTitle('街の探索者');
+        if (tiles >= 20) this.unlockTitle('お散歩ルーキー');
+        if (tiles >= 40) this.unlockTitle('エリアウォーカー');
+        if (tiles >= 100) this.unlockTitle('街の開拓者');
+        if (tiles >= 300) this.unlockTitle('ナスカの地上絵師');
+        if (tiles >= 700) this.unlockTitle('フロンティア');
+        if (tiles >= 1500) this.unlockTitle('大地の旅人');
+        if (tiles >= 3000) this.unlockTitle('地平線の開拓者');
+        if (tiles >= 6000) this.unlockTitle('ワールドランナー');
+        if (tiles >= 15000) this.unlockTitle('大陸の制圧者');
+        if (tiles >= 100000) this.unlockTitle('地球を歩く者');
+
+        // 2. オセロ奪還バトル実績（全8段階）
+        if (reclaimed >= 1) this.unlockTitle('オセロスナイパー');
+        if (reclaimed >= 5) this.unlockTitle('スニークアタッカー');
+        if (reclaimed >= 10) this.unlockTitle('奪還マスター');
+        if (reclaimed >= 25) this.unlockTitle('反撃の狼煙');
+        if (reclaimed >= 50) this.unlockTitle('逆転の策士');
+        if (reclaimed >= 75) this.unlockTitle('エリアクラッシャー');
+        if (reclaimed >= 100) this.unlockTitle('盤面の破壊神');
+        if (reclaimed >= 200) this.unlockTitle('奪還の神髄');
+    }
+
+    // シーズン（週間）ランキング刻印称号（動的生成メモリアル仕様）
+    checkWeeklyRankingMemorialTitle(weekId, rank) {
+        if (!weekId || typeof rank !== 'number' || isNaN(rank) || rank <= 0) return null;
+        let titleName = null;
+        if (rank === 1) titleName = `${weekId} 1位`;
+        else if (rank === 2) titleName = `${weekId} 2位`;
+        else if (rank === 3) titleName = `${weekId} 3位`;
+        else if (rank <= 10) titleName = `${weekId} TOP10`;
+        else if (rank <= 30) titleName = `${weekId} TOP30`;
+        else if (rank <= 50) titleName = `${weekId} TOP50`;
+        else if (rank <= 100) titleName = `${weekId} TOP100`;
+
+        if (titleName) {
+            this.unlockTitle(titleName);
+            return titleName;
+        }
+        return null;
     }
 
     unlockTitle(titleName) {
@@ -153,9 +213,9 @@ class StatsManager {
             return { success: false, message: `招待コードはすでに適用済みです [${used}]` };
         }
 
-        // Grant coins to current user
+        // Grant coins to current user (1,000 COIN)
         if (this.app && this.app.coinManager) {
-            this.app.coinManager.addCoins(150, '友達招待ボーナス');
+            this.app.coinManager.addCoins(1000, '友達招待ボーナス');
         }
 
         localStorage.setItem('tw_referred_used', code);
@@ -170,7 +230,7 @@ class StatsManager {
                     .single();
 
                 if (inviter) {
-                    const newCoins = (inviter.coins || 0) + 150;
+                    const newCoins = (inviter.coins || 0) + 1000;
                     await this.supabaseManager.client
                         .from('territory_users')
                         .update({ coins: newCoins, updated_at: new Date().toISOString() })
@@ -365,6 +425,10 @@ class StatsManager {
 
             const rank = count + 1;
             const rankLabel = rank <= 10 ? `${rank}位` : '圏外';
+
+            // 週間ランキング確定による刻印称号自動付与
+            this.checkWeeklyRankingMemorialTitle(weekId, rank);
+
             return {
                 rank: rank,
                 tilesCount: myTiles,

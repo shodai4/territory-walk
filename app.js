@@ -65,7 +65,7 @@ class TerritoryWalkApp {
         const bonus = this.statsManager.checkDailyLoginBonus();
         if (bonus.isNew) {
             if (this.coinManager) {
-                const bonusCoins = Math.min(50, 20 + (bonus.streak - 1) * 10);
+                const bonusCoins = Math.min(500, 200 + (bonus.streak - 1) * 50);
                 this.coinManager.addCoins(bonusCoins, `連続ログイン ${bonus.streak}日目ボーナス`);
             }
             setTimeout(() => {
@@ -1020,8 +1020,8 @@ class TerritoryWalkApp {
             banner.innerHTML = '<span class="text-amber-400 font-bold">DRAW (引き分け)</span>';
         }
 
-        document.getElementById('result-score-black').textContent = `${result.blackPct}% (${result.blackTotal}マス)`;
-        document.getElementById('result-score-white').textContent = `${result.whitePct}% (${result.whiteTotal}マス)`;
+        document.getElementById('result-score-black').innerHTML = `<span class="text-white font-bold">${result.blackPct}%</span> <span class="text-[10px] text-zinc-400 font-normal">(${result.blackTotal}マス)</span>`;
+        document.getElementById('result-score-white').innerHTML = `<span class="text-[10px] text-zinc-400 font-normal">(${result.whiteTotal}マス)</span> <span class="text-white font-bold">${result.whitePct}%</span>`;
 
         // 対戦比率ゲージバーの更新（アニメーション伸縮）
         if (barBlack) barBlack.style.width = `${Math.max(5, Math.min(95, result.blackPct))}%`;
