@@ -253,11 +253,14 @@ class TerritoryWalkApp {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         }).addTo(this.map);
 
+        const savedMapTheme = localStorage.getItem('tw_map_theme') || 'dark';
         const mapContainer = document.getElementById('map');
-        if (this.isMapVisible) {
-            if (mapContainer) mapContainer.classList.remove('map-tiles-hidden');
-        } else {
+        if (savedMapTheme === 'none') {
             if (mapContainer) mapContainer.classList.add('map-tiles-hidden');
+            this.isMapVisible = false;
+        } else {
+            if (mapContainer) mapContainer.classList.remove('map-tiles-hidden');
+            this.isMapVisible = true;
         }
 
         this.updateMapVisibilityUI();
@@ -372,17 +375,29 @@ class TerritoryWalkApp {
     }
 
     setMapTheme(theme, notify = false) {
-        document.body.setAttribute('data-map-theme', theme);
-        localStorage.setItem('tw_map_theme', theme);
+        const mapContainer = document.getElementById('map');
+        if (theme === 'none') {
+            document.body.setAttribute('data-map-theme', 'none');
+            localStorage.setItem('tw_map_theme', 'none');
+            if (mapContainer) mapContainer.classList.add('map-tiles-hidden');
+            this.isMapVisible = false;
+        } else {
+            document.body.setAttribute('data-map-theme', theme);
+            localStorage.setItem('tw_map_theme', theme);
+            if (mapContainer) mapContainer.classList.remove('map-tiles-hidden');
+            this.isMapVisible = true;
+        }
+
         this.updateMapThemeBadge(theme);
         if (notify) {
             const labels = {
                 dark: 'ダーク',
                 mono: 'モノクロ',
                 street: 'ストリート',
-                sepia: 'セピア'
+                sepia: 'セピア',
+                none: '地図非表示'
             };
-            this.showToast(`地図カラー変更: ${labels[theme] || theme}`);
+            this.showToast(`背景地図設定: ${labels[theme] || theme}`);
         }
     }
 

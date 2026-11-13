@@ -284,7 +284,7 @@
                         </div>
                     </div>
 
-                    <!-- サブセクション2: 背景地図カラー (4種) -->
+                    <!-- サブセクション2: 背景地図カラー (5種・地図非表示を含む) -->
                     <div class="space-y-1.5 pt-2 border-t border-zinc-900/60">
                         <div class="flex items-center justify-between">
                             <span class="text-[11px] font-bold text-zinc-300">背景地図カラー</span>
@@ -294,50 +294,46 @@
                             <button class="map-theme-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[11px] hover:border-white transition-all active:scale-95 text-zinc-300" data-map-theme="mono">モノクロ</button>
                             <button class="map-theme-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[11px] hover:border-white transition-all active:scale-95 text-emerald-400" data-map-theme="street">ストリート</button>
                             <button class="map-theme-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[11px] hover:border-white transition-all active:scale-95 text-amber-300" data-map-theme="sepia">セピア</button>
+                            <button class="map-theme-btn col-span-2 bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[11px] hover:border-white transition-all active:scale-95 text-zinc-400" data-map-theme="none">地図非表示 (白黒マスのみ)</button>
                         </div>
                     </div>
                 </div>
             </details>
 
-            <!-- 3. 表示・動作設定 -->
+            <!-- 3. デバッグモード (開発・検証用機能の集約管理) -->
             <details class="group bg-zinc-950/80 border border-zinc-800 rounded-xl shrink-0">
-                <summary class="flex items-center justify-between p-2.5 cursor-pointer text-xs font-bold text-white select-none list-none">
-                    <span>表示・動作設定</span>
+                <summary class="flex items-center justify-between p-2.5 cursor-pointer text-xs font-bold text-zinc-300 select-none list-none">
+                    <span class="flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full bg-zinc-500"></span>
+                        <span>デバッグモード</span>
+                    </span>
                     <svg class="w-3.5 h-3.5 text-zinc-400 group-open:rotate-180 transition-transform duration-200 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
                     </svg>
                 </summary>
-                <div class="p-2.5 pt-0 space-y-2 border-t border-zinc-900/60 mt-1">
+                <div class="p-2.5 pt-0 space-y-2.5 border-t border-zinc-900/60 mt-1">
                     <div class="flex items-center justify-between pt-1">
                         <div>
-                            <div class="font-bold text-xs text-white">背景地図の表示</div>
-                            <div class="text-[10px] text-zinc-400">OFFで白黒マスのみの漆黒空間に</div>
-                        </div>
-                        <button id="btn-toggle-map" class="px-3 py-1.5 rounded-lg border text-xs font-mono font-bold flex items-center gap-1.5 transition-all active:scale-95 bg-zinc-800 border-zinc-600 text-white">
-                            <span id="map-toggle-dot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
-                            <span id="map-toggle-text">MAP: ON</span>
-                        </button>
-                    </div>
-
-                    <div class="flex items-center justify-between pt-1">
-                        <div>
-                            <div class="font-bold text-xs text-white">デバッグ機能 (D-Pad)</div>
-                            <div class="text-[10px] text-zinc-400">十字キーとチーム切替ボタン</div>
+                            <div class="font-bold text-xs text-white">仮想散歩コントローラー (D-Pad)</div>
+                            <div class="text-[10px] text-zinc-400">十字キーとチーム即時切替</div>
                         </div>
                         <button id="btn-toggle-debug" class="px-3 py-1.5 rounded-lg border text-xs font-mono font-bold flex items-center gap-1.5 transition-all active:scale-95 bg-zinc-900 border-zinc-700 text-zinc-400">
                             <span id="debug-toggle-dot" class="w-2 h-2 rounded-full bg-zinc-600"></span>
-                            <span id="debug-toggle-text">DEBUG: OFF</span>
+                            <span id="debug-toggle-text">D-PAD: OFF</span>
                         </button>
                     </div>
 
                     <!-- デバッグプレビューショートカットボタン -->
-                    <div class="pt-2 border-t border-zinc-900 grid grid-cols-2 gap-1.5">
-                        <button id="btn-menu-debug-preview-result" onclick="document.getElementById('btn-debug-preview-result')?.click()" class="py-1.5 px-2 bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-700 border border-zinc-800 text-[10px] font-mono text-sky-400 rounded-lg text-center transition-all active:scale-95">
-                            結果発表プレビュー
-                        </button>
-                        <button id="btn-menu-debug-preview-team" onclick="document.getElementById('btn-debug-preview-team')?.click()" class="py-1.5 px-2 bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-700 border border-zinc-800 text-[10px] font-mono text-emerald-400 rounded-lg text-center transition-all active:scale-95">
-                            チームリセットプレビュー
-                        </button>
+                    <div class="pt-2 border-t border-zinc-900/80 space-y-1.5">
+                        <div class="text-[10px] text-zinc-400 font-mono">画面プレビュー検証:</div>
+                        <div class="grid grid-cols-2 gap-1.5">
+                            <button id="btn-menu-debug-preview-result" onclick="document.getElementById('btn-debug-preview-result')?.click()" class="py-2 px-2 bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-700 border border-zinc-800 text-[10px] font-mono text-sky-400 rounded-lg text-center transition-all active:scale-95">
+                                結果発表プレビュー
+                            </button>
+                            <button id="btn-menu-debug-preview-team" onclick="document.getElementById('btn-debug-preview-team')?.click()" class="py-2 px-2 bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-700 border border-zinc-800 text-[10px] font-mono text-emerald-400 rounded-lg text-center transition-all active:scale-95">
+                                チームリセットプレビュー
+                            </button>
+                        </div>
                     </div>
                 </div>
             </details>
