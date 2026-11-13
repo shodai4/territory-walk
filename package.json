@@ -7,11 +7,12 @@
   "private": true,
   "scripts": {
     "build": "node scripts/build.js",
-    "cap:add": "npm run build && npx cap add ios && node scripts/configure-ios.js",
-    "cap:sync": "npm run build && npx cap sync ios && node scripts/configure-ios.js",
+    "assets:generate": "python3 scripts/generate-assets.py",
+    "cap:add": "npm run build && npx cap add ios && node scripts/configure-ios.js && node scripts/setup-ios-assets.js",
+    "cap:sync": "npm run build && npx cap sync ios && node scripts/configure-ios.js && node scripts/setup-ios-assets.js",
     "cap:open": "npx cap open ios",
-    "ios:setup": "npm run build && npx cap add ios && node scripts/configure-ios.js && npx cap open ios",
-    "ios:config": "node scripts/configure-ios.js"
+    "ios:setup": "npm run assets:generate && npm run build && npx cap add ios && node scripts/configure-ios.js && node scripts/setup-ios-assets.js && npx cap open ios",
+    "ios:config": "node scripts/configure-ios.js && node scripts/setup-ios-assets.js"
   },
   "dependencies": {
     "@capacitor/core": "^6.2.0",

@@ -24,7 +24,11 @@ const ASSETS_TO_COPY = [
     'pro.js',
     'search.js',
     'stats.js',
-    'supabase.js'
+    'supabase.js',
+    'favicon.png',
+    'icon-192.png',
+    'icon-512.png',
+    'apple-touch-icon.png'
 ];
 
 console.log('[Build] Preparing www/ directory for Capacitor iOS...');
