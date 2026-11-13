@@ -290,6 +290,10 @@
                             <span class="text-zinc-400">所属陣営:</span>
                             <span id="menu-current-team-info" class="font-bold text-white">Black (黒)</span>
                         </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-zinc-400">逆転ボーナス:</span>
+                            <span id="menu-underdog-status" class="text-zinc-400">判定中...</span>
+                        </div>
                         <button id="btn-rebalance-team" class="w-full mt-1 py-1.5 px-2 bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-700 border border-zinc-700 text-[10px] font-mono text-zinc-300 rounded-lg flex items-center justify-center gap-1 transition-all active:scale-95">
                             <span>少数チームへ自動均等化する (オートバランサー)</span>
                         </button>
@@ -633,11 +637,11 @@
                         </div>
                     </div>
 
-                    <!-- 歩行獲得ボーナスカード (完全公正ルール) -->
+                    <!-- 歩行獲得ボーナスカード (劣勢カムバック2倍対応) -->
                     <div class="bg-zinc-950/80 border border-zinc-800 p-3 rounded-xl space-y-1.5">
                         <div class="flex items-center justify-between">
                             <div class="font-bold text-xs text-white">歩行・陣取りボーナス</div>
-                            <span class="text-[10px] text-zinc-400 font-mono">公平ルール</span>
+                            <span class="text-[10px] text-amber-400 font-mono">劣勢時2倍！</span>
                         </div>
                         <div class="text-[11px] text-zinc-400">街を歩いて陣地を開拓・奪還すると自動でコインが貯まります。</div>
                         <div class="grid grid-cols-2 gap-2 pt-1 font-mono text-xs">
@@ -646,9 +650,13 @@
                                 <div class="font-bold text-white mt-0.5">+1 COIN / マス</div>
                             </div>
                             <div class="bg-zinc-900/80 border border-zinc-800 p-2 rounded-lg">
-                                <div class="text-emerald-400 text-[10px]">オセロ奪還</div>
+                                <div class="text-emerald-400 text-[10px]">オセロ奪還 (通常)</div>
                                 <div class="font-bold text-emerald-400 mt-0.5">+2 COIN / マス</div>
                             </div>
+                        </div>
+                        <div class="bg-amber-950/30 border border-amber-500/40 p-2 rounded-lg font-mono text-[10px] text-amber-300 flex items-center justify-between">
+                            <span>劣勢チーム時 (陣地40%以下):</span>
+                            <span class="font-bold text-amber-400">+4 COIN (2倍逆転ボーナス)</span>
                         </div>
                     </div>
 
@@ -754,13 +762,13 @@
     <!-- Supabase JS v2 CDN -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <!-- Feature Modules -->
-    <script src="poster.js?v=20261113v11"></script>
-    <script src="pro.js?v=20261113v11"></script>
-    <script src="coins.js?v=20261113v11"></script>
-    <script src="stats.js?v=20261113v11"></script>
-    <script src="supabase.js?v=20261113v11"></script>
-    <script src="grid.js?v=20261113v11"></script>
+    <script src="poster.js?v=20261113v12"></script>
+    <script src="pro.js?v=20261113v12"></script>
+    <script src="coins.js?v=20261113v12"></script>
+    <script src="stats.js?v=20261113v12"></script>
+    <script src="supabase.js?v=20261113v12"></script>
+    <script src="grid.js?v=20261113v12"></script>
     <!-- Main Application Logic -->
-    <script src="app.js?v=20261113v11"></script>
+    <script src="app.js?v=20261113v12"></script>
 </body>
 </html>

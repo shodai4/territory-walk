@@ -125,11 +125,32 @@ class TerritoryWalkApp {
         }
     }
 
+    isUnderdogTeam() {
+        if (!this.gridManager) return false;
+        let blackCount = 0;
+        let whiteCount = 0;
+        for (const team of this.gridManager.claimedTilesCache.values()) {
+            if (team === 'black') blackCount++;
+            else if (team === 'white') whiteCount++;
+        }
+        const total = blackCount + whiteCount;
+        if (total === 0) return false;
+        const myCount = this.currentTeam === 'black' ? blackCount : whiteCount;
+        const myPct = Math.round((myCount / total) * 100);
+        return myPct <= 40;
+    }
+
     updateAutoBalanceUI() {
         const teamInfoEl = document.getElementById('menu-current-team-info');
         if (teamInfoEl) {
             const teamName = this.currentTeam === 'black' ? 'Black (黒)' : 'White (白)';
             teamInfoEl.textContent = teamName;
+        }
+        const underdogEl = document.getElementById('menu-underdog-status');
+        if (underdogEl) {
+            const isUnderdog = this.isUnderdogTeam();
+            underdogEl.textContent = isUnderdog ? '劣勢逆転ボーナス発動中 (コイン2倍)' : '通常 (陣地40%以下で2倍発動)';
+            underdogEl.className = isUnderdog ? 'text-amber-400 font-bold' : 'text-zinc-400';
         }
     }
 

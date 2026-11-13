@@ -322,13 +322,25 @@ class CoinManager {
         }
     }
 
-    // --- Tile Walking Hook (Fair & Equal Rule: +1C for new claim, +2C for reclaiming) ---
+    // --- Tile Walking Hook with Underdog Comeback Double Coins ---
     onTileClaimed(isReclaimed) {
-        const base = isReclaimed ? 2 : 1;
+        let base = isReclaimed ? 2 : 1;
+        let isComeback = false;
+
+        // Comeback Bonus: Tile reclaiming when user is underdog (<= 40% territory)
+        if (isReclaimed && this.app && this.app.isUnderdogTeam && this.app.isUnderdogTeam()) {
+            base = 4; // 2x double coin bonus
+            isComeback = true;
+        }
+
         this.coins += base;
         localStorage.setItem(this.STORAGE_KEY_COINS, this.coins.toString());
         this.updateCoinUI();
         this.syncCoinsToSupabase();
+
+        if (isComeback && this.app && this.app.showToast) {
+            this.app.showToast('劣勢逆転ボーナス発動！獲得コイン2倍 (+4 COIN)');
+        }
     }
 
     // --- Coin Packs (IAP / Stripe / Web Simulation) ---
