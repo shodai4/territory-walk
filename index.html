@@ -23,8 +23,17 @@
                 <span class="font-mono tracking-wider font-bold">TERRITORY WALK</span>
             </div>
 
-            <!-- 右：現在チーム表示 & MENUボタン -->
-            <div class="flex items-center gap-2 shrink-0">
+            <!-- 右：コイン残高 ＆ 現在チーム表示 & MENUボタン -->
+            <div class="flex items-center gap-1.5 shrink-0">
+                <button id="btn-header-coins" class="flex items-center gap-1 bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-700 border border-zinc-700/80 hover:border-amber-400/80 px-2 py-1 rounded-lg font-mono text-xs text-amber-400 shadow transition-all active:scale-95" title="コイン・ショップを開く">
+                    <svg class="w-3.5 h-3.5 text-amber-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="9"></circle>
+                        <path d="M12 7v10"></path>
+                        <path d="M15 9.5a2.5 2.5 0 0 0-5 0c0 1.5 1.5 2 3 2.5s3 1 3 2.5a2.5 2.5 0 0 1-5 0"></path>
+                    </svg>
+                    <span id="header-coin-count" class="font-bold">100</span>
+                    <span class="text-[9px] text-zinc-400">C</span>
+                </button>
                 <div id="team-badge" class="flex items-center gap-1.5 bg-zinc-900 border border-zinc-700/60 px-2.5 py-1 rounded-full font-mono text-xs shadow-inner">
                     <!-- JSで動的切替: [●] Black または [○] White -->
                 </div>
@@ -171,6 +180,16 @@
                 </button>
             </div>
 
+            <!-- トップアクションボタン: ショップ ＆ コイン -->
+            <button id="btn-open-shop-from-menu" class="w-full py-2.5 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 border border-amber-400 text-black font-mono text-xs font-bold rounded-xl shadow transition-all active:scale-95 flex items-center justify-center gap-1.5">
+                <svg class="w-4 h-4 text-black" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="9"></circle>
+                    <path d="M12 7v10"></path>
+                    <path d="M15 9.5a2.5 2.5 0 0 0-5 0c0 1.5 1.5 2 3 2.5s3 1 3 2.5a2.5 2.5 0 0 1-5 0"></path>
+                </svg>
+                <span>ショップ ＆ コイン獲得</span>
+            </button>
+
             <!-- トップアクションボタン: ランキング・マイ戦績 -->
             <button id="btn-open-stats" class="w-full py-2.5 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 border border-zinc-700 text-amber-400 font-mono text-xs font-bold rounded-xl shadow transition-all active:scale-95 flex items-center justify-center">
                 <span>ランキング・マイ戦績</span>
@@ -194,6 +213,8 @@
                     <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[10px] hover:border-white transition-all active:scale-95 text-orange-400" data-skin="crimson">紅蓮 (Crimson)</button>
                     <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[10px] hover:border-white transition-all active:scale-95 text-pink-400" data-skin="sakura">サクラ (Sakura)</button>
                     <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[10px] hover:border-white transition-all active:scale-95 text-lime-400" data-skin="pixel">レトロ (Pixel)</button>
+                    <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[10px] hover:border-white transition-all active:scale-95 text-purple-400" data-skin="cyberpunk">サイバー (Cyber)</button>
+                    <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[10px] hover:border-white transition-all active:scale-95 text-slate-300" data-skin="monochrome">モノトーン (Mono)</button>
                 </div>
             </details>
 
@@ -473,6 +494,163 @@
         </div>
     </div>
 
+    <!-- ショップ ＆ コインモーダル -->
+    <div id="shop-modal" class="hidden fixed inset-0 z-[2000] bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="bg-zinc-900 border border-zinc-700/90 rounded-2xl max-w-lg w-full max-w-[calc(100vw-2rem)] p-5 shadow-2xl flex flex-col gap-3 text-xs select-none max-h-[90vh] overflow-hidden">
+            <!-- モーダルヘッダー -->
+            <div class="flex items-center justify-between border-b border-zinc-800 pb-3">
+                <div class="flex items-center gap-2">
+                    <svg class="w-4 h-4 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="9"></circle>
+                        <path d="M12 7v10"></path>
+                        <path d="M15 9.5a2.5 2.5 0 0 0-5 0c0 1.5 1.5 2 3 2.5s3 1 3 2.5a2.5 2.5 0 0 1-5 0"></path>
+                    </svg>
+                    <div class="font-bold text-sm tracking-wider text-white">SHOP & COINS</div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <div class="flex items-center gap-1 bg-zinc-950 border border-zinc-700/80 px-2.5 py-1 rounded-full font-mono text-xs text-amber-400">
+                        <span id="shop-modal-coin-count" class="font-bold">100</span>
+                        <span class="text-[9px] text-zinc-400">COIN</span>
+                    </div>
+                    <button id="btn-close-shop" class="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-zinc-300 font-bold flex items-center gap-1 text-[11px] transition-all active:scale-95">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                        <span>閉じる</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- タブバー -->
+            <div class="flex items-center gap-1 bg-zinc-950 p-1 rounded-xl border border-zinc-800 text-[11px]">
+                <button id="tab-shop-earn" class="shop-tab-btn active flex-1 py-1.5 rounded-lg border-b-2 border-amber-500 font-bold text-center text-amber-400 bg-zinc-900/60">コイン獲得</button>
+                <button id="tab-shop-skins" class="shop-tab-btn flex-1 py-1.5 rounded-lg border-b-2 border-transparent font-medium text-center text-zinc-400 hover:text-white">マステーマ</button>
+                <button id="tab-shop-titles" class="shop-tab-btn flex-1 py-1.5 rounded-lg border-b-2 border-transparent font-medium text-center text-zinc-400 hover:text-white">限定称号</button>
+                <button id="tab-shop-perks" class="shop-tab-btn flex-1 py-1.5 rounded-lg border-b-2 border-transparent font-medium text-center text-zinc-400 hover:text-white">特別機能</button>
+            </div>
+
+            <!-- パネルコンテナ -->
+            <div class="flex-1 overflow-y-auto pr-1 space-y-3">
+                <!-- パネル1: コイン獲得 (EARN) -->
+                <div id="panel-shop-earn" class="space-y-2.5">
+                    <!-- リワード動画カード -->
+                    <div class="bg-gradient-to-br from-zinc-950 to-zinc-900 border border-amber-500/50 p-3 rounded-xl flex flex-col gap-2">
+                        <div class="flex items-start justify-between">
+                            <div>
+                                <div class="font-bold text-xs text-amber-400 flex items-center gap-1.5">
+                                    <span>動画リワード広告（テスト視聴）</span>
+                                </div>
+                                <div class="text-[11px] text-zinc-300 mt-1">5秒のスポンサー動画を視聴して、すぐにコインを獲得できます。</div>
+                            </div>
+                            <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 text-[10px] font-mono font-bold shrink-0">+50 COIN</span>
+                        </div>
+                        <button id="btn-watch-reward-ad" class="w-full py-2 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-black font-bold font-mono text-xs rounded-lg shadow transition-all active:scale-95 flex items-center justify-center gap-1.5 mt-1">
+                            <svg class="w-3.5 h-3.5 text-black" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                            <span>動画を視聴して +50 COIN を獲得</span>
+                        </button>
+                    </div>
+
+                    <!-- 歩行獲得ボーナスカード -->
+                    <div class="bg-zinc-950/80 border border-zinc-800 p-3 rounded-xl space-y-1.5">
+                        <div class="font-bold text-xs text-white">歩行・陣取りボーナス</div>
+                        <div class="text-[11px] text-zinc-400">街を歩いて陣地を開拓・奪還すると自動でコインが貯まります。</div>
+                        <div class="grid grid-cols-2 gap-2 pt-1 font-mono text-xs">
+                            <div class="bg-zinc-900/80 border border-zinc-800 p-2 rounded-lg">
+                                <div class="text-zinc-500 text-[10px]">自陣開拓</div>
+                                <div class="font-bold text-white mt-0.5">+1 COIN / マス</div>
+                            </div>
+                            <div class="bg-zinc-900/80 border border-zinc-800 p-2 rounded-lg">
+                                <div class="text-emerald-400 text-[10px]">オセロ奪還</div>
+                                <div class="font-bold text-emerald-400 mt-0.5">+2 COIN / マス</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- デイリーログインボーナスカード -->
+                    <div class="bg-zinc-950/80 border border-zinc-800 p-3 rounded-xl space-y-1.5">
+                        <div class="flex items-center justify-between">
+                            <div class="font-bold text-xs text-white">デイリーログインボーナス</div>
+                            <span class="text-[10px] text-zinc-400 font-mono">毎日自動付与</span>
+                        </div>
+                        <div class="text-[11px] text-zinc-400">毎日の初回アクセス時に連続ログイン日数に応じて付与されます。</div>
+                        <div class="text-amber-400 font-mono text-xs font-bold pt-0.5">+20〜50 COIN / 日</div>
+                    </div>
+                </div>
+
+                <!-- パネル2: マステーマ (SKINS) -->
+                <div id="panel-shop-skins" class="hidden space-y-2">
+                    <div class="text-[10px] text-zinc-400">※Pay to Win完全排除。マスの見た目のみが変化し、ゲームの有利不利には影響しません。</div>
+                    <div id="container-shop-skins" class="space-y-1.5">
+                        <!-- JSで動的描画 -->
+                    </div>
+                </div>
+
+                <!-- パネル3: 限定称号 (TITLES) -->
+                <div id="panel-shop-titles" class="hidden space-y-2">
+                    <div class="text-[10px] text-zinc-400">※ランキングやマイ戦績で表示名の前にセットできる限定称号です。</div>
+                    <div id="container-shop-titles" class="space-y-1.5">
+                        <!-- JSで動的描画 -->
+                    </div>
+                </div>
+
+                <!-- パネル4: 特別機能 (PERKS) -->
+                <div id="panel-shop-perks" class="hidden space-y-2">
+                    <div class="text-[10px] text-zinc-400">※ポスター保存やマーカー光彩などの付加機能です。歩行ルールには影響しません。</div>
+                    <div id="container-shop-perks" class="space-y-1.5">
+                        <!-- JSで動的描画 -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- モーダルフッター -->
+            <div class="pt-2 border-t border-zinc-800">
+                <button id="btn-shop-footer-close" class="w-full py-2.5 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 border border-zinc-700 text-white font-bold font-mono text-xs rounded-xl shadow transition-all active:scale-95">閉じる</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- リワード動画広告シミュレーションモーダル -->
+    <div id="reward-ad-modal" class="hidden fixed inset-0 z-[2100] bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="bg-zinc-900 border border-amber-500/80 rounded-2xl max-w-sm w-full p-6 shadow-2xl flex flex-col gap-4 text-xs select-none">
+            <div class="flex items-center justify-between border-b border-zinc-800 pb-3">
+                <div class="flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse"></span>
+                    <span class="font-bold text-xs tracking-wider text-amber-400 font-mono">SPONSOR REWARD</span>
+                </div>
+                <button id="btn-close-reward-ad" class="text-zinc-500 hover:text-white p-1">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+
+            <!-- 動画広告エリア（ダークテック調シミュレーション） -->
+            <div class="bg-zinc-950 border border-zinc-800 rounded-xl p-5 flex flex-col items-center justify-center text-center gap-3 min-h-[160px]">
+                <div class="w-10 h-10 rounded-full bg-zinc-900 border border-zinc-700 flex items-center justify-center text-amber-400">
+                    <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                </div>
+                <div>
+                    <div class="font-bold text-sm text-white">TERRITORY WALK PRO</div>
+                    <div class="text-[11px] text-zinc-400 mt-1">白黒歩行陣取り・完全自律開発プロジェクト</div>
+                    <div class="text-[10px] text-zinc-500 mt-0.5">Presented by お絵描き楽しも委員会</div>
+                </div>
+                <div id="reward-ad-status" class="text-[11px] text-amber-300 font-mono">スポンサー動画を再生中...</div>
+            </div>
+
+            <!-- カウントダウン ＆ プログレスバー -->
+            <div class="space-y-1.5">
+                <div class="flex justify-between items-center font-mono text-[11px]">
+                    <span id="reward-ad-timer" class="text-zinc-300 font-bold">リワード付与まで: 5秒</span>
+                    <span class="text-amber-400 font-bold">+50 COIN</span>
+                </div>
+                <div class="w-full h-2 bg-zinc-950 rounded-full overflow-hidden border border-zinc-800">
+                    <div id="reward-ad-progress" class="h-full bg-gradient-to-r from-amber-500 to-amber-300 transition-all duration-100" style="width: 0%;"></div>
+                </div>
+            </div>
+
+            <!-- リワード受取ボタン（カウントダウン終了後に表示） -->
+            <button id="btn-claim-ad-reward" class="hidden w-full py-2.5 bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-black font-bold font-mono text-xs rounded-xl shadow-lg transition-all active:scale-95 flex items-center justify-center gap-1.5">
+                <span>+50 COIN を受け取る</span>
+            </button>
+        </div>
+    </div>
+
     <!-- Leaflet JS CDN -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <!-- Supabase JS v2 CDN -->
@@ -480,10 +658,11 @@
     <!-- Feature Modules -->
     <script src="poster.js"></script>
     <script src="pro.js"></script>
-    <script src="stats.js?v=20261113v6"></script>
-    <script src="supabase.js?v=20261113v6"></script>
-    <script src="grid.js?v=20261113v6"></script>
+    <script src="coins.js?v=20261113v7"></script>
+    <script src="stats.js?v=20261113v7"></script>
+    <script src="supabase.js?v=20261113v7"></script>
+    <script src="grid.js?v=20261113v7"></script>
     <!-- Main Application Logic -->
-    <script src="app.js?v=20261113v6"></script>
+    <script src="app.js?v=20261113v7"></script>
 </body>
 </html>

@@ -174,14 +174,33 @@ body[data-skin="pixel"] .dark-glass-modal, body[data-skin="pixel"] #dpad-contain
     border-color: rgba(132, 204, 22, 0.6) !important;
     box-shadow: 0 0 20px rgba(132, 204, 22, 0.2);
 }
+body[data-skin="cyberpunk"] .dark-glass-modal, body[data-skin="cyberpunk"] #dpad-container, body[data-skin="cyberpunk"] #btn-recenter {
+    border-color: rgba(168, 85, 247, 0.6) !important;
+    box-shadow: 0 0 20px rgba(168, 85, 247, 0.2);
+}
+body[data-skin="monochrome"] .dark-glass-modal, body[data-skin="monochrome"] #dpad-container, body[data-skin="monochrome"] #btn-recenter {
+    border-color: rgba(148, 163, 184, 0.6) !important;
+    box-shadow: 0 0 20px rgba(148, 163, 184, 0.2);
+}
 
 body[data-skin="neon"] .skin-btn[data-skin="neon"] { border-color: #06b6d4; color: #06b6d4; font-weight: bold; }
 body[data-skin="gold"] .skin-btn[data-skin="gold"] { border-color: #eab308; color: #eab308; font-weight: bold; }
 body[data-skin="crimson"] .skin-btn[data-skin="crimson"] { border-color: #ef4444; color: #ef4444; font-weight: bold; }
 body[data-skin="sakura"] .skin-btn[data-skin="sakura"] { border-color: #f472b6; color: #f472b6; font-weight: bold; }
 body[data-skin="pixel"] .skin-btn[data-skin="pixel"] { border-color: #84cc16; color: #84cc16; font-weight: bold; }
+body[data-skin="cyberpunk"] .skin-btn[data-skin="cyberpunk"] { border-color: #a855f7; color: #a855f7; font-weight: bold; }
+body[data-skin="monochrome"] .skin-btn[data-skin="monochrome"] { border-color: #cbd5e1; color: #cbd5e1; font-weight: bold; }
 
 .player-pulse-white {
+    position: absolute;
+    width: 40px;
+    height: 40px;
+    left: -10px;
+    top: -10px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.6);
+    animation: pulse-white 2s infinite ease-in-out;
+}
 
 .player-pulse-black {
     position: absolute;
@@ -192,6 +211,23 @@ body[data-skin="pixel"] .skin-btn[data-skin="pixel"] { border-color: #84cc16; co
     border-radius: 50%;
     border: 2px solid rgba(255, 255, 255, 0.6);
     animation: pulse-black 2s infinite ease-in-out;
+}
+
+/* Custom Pin Effects */
+body[data-pin-effect="neon"] .player-dot-white, body[data-pin-effect="neon"] .player-dot-black {
+    box-shadow: 0 0 25px #06b6d4, 0 0 10px #d946ef !important;
+    border-color: #06b6d4 !important;
+}
+body[data-pin-effect="neon"] .player-pulse-white, body[data-pin-effect="neon"] .player-pulse-black {
+    border-color: rgba(6, 182, 212, 0.8) !important;
+}
+
+body[data-pin-effect="gold"] .player-dot-white, body[data-pin-effect="gold"] .player-dot-black {
+    box-shadow: 0 0 25px #eab308, 0 0 10px #fef08a !important;
+    border-color: #eab308 !important;
+}
+body[data-pin-effect="gold"] .player-pulse-white, body[data-pin-effect="gold"] .player-pulse-black {
+    border-color: rgba(234, 179, 8, 0.8) !important;
 }
 
 .player-dot-white {

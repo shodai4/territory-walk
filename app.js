@@ -32,6 +32,7 @@ class TerritoryWalkApp {
         this.posterGenerator = new PosterGenerator(this);
         this.supabaseManager = new SupabaseManager();
         this.statsManager = new StatsManager(this.supabaseManager, this);
+        this.coinManager = new CoinManager(this, this.supabaseManager);
 
         this.initTeam();
         this.initDOM();
@@ -52,6 +53,10 @@ class TerritoryWalkApp {
         // Check Daily Login Bonus
         const bonus = this.statsManager.checkDailyLoginBonus();
         if (bonus.isNew) {
+            if (this.coinManager) {
+                const bonusCoins = Math.min(50, 20 + (bonus.streak - 1) * 10);
+                this.coinManager.addCoins(bonusCoins, `連続ログイン ${bonus.streak}日目ボーナス`);
+            }
             setTimeout(() => {
                 this.showToast(`DAILY BONUS: 連続ログイン ${bonus.streak}日目達成！`);
             }, 1200);
@@ -226,6 +231,11 @@ class TerritoryWalkApp {
             btn.addEventListener('click', (e) => {
                 const targetSkin = e.currentTarget.dataset.skin;
 
+                if (this.coinManager && !this.coinManager.isSkinUnlocked(targetSkin)) {
+                    this.coinManager.promptUnlockSkin(targetSkin);
+                    return;
+                }
+
                 document.body.dataset.skin = targetSkin;
                 localStorage.setItem('territory_skin', targetSkin);
                 this.updateSkinBadge(targetSkin);
@@ -240,10 +250,11 @@ class TerritoryWalkApp {
     }
 
     cycleSkin() {
-        const skins = ['default', 'neon', 'gold', 'crimson', 'sakura', 'pixel'];
+        const allSkins = ['default', 'neon', 'gold', 'crimson', 'sakura', 'pixel', 'cyberpunk', 'monochrome'];
+        const unlocked = allSkins.filter(s => !this.coinManager || this.coinManager.isSkinUnlocked(s));
         const current = document.body.dataset.skin || 'default';
-        const nextIdx = (skins.indexOf(current) + 1) % skins.length;
-        const nextSkin = skins[nextIdx];
+        const nextIdx = (unlocked.indexOf(current) + 1) % unlocked.length;
+        const nextSkin = unlocked[nextIdx] || 'default';
 
         document.body.dataset.skin = nextSkin;
         localStorage.setItem('territory_skin', nextSkin);
@@ -265,7 +276,9 @@ class TerritoryWalkApp {
             gold: 'SKIN: ゴールド',
             crimson: 'SKIN: 紅蓮',
             sakura: 'SKIN: サクラ',
-            pixel: 'SKIN: レトロ'
+            pixel: 'SKIN: レトロ',
+            cyberpunk: 'SKIN: サイバー',
+            monochrome: 'SKIN: モノトーン'
         };
         textEl.textContent = labels[skin] || 'SKIN: ' + skin;
     }
@@ -279,7 +292,9 @@ class TerritoryWalkApp {
             gold: 'ゴールド (Gold)',
             crimson: '紅蓮 (Crimson)',
             sakura: 'サクラ (Sakura)',
-            pixel: 'レトロ (Pixel)'
+            pixel: 'レトロ (Pixel)',
+            cyberpunk: 'サイバー (Cyber)',
+            monochrome: 'モノトーン (Mono)'
         };
         badge.textContent = labels[skin] || skin;
     }
@@ -715,7 +730,16 @@ class TerritoryWalkApp {
         if (!exportBtn) return;
 
         exportBtn.addEventListener('click', async () => {
-            if (!this.checkProAccess('ポスター保存')) return;
+            const hasAccess = (this.proManager && this.proManager.isPro()) ||
+                              (this.coinManager && this.coinManager.canAccessPosterExport());
+            if (!hasAccess) {
+                const ok = confirm('【ポスター保存】\n週間陣地ポスターの書き出しはPro機能またはチケット（30 COIN）が必要です。\nショップを開いてチケットを入手しますか？');
+                if (ok && this.coinManager) {
+                    if (this.menuModal) this.menuModal.classList.add('hidden');
+                    this.coinManager.openShopModal('perks');
+                }
+                return;
+            }
 
             const originalHtml = exportBtn.innerHTML;
             exportBtn.innerHTML = '<span>ポスター生成中...</span>';
@@ -982,6 +1006,11 @@ class TerritoryWalkApp {
             // 2. Stats logging
             if (this.statsManager) {
                 this.statsManager.recordTileClaimed(isReclaimed);
+            }
+
+            // In-game Coin reward
+            if (this.coinManager) {
+                this.coinManager.onTileClaimed(isReclaimed);
             }
 
             // 3. Supabase online sync

@@ -174,6 +174,16 @@ class GridManager {
                 white: { color: '#3f6212', weight: 1.5, fillOpacity: 0.85, fillColor: '#bef264' },
                 black: { color: '#14532d', weight: 1.5, fillOpacity: 0.85, fillColor: '#365314' },
                 unclaimed: { color: '#4d7c0f', weight: 1, fillOpacity: 0.08, fillColor: '#365314' }
+            },
+            cyberpunk: {
+                white: { color: '#0284c7', weight: 1.5, fillOpacity: 0.88, fillColor: '#38bdf8' },
+                black: { color: '#7e22ce', weight: 1.5, fillOpacity: 0.90, fillColor: '#a855f7' },
+                unclaimed: { color: '#581c87', weight: 1, fillOpacity: 0.05, fillColor: '#3b0764' }
+            },
+            monochrome: {
+                white: { color: '#1e293b', weight: 1.5, fillOpacity: 0.88, fillColor: '#f1f5f9' },
+                black: { color: '#020617', weight: 1.5, fillOpacity: 0.92, fillColor: '#334155' },
+                unclaimed: { color: '#1e293b', weight: 1, fillOpacity: 0.05, fillColor: '#0f172a' }
             }
         };
 

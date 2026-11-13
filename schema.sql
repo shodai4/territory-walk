@@ -49,8 +49,12 @@ CREATE TABLE IF NOT EXISTS territory_users (
     lifetime_reclaimed INTEGER NOT NULL DEFAULT 0,
     battles_won INTEGER NOT NULL DEFAULT 0,
     battles_lost INTEGER NOT NULL DEFAULT 0,
+    coins INTEGER NOT NULL DEFAULT 100,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Migration for existing tables:
+ALTER TABLE territory_users ADD COLUMN IF NOT EXISTS coins INTEGER NOT NULL DEFAULT 100;
 
 -- 2. Weekly Rankings Table (territory_weekly_rankings)
 CREATE TABLE IF NOT EXISTS territory_weekly_rankings (
