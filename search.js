@@ -28,32 +28,14 @@ class SearchManager {
     }
 
     initEvents() {
-        // 開くボタン（ヘッダー内またはマップ上トリガー ＆ MENU内）
-        const openFloatingBtn = document.getElementById('btn-open-search');
+        // MENU内の地図検索ボタン -> MENUを閉じて検索入力にフォーカス
         const openMenuBtn = document.getElementById('btn-open-search-from-menu');
-
-        if (openFloatingBtn) {
-            openFloatingBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                this.toggleSearchBar();
-            });
-        }
-
         if (openMenuBtn) {
             openMenuBtn.addEventListener('click', (e) => {
                 e.preventDefault();
                 const menuModal = document.getElementById('menu-modal');
                 if (menuModal) menuModal.classList.add('hidden');
-                this.openSearchBar();
-            });
-        }
-
-        // 閉じるボタン
-        const closeBtn = document.getElementById('btn-close-inline-search');
-        if (closeBtn) {
-            closeBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                this.closeSearchBar();
+                this.focusSearchInput();
             });
         }
 
@@ -109,29 +91,29 @@ class SearchManager {
         }
     }
 
-    toggleSearchBar() {
-        if (this.isOpen) {
-            this.closeSearchBar();
-        } else {
-            this.openSearchBar();
+    focusSearchInput() {
+        if (this.input) {
+            this.input.focus();
+            if (this.input.value.trim().length >= 2) {
+                this.performSearch(this.input.value);
+            }
         }
+    }
+
+    toggleSearchBar() {
+        this.focusSearchInput();
     }
 
     openSearchBar() {
-        if (!this.container) return;
-        this.container.classList.remove('hidden');
-        this.isOpen = true;
-        if (this.input) {
-            setTimeout(() => this.input.focus(), 100);
-        }
+        this.focusSearchInput();
     }
 
     closeSearchBar() {
-        if (!this.container) return;
-        this.container.classList.add('hidden');
-        this.isOpen = false;
         if (this.resultsContainer) {
             this.resultsContainer.classList.add('hidden');
+        }
+        if (this.input) {
+            this.input.blur();
         }
     }
 

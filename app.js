@@ -86,20 +86,19 @@ class TerritoryWalkApp {
         if (!toast) {
             toast = document.createElement('div');
             toast.id = 'app-toast';
-            toast.className = 'fixed top-[92px] left-1/2 -translate-x-1/2 z-[3000] bg-zinc-950/95 border border-amber-500/80 text-amber-300 text-xs font-mono px-4 py-2.5 rounded-xl shadow-2xl backdrop-blur-md transition-all duration-300 pointer-events-none opacity-0 text-center flex flex-col items-center max-w-[92vw]';
+            toast.className = 'fixed top-[140px] left-1/2 -translate-x-1/2 z-[3000] bg-zinc-950/95 border border-amber-500/80 text-amber-300 text-xs font-mono px-4 py-2.5 rounded-xl shadow-2xl backdrop-blur-md transition-all duration-300 pointer-events-none text-center flex flex-col items-center max-w-[92vw]';
             document.body.appendChild(toast);
         }
         if (subtitle) {
-            toast.innerHTML = `<div class="font-bold text-xs text-white leading-tight break-keep whitespace-nowrap">${message}</div><div class="text-[11px] text-amber-400 mt-0.5 leading-tight break-keep whitespace-nowrap">${subtitle}</div>`;
+            toast.innerHTML = `<div class="font-bold text-xs text-white leading-tight break-keep whitespace-nowrap">${message}</div><div class="text-[11px] text-amber-400 mt-1 leading-tight break-keep whitespace-nowrap">${subtitle}</div>`;
         } else {
             toast.innerHTML = `<div class="font-bold text-xs text-amber-300 leading-tight break-keep whitespace-nowrap">${message}</div>`;
         }
-        toast.classList.remove('opacity-0');
-        toast.classList.add('opacity-100');
+        toast.style.opacity = '1';
+        toast.style.pointerEvents = 'none';
         if (this.toastTimeout) clearTimeout(this.toastTimeout);
         this.toastTimeout = setTimeout(() => {
-            toast.classList.remove('opacity-100');
-            toast.classList.add('opacity-0');
+            toast.style.opacity = '0';
         }, 3200);
     }
 
@@ -244,7 +243,7 @@ class TerritoryWalkApp {
             zoom: CONFIG.DEFAULT_ZOOM,
             minZoom: CONFIG.MIN_ZOOM,
             maxZoom: CONFIG.MAX_ZOOM,
-            zoomControl: true,
+            zoomControl: false,
             attributionControl: false
         });
 
@@ -348,19 +347,15 @@ class TerritoryWalkApp {
     }
 
     updateSkinBadge(skin) {
-        const labels = {
-            default: '標準',
-            neon: 'ネオン',
-            gold: 'ゴールド',
-            crimson: '紅蓮',
-            sakura: 'サクラ',
-            pixel: 'レトロ',
-            cyberpunk: 'サイバー',
-            monochrome: 'モノトーン'
-        };
-        const badge = document.getElementById('current-skin-badge');
-        if (badge) badge.textContent = labels[skin] || skin;
-        this.updateThemeMapBadge();
+        const skinButtons = document.querySelectorAll('.skin-btn');
+        skinButtons.forEach(btn => {
+            const isSelected = btn.dataset.skin === skin;
+            if (isSelected) {
+                btn.className = 'skin-btn bg-white text-black font-bold border-2 border-white p-2 rounded-lg text-[11px] shadow-xl transition-all active:scale-95 flex items-center justify-center';
+            } else {
+                btn.className = 'skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[11px] hover:border-white transition-all active:scale-95 text-zinc-300 flex items-center justify-center';
+            }
+        });
     }
 
     initMapThemeSelector() {
@@ -392,39 +387,19 @@ class TerritoryWalkApp {
     }
 
     updateMapThemeBadge(theme) {
-        const labels = {
-            dark: 'ダーク',
-            mono: 'モノクロ',
-            street: 'ストリート',
-            sepia: 'セピア'
-        };
-        const badge = document.getElementById('current-map-theme-badge');
-        if (badge) badge.textContent = labels[theme] || theme;
-        this.updateThemeMapBadge();
+        const themeButtons = document.querySelectorAll('.map-theme-btn');
+        themeButtons.forEach(btn => {
+            const isSelected = btn.dataset.mapTheme === theme;
+            if (isSelected) {
+                btn.className = 'map-theme-btn bg-white text-black font-bold border-2 border-white p-2 rounded-lg text-[11px] shadow-xl transition-all active:scale-95 flex items-center justify-center';
+            } else {
+                btn.className = 'map-theme-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[11px] hover:border-white transition-all active:scale-95 text-zinc-300 flex items-center justify-center';
+            }
+        });
     }
 
     updateThemeMapBadge() {
-        const badge = document.getElementById('current-theme-map-badge');
-        if (!badge) return;
-        const skin = document.body.dataset.skin || 'default';
-        const mapTheme = localStorage.getItem('tw_map_theme') || 'dark';
-        const skinLabels = {
-            default: '標準',
-            neon: 'ネオン',
-            gold: 'ゴールド',
-            crimson: '紅蓮',
-            sakura: 'サクラ',
-            pixel: 'レトロ',
-            cyberpunk: 'サイバー',
-            monochrome: 'モノトーン'
-        };
-        const mapLabels = {
-            dark: 'ダーク',
-            mono: 'モノクロ',
-            street: 'ストリート',
-            sepia: 'セピア'
-        };
-        badge.textContent = `${skinLabels[skin] || skin} / ${mapLabels[mapTheme] || mapTheme}`;
+        // UI見出し横のテキスト補足は全廃（ボタン自体のハイライト色で識別）
     }
 
     initStatsModal() {
@@ -697,20 +672,49 @@ class TerritoryWalkApp {
     initWeeklyResultModal() {
         const modal = document.getElementById('weekly-result-modal');
         const closeBtn = document.getElementById('btn-close-weekly-result');
+        const closeIconBtn = document.getElementById('btn-close-weekly-result-icon');
+        const shareBtn = document.getElementById('btn-share-weekly-result');
         const openFromMenuBtn = document.getElementById('btn-open-weekly-result');
 
-        if (closeBtn && modal) {
-            closeBtn.addEventListener('click', () => {
-                modal.classList.add('hidden');
-                const currentWeek = this.supabaseManager.getCurrentWeekId();
-                localStorage.setItem('tw_last_seen_week', currentWeek);
-                this.showToast('新シーズンスタート！陣地を開拓しましょう');
-            });
+        const closeModal = () => {
+            if (!modal) return;
+            modal.classList.add('hidden');
+            const currentWeek = this.supabaseManager ? this.supabaseManager.getCurrentWeekId() : 'current';
+            localStorage.setItem('tw_last_seen_week', currentWeek);
+        };
+
+        if (closeBtn) closeBtn.addEventListener('click', closeModal);
+        if (closeIconBtn) closeIconBtn.addEventListener('click', closeModal);
+
+        if (modal) {
             modal.addEventListener('click', (e) => {
-                if (e.target === modal) {
-                    modal.classList.add('hidden');
-                    const currentWeek = this.supabaseManager.getCurrentWeekId();
-                    localStorage.setItem('tw_last_seen_week', currentWeek);
+                if (e.target === modal) closeModal();
+            });
+        }
+
+        if (shareBtn) {
+            shareBtn.addEventListener('click', () => {
+                const res = this.lastResultData || {};
+                const outcomeText = res.isWin ? '勝利陣営！' : (res.isDraw ? '引き分け！' : '敗北陣営...');
+                const teamName = (res.myTeam || this.currentTeam || 'black').toUpperCase();
+                const blackPct = res.blackPct || 50;
+                const whitePct = res.whitePct || 50;
+                const tiles = res.myTiles || 0;
+                const inviteCode = (this.coinManager && this.coinManager.getInviteCode()) || '';
+
+                const shareText = `【TERRITORY WALK】前週シーズン決着！\n所属: ${teamName}チーム (${outcomeText})\n最終制圧比率: Black ${blackPct}% vs White ${whitePct}%\n個人開拓貢献: ${tiles}マス\n\n街を歩いてオセロ陣地を奪い合おう！\n招待コード: ${inviteCode}\n#テリトリーウォーク #TerritoryWalk`;
+                const shareUrl = 'https://shodai4.github.io/territory-walk/';
+
+                if (navigator.share) {
+                    navigator.share({
+                        title: 'TERRITORY WALK シーズン結果',
+                        text: shareText,
+                        url: shareUrl
+                    }).catch(() => {
+                        window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText + '\n' + shareUrl)}`, '_blank');
+                    });
+                } else {
+                    window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText + '\n' + shareUrl)}`, '_blank');
                 }
             });
         }
@@ -746,38 +750,64 @@ class TerritoryWalkApp {
         const modal = document.getElementById('weekly-result-modal');
         if (!modal) return;
 
-        const currentWeek = this.supabaseManager.getCurrentWeekId();
+        const currentWeek = this.supabaseManager ? this.supabaseManager.getCurrentWeekId() : '2026-W46';
         const weekToShow = targetWeek || this.getPreviousWeekId(currentWeek);
 
         document.getElementById('result-week-id').textContent = weekToShow;
         document.getElementById('result-winner-banner').textContent = '集計中...';
         modal.classList.remove('hidden');
 
-        const result = await this.statsManager.getPreviousWeekResult(weekToShow);
+        let result = this.statsManager ? await this.statsManager.getPreviousWeekResult(weekToShow) : null;
+
+        // デバッグプレビュー時で過去週レコードがない場合は、バーの視覚化が確認できるリアルなシミュレーションデータを表示
+        if (!result && isManual) {
+            result = {
+                weekId: weekToShow,
+                blackTotal: 142,
+                whiteTotal: 88,
+                blackPct: 62,
+                whitePct: 38,
+                winnerTeam: 'black',
+                isDraw: false,
+                myTeam: this.currentTeam || 'black',
+                myTiles: 18,
+                isWin: this.currentTeam === 'black'
+            };
+        }
+
+        const banner = document.getElementById('result-winner-banner');
+        const outcome = document.getElementById('result-battle-outcome');
+        const barBlack = document.getElementById('result-bar-black');
+        const barWhite = document.getElementById('result-bar-white');
+
         if (!result) {
-            document.getElementById('result-winner-banner').textContent = '記録なし';
+            banner.textContent = '記録なし';
             document.getElementById('result-winner-subtitle').textContent = `${weekToShow} の対戦データはありません`;
             document.getElementById('result-score-black').textContent = '-';
             document.getElementById('result-score-white').textContent = '-';
+            if (barBlack) barBlack.style.width = '50%';
+            if (barWhite) barWhite.style.width = '50%';
             document.getElementById('result-my-team').textContent = this.currentTeam === 'black' ? 'Black' : 'White';
             document.getElementById('result-my-tiles').textContent = '0 マス';
             document.getElementById('result-battle-outcome').textContent = '対戦なし';
             return;
         }
 
-        const banner = document.getElementById('result-winner-banner');
-        const outcome = document.getElementById('result-battle-outcome');
-
         if (result.winnerTeam === 'black') {
-            banner.innerHTML = '<span class="text-zinc-100">BLACK TEAM WIN</span>';
+            banner.innerHTML = '<span class="text-zinc-100 font-bold">BLACK TEAM WIN</span>';
         } else if (result.winnerTeam === 'white') {
-            banner.innerHTML = '<span class="text-zinc-100">WHITE TEAM WIN</span>';
+            banner.innerHTML = '<span class="text-zinc-100 font-bold">WHITE TEAM WIN</span>';
         } else {
-            banner.innerHTML = '<span class="text-amber-400">DRAW (引き分け)</span>';
+            banner.innerHTML = '<span class="text-amber-400 font-bold">DRAW (引き分け)</span>';
         }
 
         document.getElementById('result-score-black').textContent = `${result.blackPct}% (${result.blackTotal}マス)`;
         document.getElementById('result-score-white').textContent = `${result.whitePct}% (${result.whiteTotal}マス)`;
+
+        // 対戦比率ゲージバーの更新（アニメーション伸縮）
+        if (barBlack) barBlack.style.width = `${Math.max(5, Math.min(95, result.blackPct))}%`;
+        if (barWhite) barWhite.style.width = `${Math.max(5, Math.min(95, result.whitePct))}%`;
+
         document.getElementById('result-my-team').textContent = result.myTeam === 'black' ? 'Black' : 'White';
         document.getElementById('result-my-tiles').textContent = `${result.myTiles.toLocaleString()} マス`;
 
@@ -785,17 +815,19 @@ class TerritoryWalkApp {
             outcome.innerHTML = '<span class="text-zinc-400">引き分け</span>';
         } else if (result.isWin) {
             outcome.innerHTML = '<span class="text-amber-400 font-bold">VICTORY (勝利陣営)</span>';
-            if (!isManual) {
+            if (!isManual && this.statsManager) {
                 this.statsManager.stats.battles_won += 1;
                 this.statsManager.saveLocalStats();
             }
         } else {
             outcome.innerHTML = '<span class="text-zinc-400">DEFEAT (敗北陣営)</span>';
-            if (!isManual) {
+            if (!isManual && this.statsManager) {
                 this.statsManager.stats.battles_lost += 1;
                 this.statsManager.saveLocalStats();
             }
         }
+
+        this.lastResultData = result;
     }
 
     getPreviousWeekId(currentWeekId) {
@@ -1347,12 +1379,30 @@ class TerritoryWalkApp {
     }
 
     initEvents() {
+        // Zoom Controls (Custom Right-Bottom Controls)
+        const btnZoomIn = document.getElementById('btn-zoom-in');
+        if (btnZoomIn) {
+            btnZoomIn.addEventListener('click', (e) => {
+                e.preventDefault();
+                if (this.map) this.map.zoomIn();
+            });
+        }
+
+        const btnZoomOut = document.getElementById('btn-zoom-out');
+        if (btnZoomOut) {
+            btnZoomOut.addEventListener('click', (e) => {
+                e.preventDefault();
+                if (this.map) this.map.zoomOut();
+            });
+        }
+
         if (this.btnRecenter) {
             this.btnRecenter.addEventListener('click', () => {
                 if (this.map && this.virtualPos) {
                     this.map.setView(this.virtualPos, CONFIG.DEFAULT_ZOOM, { animate: true });
                     if (this.searchManager) {
                         this.searchManager.clearSearchMarker();
+                        this.searchManager.closeSearchBar();
                     }
                     this.showToast('現在地に戻りました');
                 }

@@ -21,16 +21,16 @@ class CoinManager {
         this.adTimer = null;
         this.adSecondsLeft = 5;
 
-        // 1. Tile & Grid Skins Catalog (Rebalanced Price Hierarchy)
+        // 1. Tile & Grid Skins Catalog (Simplified, Minimal Color Descriptions)
         this.SKINS = {
-            default: { id: 'default', name: '標準', cost: 0, desc: '白黒クラシックオセロカラー', class: 'text-zinc-200' },
-            pixel: { id: 'pixel', name: 'レトロ', cost: 100, desc: '80sアーケードライムグリーン', class: 'text-lime-400' },
-            sakura: { id: 'sakura', name: 'サクラ', cost: 150, desc: '春風舞う桜ピンクと翡翠ミント', class: 'text-pink-400' },
-            monochrome: { id: 'monochrome', name: 'モノトーン', cost: 150, desc: '氷雪ホワイトと漆黒の高コントラスト', class: 'text-slate-300' },
-            crimson: { id: 'crimson', name: '紅蓮', cost: 200, desc: '燃え盛る情熱の炎と深紅', class: 'text-orange-400' },
-            neon: { id: 'neon', name: 'ネオン', cost: 250, desc: 'シアンとマゼンタの鮮烈な発光', class: 'text-cyan-400' },
-            gold: { id: 'gold', name: 'ゴールド', cost: 500, desc: '富と栄光のシャンパンゴールド（プレミアム）', class: 'text-amber-400' },
-            cyberpunk: { id: 'cyberpunk', name: 'サイバー', cost: 800, desc: '近未来パープルとネオンブルー（ハイエンド）', class: 'text-purple-400' }
+            default: { id: 'default', name: '標準', cost: 0, desc: '白と黒のオセロカラー', class: 'text-zinc-200' },
+            pixel: { id: 'pixel', name: 'レトロ', cost: 100, desc: 'ライムグリーンとダーク', class: 'text-lime-400' },
+            sakura: { id: 'sakura', name: 'サクラ', cost: 150, desc: '桜ピンクと翡翠ミント', class: 'text-pink-400' },
+            monochrome: { id: 'monochrome', name: 'モノトーン', cost: 150, desc: '完全白黒の濃淡', class: 'text-slate-300' },
+            crimson: { id: 'crimson', name: '紅蓮', cost: 200, desc: '深紅とダーク', class: 'text-orange-400' },
+            neon: { id: 'neon', name: 'ネオン', cost: 250, desc: 'シアンとマゼンタ', class: 'text-cyan-400' },
+            gold: { id: 'gold', name: 'ゴールド', cost: 500, desc: 'シャンパンゴールド', class: 'text-amber-400' },
+            cyberpunk: { id: 'cyberpunk', name: 'サイバー', cost: 800, desc: 'パープルとブルー', class: 'text-purple-400' }
         };
 
         // 2. Exclusive Shop Titles Catalog (Rebalanced Price Hierarchy)
