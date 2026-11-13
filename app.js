@@ -492,68 +492,7 @@ class TerritoryWalkApp {
     }
 
     setupSwipeUpToClose(modalId, closeFn) {
-        const modal = document.getElementById(modalId);
-        if (!modal) return;
-        const card = modal.querySelector('div');
-        if (!card) return;
-
-        let startY = 0;
-        let startX = 0;
-        let startTime = 0;
-        let isSwiping = false;
-
-        modal.addEventListener('touchstart', (e) => {
-            const touch = e.touches[0];
-            startY = touch.clientY;
-            startX = touch.clientX;
-            startTime = Date.now();
-            isSwiping = false;
-        }, { passive: true });
-
-        modal.addEventListener('touchmove', (e) => {
-            const touch = e.touches[0];
-            const deltaY = touch.clientY - startY;
-            const deltaX = touch.clientX - startX;
-
-            const scrollableEl = card.querySelector('.overflow-y-auto') || card;
-            const isAtTop = scrollableEl.scrollTop <= 5;
-
-            if (isAtTop && deltaY < -15 && Math.abs(deltaY) > Math.abs(deltaX)) {
-                isSwiping = true;
-                card.style.transition = 'none';
-                card.style.transform = `translateY(${deltaY}px)`;
-                card.style.opacity = `${Math.max(0.3, 1 + deltaY / 400)}`;
-            }
-        }, { passive: true });
-
-        const endHandler = (e) => {
-            if (!isSwiping) return;
-            isSwiping = false;
-
-            const touch = e.changedTouches ? e.changedTouches[0] : null;
-            const deltaY = touch ? touch.clientY - startY : 0;
-            const elapsed = Math.max(1, Date.now() - startTime);
-            const velocity = Math.abs(deltaY) / elapsed;
-
-            if (deltaY < -60 || (velocity > 0.35 && deltaY < -20)) {
-                card.style.transition = 'all 0.22s cubic-bezier(0.16, 1, 0.3, 1)';
-                card.style.transform = 'translateY(-120%)';
-                card.style.opacity = '0';
-                setTimeout(() => {
-                    closeFn();
-                    card.style.transform = '';
-                    card.style.opacity = '';
-                    card.style.transition = '';
-                }, 220);
-            } else {
-                card.style.transition = 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)';
-                card.style.transform = 'translateY(0)';
-                card.style.opacity = '1';
-            }
-        };
-
-        modal.addEventListener('touchend', endHandler, { passive: true });
-        modal.addEventListener('touchcancel', endHandler, { passive: true });
+        // 廃止: モーダル内スクロール時の誤作動や引っかかりを根絶するため、スワイプ終了ジェスチャーは完全撤廃
     }
 
     setMapTheme(theme, notify = false) {

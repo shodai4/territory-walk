@@ -277,14 +277,15 @@ body[data-map-theme="sepia"] .leaflet-tile-pane {
 }
 
 /* Prevent Window Pinch Zoom & Ensure Fixed UI Shell */
-header, #dpad-container, #btn-recenter, #rules-modal, #menu-modal, #stats-modal, #pro-modal, #weekly-result-modal {
+header, #dpad-container, #btn-recenter {
     touch-action: none !important;
     -webkit-user-select: none !important;
     user-select: none !important;
 }
 
-/* Modal Viewport Protection: Prevent horizontal scroll & Safari header clipping */
-#rules-modal, #menu-modal, #stats-modal, #pro-modal, #weekly-result-modal {
+/* Modal Viewport Protection: Smooth vertical scroll, prevent horizontal scroll */
+#rules-modal, #menu-modal, #stats-modal, #pro-modal, #weekly-result-modal, #shop-modal, #team-reset-modal {
+    touch-action: pan-y !important;
     width: 100% !important;
     width: 100vw !important;
     max-width: 100vw !important;
