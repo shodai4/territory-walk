@@ -43,6 +43,7 @@ class TerritoryWalkApp {
         this.adMobManager = new AdMobManager(this);
         this.iapManager = new IAPManager(this);
 
+        this.initToastSystem();
         this.initTeam();
         this.initDOM();
         this.initMap();
@@ -81,32 +82,131 @@ class TerritoryWalkApp {
         }, 8000);
     }
 
-    showToast(message, subtitle = null) {
-        let toast = document.getElementById('app-toast');
-        if (!toast) {
-            toast = document.createElement('div');
-            toast.id = 'app-toast';
-            toast.className = 'fixed top-[140px] left-1/2 -translate-x-1/2 z-[3000] bg-zinc-950/95 border border-amber-500/80 text-amber-300 text-xs font-mono px-4 py-2.5 rounded-xl shadow-2xl backdrop-blur-md transition-all duration-300 pointer-events-none text-center flex flex-col items-center max-w-[92vw]';
-            document.body.appendChild(toast);
+    initToastSystem() {
+        this.toastQueue = [];
+        this.setupModalObservers();
+    }
+
+    isAnyModalOpen() {
+        const modalIds = [
+            'shop-modal',
+            'menu-modal',
+            'rules-modal',
+            'stats-modal',
+            'weekly-result-modal',
+            'team-reset-modal'
+        ];
+        for (const id of modalIds) {
+            const el = document.getElementById(id);
+            if (el && !el.classList.contains('hidden')) {
+                return true;
+            }
         }
+        return false;
+    }
+
+    setupModalObservers() {
+        const modalIds = [
+            'shop-modal',
+            'menu-modal',
+            'rules-modal',
+            'stats-modal',
+            'weekly-result-modal',
+            'team-reset-modal'
+        ];
+        modalIds.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                const observer = new MutationObserver(() => {
+                    if (el.classList.contains('hidden')) {
+                        // モーダルが閉じられたら少し間を置いて溜まっていたキューを順次表示
+                        setTimeout(() => this.flushToastQueue(), 250);
+                    }
+                });
+                observer.observe(el, { attributes: true, attributeFilter: ['class'] });
+            }
+        });
+    }
+
+    showToast(message, subtitle = null) {
+        if (!message) return;
+
+        // モーダル表示中の場合は画面に出さずキューに蓄積（同一内容の重複は抑止）
+        if (this.isAnyModalOpen()) {
+            const isDup = this.toastQueue.some(t => t.message === message && t.subtitle === subtitle);
+            if (!isDup) {
+                this.toastQueue.push({ message, subtitle });
+            }
+            return;
+        }
+
+        this.renderToast(message, subtitle);
+    }
+
+    renderToast(message, subtitle = null) {
+        let container = document.getElementById('toast-container');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'toast-container';
+            container.className = 'fixed top-[136px] left-1/2 -translate-x-1/2 z-[3000] flex flex-col items-center gap-2 pointer-events-none max-w-[92vw] w-max';
+            document.body.appendChild(container);
+        }
+
+        const toast = document.createElement('div');
+        toast.className = 'bg-zinc-950/95 border border-amber-500/80 text-amber-300 text-xs font-mono px-4 py-2.5 rounded-xl shadow-2xl backdrop-blur-md transition-all duration-300 pointer-events-none text-center flex flex-col items-center opacity-0 -translate-y-2';
+
         if (subtitle) {
             toast.innerHTML = `<div class="font-bold text-xs text-white leading-tight break-keep whitespace-nowrap">${message}</div><div class="text-[11px] text-amber-400 mt-1 leading-tight break-keep whitespace-nowrap">${subtitle}</div>`;
         } else {
             toast.innerHTML = `<div class="font-bold text-xs text-amber-300 leading-tight break-keep whitespace-nowrap">${message}</div>`;
         }
-        toast.style.opacity = '1';
-        toast.style.pointerEvents = 'none';
-        if (this.toastTimeout) clearTimeout(this.toastTimeout);
-        this.toastTimeout = setTimeout(() => {
-            toast.style.opacity = '0';
+
+        container.appendChild(toast);
+
+        // アニメーション入場
+        requestAnimationFrame(() => {
+            toast.classList.remove('opacity-0', '-translate-y-2');
+            toast.classList.add('opacity-100', 'translate-y-0');
+        });
+
+        // 3.2秒後にフェードアウト＆DOM削除
+        setTimeout(() => {
+            toast.classList.remove('opacity-100', 'translate-y-0');
+            toast.classList.add('opacity-0', '-translate-y-2');
+            setTimeout(() => {
+                if (toast.parentNode) {
+                    toast.parentNode.removeChild(toast);
+                }
+            }, 300);
         }, 3200);
+    }
+
+    flushToastQueue() {
+        if (!this.toastQueue || this.toastQueue.length === 0) return;
+        if (this.isAnyModalOpen()) return;
+
+        // キューから最大3件まで順次スタック表示
+        const items = this.toastQueue.splice(0, 3);
+        this.toastQueue = [];
+
+        items.forEach((item, idx) => {
+            setTimeout(() => {
+                if (!this.isAnyModalOpen()) {
+                    this.renderToast(item.message, item.subtitle);
+                } else {
+                    this.toastQueue.push(item);
+                }
+            }, idx * 280);
+        });
     }
 
     async initTeam() {
         let savedTeam = localStorage.getItem('player_team');
         if (!savedTeam || (savedTeam !== 'white' && savedTeam !== 'black')) {
-            if (this.statsManager) {
-                savedTeam = await this.statsManager.getRecommendedTeam();
+            const urlParams = new URLSearchParams(window.location.search);
+            const teamParam = urlParams.get('team');
+            if (teamParam === 'white' || teamParam === 'black') {
+                savedTeam = teamParam;
             } else {
                 savedTeam = Math.random() < 0.5 ? 'white' : 'black';
             }
@@ -114,22 +214,7 @@ class TerritoryWalkApp {
         }
         this.currentTeam = savedTeam;
         this.applyTheme();
-        this.updateAutoBalanceUI();
-    }
-
-    async autoBalanceTeam(force = false) {
-        if (!this.statsManager) return;
-        const recommended = await this.statsManager.getRecommendedTeam();
-        if (force || this.currentTeam !== recommended) {
-            this.currentTeam = recommended;
-            localStorage.setItem('player_team', recommended);
-            this.applyTheme();
-            if (this.statsManager) this.statsManager.syncUserProfileImmediate();
-            this.showToast(`チーム自動均等化: ${recommended === 'black' ? 'Black (黒)' : 'White (白)'} 陣営に配属されました`);
-            this.updateAutoBalanceUI();
-        } else {
-            this.showToast(`現在のチームは既に人数バランスが取れています (${this.currentTeam === 'black' ? 'Black (黒)' : 'White (白)'})`);
-        }
+        this.updateTeamStatusUI();
     }
 
     isUnderdogTeam() {
@@ -147,7 +232,7 @@ class TerritoryWalkApp {
         return myPct <= 40;
     }
 
-    updateAutoBalanceUI() {
+    updateTeamStatusUI() {
         const teamInfoEl = document.getElementById('menu-current-team-info');
         if (teamInfoEl) {
             const teamName = this.currentTeam === 'black' ? 'Black (黒)' : 'White (白)';
@@ -159,6 +244,10 @@ class TerritoryWalkApp {
             underdogEl.textContent = isUnderdog ? '劣勢逆転ボーナス発動中 (コイン2倍)' : '通常 (陣地40%以下で2倍発動)';
             underdogEl.className = isUnderdog ? 'text-amber-400 font-bold' : 'text-zinc-400';
         }
+    }
+
+    updateAutoBalanceUI() {
+        this.updateTeamStatusUI();
     }
 
     applyTheme() {
@@ -1019,13 +1108,6 @@ class TerritoryWalkApp {
         if (this.btnMenu) this.btnMenu.addEventListener('click', openModal);
         if (this.btnCloseMenu) this.btnCloseMenu.addEventListener('click', closeModal);
         if (this.btnModalCloseIcon) this.btnModalCloseIcon.addEventListener('click', closeModal);
-
-        const btnRebalance = document.getElementById('btn-rebalance-team');
-        if (btnRebalance) {
-            btnRebalance.addEventListener('click', () => {
-                this.autoBalanceTeam(true);
-            });
-        }
 
         if (this.btnOpenRules) {
             this.btnOpenRules.addEventListener('click', () => {

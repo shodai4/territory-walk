@@ -730,9 +730,9 @@ class CoinManager {
             const { btn, panel } = tabs[k];
             if (btn) {
                 if (k === tabKey) {
-                    btn.className = 'shop-tab-btn active flex-1 py-1.5 px-2 rounded-lg border-b-2 border-amber-500 font-bold text-center text-amber-400 bg-zinc-900/60 shrink-0';
+                    btn.className = 'shop-tab-btn active py-2 px-0.5 rounded-lg border-b-2 border-amber-500 font-bold text-center text-amber-400 bg-zinc-900/60 text-xs transition-all truncate';
                 } else {
-                    btn.className = 'shop-tab-btn flex-1 py-1.5 px-2 rounded-lg border-b-2 border-transparent font-medium text-center text-zinc-400 hover:text-white shrink-0';
+                    btn.className = 'shop-tab-btn py-2 px-0.5 rounded-lg border-b-2 border-transparent font-medium text-center text-zinc-400 hover:text-white text-xs transition-all truncate';
                 }
             }
             if (panel) {

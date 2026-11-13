@@ -189,35 +189,6 @@ class StatsManager {
         return { success: true, message: `招待コード【${code}】を適用しました！双方に +150 COIN が付与されました` };
     }
 
-    async getRecommendedTeam() {
-        if (!this.supabaseManager || !this.supabaseManager.client) {
-            return Math.random() < 0.5 ? 'white' : 'black';
-        }
-        try {
-            const { data, error } = await this.supabaseManager.client
-                .from('territory_users')
-                .select('team');
-
-            if (error || !data || data.length === 0) {
-                return Math.random() < 0.5 ? 'white' : 'black';
-            }
-
-            let blackCount = 0;
-            let whiteCount = 0;
-            data.forEach(u => {
-                if (u.team === 'black') blackCount++;
-                else if (u.team === 'white') whiteCount++;
-            });
-
-            if (blackCount < whiteCount) return 'black';
-            if (whiteCount < blackCount) return 'white';
-            return Math.random() < 0.5 ? 'white' : 'black';
-        } catch (e) {
-            console.warn('[Stats] Failed to get team balance:', e);
-            return Math.random() < 0.5 ? 'white' : 'black';
-        }
-    }
-
     async setNickname(name) {
         if (!name || typeof name !== 'string') return;
         this.nickname = name.trim().substring(0, 20) || '名もなき歩行者';
