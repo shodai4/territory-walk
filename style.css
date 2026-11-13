@@ -399,3 +399,23 @@ body[data-theme="white"] #menu-modal > div {
     box-shadow: 0 0 30px rgba(255, 255, 255, 0.10), 0 25px 50px -12px rgba(0, 0, 0, 0.8) !important;
 }
 
+/* iOS Native Touch, Safe Area & Gesture Optimization */
+button, a, input, select, .btn-action {
+    touch-action: manipulation;
+}
+
+/* iOS Modal Safe Area Padding & Scroll Isolation */
+#rules-modal, #menu-modal, #shop-modal, #stats-modal, #pro-modal, #weekly-result-modal, #reward-ad-modal {
+    padding-top: max(0.75rem, env(safe-area-inset-top));
+    padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+    padding-left: max(0.75rem, env(safe-area-inset-left));
+    padding-right: max(0.75rem, env(safe-area-inset-right));
+}
+
+#rules-modal > div, #menu-modal > div, #shop-modal > div, #stats-modal > div, #pro-modal > div, #weekly-result-modal > div, #reward-ad-modal > div {
+    max-height: calc(100vh - max(1.5rem, env(safe-area-inset-top)) - max(2.5rem, env(safe-area-inset-bottom))) !important;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+}
+
+

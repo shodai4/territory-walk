@@ -27,6 +27,12 @@ class TerritoryWalkApp {
         this.isMapVisible = true;
         this.isDebugMode = false;
 
+        // Background location & iOS optimization state
+        this.lastProcessedLat = null;
+        this.lastProcessedLng = null;
+        this.backgroundClaimCount = 0;
+        this.isAppInBackground = false;
+
         // Initialize managers
         this.proManager = new ProManager();
         this.posterGenerator = new PosterGenerator(this);
@@ -45,6 +51,7 @@ class TerritoryWalkApp {
         this.initProModal();
         this.initExportButton();
         this.initGeolocation();
+        this.initLifecycleListeners();
         this.initDPad();
         this.initEvents();
         this.initResetCountdown();
@@ -990,6 +997,46 @@ class TerritoryWalkApp {
         );
     }
 
+    // --- Lifecycle & Background State Handler for iOS / Screen Sleep ---
+    initLifecycleListeners() {
+        document.addEventListener('visibilitychange', () => {
+            this.isAppInBackground = document.hidden;
+            if (!document.hidden) {
+                // Return from background / lock screen
+                if (this.backgroundClaimCount > 0) {
+                    this.showToast(`ポケット歩行で ${this.backgroundClaimCount} マスを開拓しました`);
+                    this.backgroundClaimCount = 0;
+                }
+                if (this.virtualPos && this.map) {
+                    this.updatePlayerMarker(this.virtualPos);
+                    if (this.gridManager) {
+                        this.gridManager.fetchAndRenderTilesInBounds();
+                    }
+                }
+            }
+        });
+
+        // Capacitor Native AppState listener
+        if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App) {
+            try {
+                window.Capacitor.Plugins.App.addListener('appStateChange', (state) => {
+                    this.isAppInBackground = !state.isActive;
+                });
+            } catch (e) {}
+        }
+    }
+
+    calculateDistanceMeters(lat1, lon1, lat2, lon2) {
+        const R = 6371000;
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                  Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
+    }
+
     handlePositionUpdate(position, isFirst = false) {
         const rawLat = position.coords.latitude;
         const rawLng = position.coords.longitude;
@@ -998,13 +1045,31 @@ class TerritoryWalkApp {
         this.virtualPos = [latitude, longitude];
 
         this.updateGPSStatus('GPS: 測位中', 'bg-emerald-400', 'text-emerald-400');
-        this.updatePlayerMarker([latitude, longitude]);
 
-        if (isFirst && this.map) {
-            this.map.setView([latitude, longitude], CONFIG.DEFAULT_ZOOM);
+        // Battery / Noise Filter: Ignore stationary jitter < 5m unless tile index changed
+        let shouldProcessMesh = true;
+        if (!isFirst && this.lastProcessedLat !== null && this.lastProcessedLng !== null) {
+            const dist = this.calculateDistanceMeters(this.lastProcessedLat, this.lastProcessedLng, latitude, longitude);
+            if (dist < 5 && this.gridManager) {
+                const { meshId } = this.gridManager.getMeshIdFromLatLng(latitude, longitude);
+                if (meshId === this.currentMeshId) {
+                    shouldProcessMesh = false;
+                }
+            }
         }
 
-        this.processMeshAndClaim(latitude, longitude);
+        if (shouldProcessMesh) {
+            this.lastProcessedLat = latitude;
+            this.lastProcessedLng = longitude;
+            this.processMeshAndClaim(latitude, longitude);
+        }
+
+        if (!this.isAppInBackground) {
+            this.updatePlayerMarker([latitude, longitude]);
+            if (isFirst && this.map) {
+                this.map.setView([latitude, longitude], CONFIG.DEFAULT_ZOOM);
+            }
+        }
     }
 
     handlePositionError(error) {
@@ -1071,19 +1136,28 @@ class TerritoryWalkApp {
             const isReclaimed = cachedTeam && cachedTeam !== this.currentTeam;
             this.currentMeshId = meshId;
 
+            // Track background claims while screen is locked
+            if (this.isAppInBackground) {
+                this.backgroundClaimCount++;
+                console.log(`[Background GPS] Claimed ${meshId} in background. Total: ${this.backgroundClaimCount}`);
+            }
+
             // 1. Immediate local UI update
             this.gridManager.claimedTilesCache.set(meshId, this.currentTeam);
             this.gridManager.saveTilesToStorage();
 
-            if (this.gridManager.renderedMeshes.has(meshId)) {
-                this.gridManager.renderedMeshes.get(meshId).setStyle(this.gridManager.getTileStyle(this.currentTeam));
+            if (!this.isAppInBackground) {
+                if (this.gridManager.renderedMeshes.has(meshId)) {
+                    this.gridManager.renderedMeshes.get(meshId).setStyle(this.gridManager.getTileStyle(this.currentTeam));
+                } else {
+                    this.gridManager.renderSingleTile(meshId, latIdx, lngIdx, this.currentTeam);
+                }
+                this.updateScoreUI();
+                this.playClaimSound();
+                this.triggerHaptic();
             } else {
-                this.gridManager.renderSingleTile(meshId, latIdx, lngIdx, this.currentTeam);
+                this.updateScoreUI();
             }
-
-            this.updateScoreUI();
-            this.playClaimSound();
-            this.triggerHaptic();
 
             // 2. Stats logging
             if (this.statsManager) {
@@ -1097,6 +1171,11 @@ class TerritoryWalkApp {
 
             // 3. Supabase online sync
             if (this.supabaseManager) {
+                this.supabaseManager.upsertTile(meshId, latIdx, lngIdx, this.currentTeam)
+                    .catch(err => console.warn('[Supabase Sync] Background tile upsert error:', err));
+            }
+        }
+    }
                 try {
                     await this.supabaseManager.claimTile(meshId, latIdx, lngIdx, this.currentTeam);
                 } catch (e) {
@@ -1137,7 +1216,11 @@ class TerritoryWalkApp {
     }
 
     triggerHaptic() {
-        if ('vibrate' in navigator) {
+        if (window.Capacitor && window.Capacitor.isPluginAvailable && window.Capacitor.isPluginAvailable('Haptics')) {
+            try {
+                window.Capacitor.Plugins.Haptics.impact({ style: 'medium' });
+            } catch (e) {}
+        } else if ('vibrate' in navigator) {
             navigator.vibrate(15);
         }
     }

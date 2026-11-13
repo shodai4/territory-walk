@@ -29,26 +29,32 @@ try {
     const CONFIG_ENTRIES = [
         {
             key: 'NSLocationWhenInUseUsageDescription',
-            xml: '	<key>NSLocationWhenInUseUsageDescription</key>\n	<string>歩行オセロ陣取りゲームの現在地追跡とマス開拓のため、位置情報を利用します。</string>'
+            val: '街を歩いて白黒の陣地を塗り替えるために位置情報を使用します。',
+            xml: '	<key>NSLocationWhenInUseUsageDescription</key>\n	<string>街を歩いて白黒の陣地を塗り替えるために位置情報を使用します。</string>'
         },
         {
             key: 'NSLocationAlwaysAndWhenInUseUsageDescription',
-            xml: '	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>\n	<string>アプリをバックグラウンドに置いた状態や画面消灯時でも歩行距離・マス開拓を継続するため、位置情報を常に利用します。</string>'
+            val: '画面を消灯してポケットに入れたままでも歩行陣取りを継続するためにバックグラウンド位置情報を使用します。',
+            xml: '	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>\n	<string>画面を消灯してポケットに入れたままでも歩行陣取りを継続するためにバックグラウンド位置情報を使用します。</string>'
         },
         {
             key: 'NSLocationAlwaysUsageDescription',
-            xml: '	<key>NSLocationAlwaysUsageDescription</key>\n	<string>バックグラウンドでの歩行オセロ陣地開拓のため、位置情報を常に利用します。</string>'
+            val: '画面を消灯してポケットに入れたままでも歩行陣取りを継続するためにバックグラウンド位置情報を使用します。',
+            xml: '	<key>NSLocationAlwaysUsageDescription</key>\n	<string>画面を消灯してポケットに入れたままでも歩行陣取りを継続するためにバックグラウンド位置情報を使用します。</string>'
         },
         {
             key: 'UIBackgroundModes',
+            val: '<string>location</string>',
             xml: '	<key>UIBackgroundModes</key>\n	<array>\n		<string>location</string>\n	</array>'
         },
         {
             key: 'UIViewControllerBasedStatusBarAppearance',
+            val: '<false/>',
             xml: '	<key>UIViewControllerBasedStatusBarAppearance</key>\n	<false/>'
         },
         {
             key: 'UIStatusBarStyle',
+            val: 'UIStatusBarStyleLightContent',
             xml: '	<key>UIStatusBarStyle</key>\n	<string>UIStatusBarStyleLightContent</string>'
         }
     ];
@@ -63,7 +69,20 @@ try {
                 modified = true;
             }
         } else {
-            console.log(`[iOS Config] Verified: <key>${entry.key}</key> already present.`);
+            // Key exists - verify and update string if needed
+            if (entry.val && entry.key.startsWith('NSLocation')) {
+                const regex = new RegExp(`<key>${entry.key}<\\/key>\\s*<string>([^<]*)<\\/string>`, 'm');
+                const match = content.match(regex);
+                if (match && match[1] !== entry.val) {
+                    content = content.replace(regex, `<key>${entry.key}</key>\n\t<string>${entry.val}</string>`);
+                    console.log(`[iOS Config] Updated description for <key>${entry.key}</key> to: "${entry.val}"`);
+                    modified = true;
+                } else {
+                    console.log(`[iOS Config] Verified: <key>${entry.key}</key> is up to date.`);
+                }
+            } else {
+                console.log(`[iOS Config] Verified: <key>${entry.key}</key> already present.`);
+            }
         }
     }
 
