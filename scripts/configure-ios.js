@@ -56,6 +56,21 @@ try {
             key: 'UIStatusBarStyle',
             val: 'UIStatusBarStyleLightContent',
             xml: '	<key>UIStatusBarStyle</key>\n	<string>UIStatusBarStyleLightContent</string>'
+        },
+        {
+            key: 'GADApplicationIdentifier',
+            val: 'ca-app-pub-3940256099942544~1458102511',
+            xml: '	<key>GADApplicationIdentifier</key>\n	<string>ca-app-pub-3940256099942544~1458102511</string>'
+        },
+        {
+            key: 'NSUserTrackingUsageDescription',
+            val: '最適な広告を表示するためにトラッキングの許可をお願いいたします。',
+            xml: '	<key>NSUserTrackingUsageDescription</key>\n	<string>最適な広告を表示するためにトラッキングの許可をお願いいたします。</string>'
+        },
+        {
+            key: 'SKAdNetworkItems',
+            val: 'cstr6suwn9.skadnetwork',
+            xml: '	<key>SKAdNetworkItems</key>\n	<array>\n		<dict>\n			<key>SKAdNetworkIdentifier</key>\n			<string>cstr6suwn9.skadnetwork</string>\n		</dict>\n	</array>'
         }
     ];
 

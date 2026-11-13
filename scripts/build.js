@@ -11,8 +11,13 @@ const WWW_DIR = path.join(ROOT_DIR, 'www');
 
 const ASSETS_TO_COPY = [
     'index.html',
+    'privacy.html',
+    'terms.html',
+    'support.html',
     'style.css',
     'app.js',
+    'admob.js',
+    'iap.js',
     'coins.js',
     'grid.js',
     'poster.js',

@@ -40,6 +40,8 @@ class TerritoryWalkApp {
         this.statsManager = new StatsManager(this.supabaseManager, this);
         this.coinManager = new CoinManager(this, this.supabaseManager);
         this.searchManager = new SearchManager(this);
+        this.adMobManager = new AdMobManager(this);
+        this.iapManager = new IAPManager(this);
 
         this.initTeam();
         this.initDOM();

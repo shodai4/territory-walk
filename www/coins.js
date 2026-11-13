@@ -349,8 +349,9 @@ class CoinManager {
         if (!pack) return;
 
         // Native Capacitor StoreKit / In-App Purchase hook
-        if (window.Capacitor && window.Capacitor.isNativePlatform()) {
-            console.log('[Coins] Native StoreKit purchase hook invoked for:', packId);
+        if (this.app && this.app.iapManager && this.app.iapManager.isNative) {
+            this.app.iapManager.purchasePack(`pack-${pack.yen}`);
+            return;
         }
 
         // Web simulation / Stripe fallback
@@ -515,7 +516,15 @@ class CoinManager {
         const btnWatchAd = document.getElementById('btn-watch-reward-ad');
         if (btnWatchAd) {
             btnWatchAd.addEventListener('click', () => {
-                this.startRewardAdSimulation();
+                if (this.app && this.app.adMobManager && this.app.adMobManager.isNative) {
+                    this.app.adMobManager.showRewardVideo(() => {
+                        this.addCoins(50, 'AdMob動画リワード');
+                        this.updateCoinUI();
+                        this.app.showToast('動画リワード獲得！ +50 COIN');
+                    });
+                } else {
+                    this.startRewardAdSimulation();
+                }
             });
         }
 
@@ -669,6 +678,36 @@ class CoinManager {
                 this.purchaseCoinPack(pid);
             });
         });
+
+        // App Store Guidelines: Restore Purchases Button & Legal Links
+        const footerEl = document.createElement('div');
+        footerEl.className = 'pt-3 border-t border-zinc-800 space-y-2';
+        footerEl.innerHTML = `
+            <button id="btn-restore-purchases" class="w-full py-2 bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-700 border border-zinc-700 text-zinc-300 hover:text-white font-mono text-[11px] font-bold rounded-xl transition-all active:scale-95 flex items-center justify-center gap-1.5 shadow">
+                <svg class="w-3.5 h-3.5 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                <span>購入の復元 (Restore Purchases)</span>
+            </button>
+            <div class="flex items-center justify-center gap-3 text-[10px] text-zinc-500 font-mono">
+                <a href="terms.html" target="_blank" class="hover:text-zinc-300 underline">利用規約</a>
+                <span>•</span>
+                <a href="privacy.html" target="_blank" class="hover:text-zinc-300 underline">プライバシーポリシー</a>
+                <span>•</span>
+                <a href="support.html" target="_blank" class="hover:text-zinc-300 underline">サポート</a>
+            </div>
+        `;
+        container.appendChild(footerEl);
+
+        const btnRestore = footerEl.querySelector('#btn-restore-purchases');
+        if (btnRestore) {
+            btnRestore.addEventListener('click', (e) => {
+                e.preventDefault();
+                if (this.app && this.app.iapManager) {
+                    this.app.iapManager.restorePurchases();
+                } else {
+                    if (this.app) this.app.showToast('購入の復元が完了しました (最新状態)');
+                }
+            });
+        }
     }
 
     renderSkinsPanel() {

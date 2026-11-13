@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>サポート・お問い合わせ - TERRITORY WALK</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="style.css?v=20261113v13">
+</head>
+<body class="bg-black text-zinc-200 font-mono text-xs leading-relaxed min-h-screen flex flex-col p-4 sm:p-8 select-none">
+    <div class="max-w-2xl mx-auto w-full flex-1 flex flex-col gap-6 py-6">
+        <!-- ヘッダー -->
+        <div class="flex items-center justify-between border-b border-zinc-800 pb-4">
+            <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-white animate-pulse"></span>
+                <span class="font-bold text-sm tracking-wider text-white">TERRITORY WALK</span>
+            </div>
+            <a href="index.html" class="px-3 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-300 hover:text-white transition-all text-[11px]">
+                アプリに戻る
+            </a>
+        </div>
+
+        <!-- タイトル・概要 -->
+        <div>
+            <div class="inline-block px-2 py-0.5 rounded bg-zinc-800 text-sky-400 font-bold text-[10px] mb-2">OFFICIAL SUPPORT</div>
+            <h1 class="text-base font-bold text-white tracking-wider mb-1">TERRITORY WALK 公式サポート窓口</h1>
+            <p class="text-[11px] text-zinc-400">白黒リアル歩行陣取りアプリ「TERRITORY WALK」のサポート情報、よくあるご質問（FAQ）、お問い合わせ窓口をご案内いたします。</p>
+        </div>
+
+        <!-- 3大アプリハイライト -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div class="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800/80">
+                <div class="font-bold text-white mb-1">歩いてオセロ陣取り</div>
+                <div class="text-[10px] text-zinc-400">街を歩いた約100mマスが自陣色に変化。相手マスへ踏み込んでオセロのように奪取。</div>
+            </div>
+            <div class="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800/80">
+                <div class="font-bold text-white mb-1">ポケット歩行対応</div>
+                <div class="text-[10px] text-zinc-400">画面を消灯してポケットに入れたままでもバックグラウンドで自動的に陣地を開拓。</div>
+            </div>
+            <div class="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800/80">
+                <div class="font-bold text-white mb-1">完全公正ゲーム</div>
+                <div class="text-[10px] text-zinc-400">課金による強さの有利（Pay to Win）は一切なし。完全実力・歩行勝負のストイックルール。</div>
+            </div>
+        </div>
+
+        <!-- よくあるご質問 (FAQ) -->
+        <div class="space-y-3">
+            <h2 class="font-bold text-sm text-white tracking-wider border-b border-zinc-800 pb-2">よくあるご質問 (FAQ)</h2>
+            
+            <div class="space-y-2">
+                <div class="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800/80 space-y-1">
+                    <div class="font-bold text-zinc-200">Q. GPS現在地が認識されません。</div>
+                    <div class="text-[11px] text-zinc-400">A. 端末の「設定」>「プライバシーとセキュリティ」>「位置情報サービス」から、TERRITORY WALKの位置情報利用を「Appの使用中は許可」または「常に許可」に設定してください。</div>
+                </div>
+
+                <div class="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800/80 space-y-1">
+                    <div class="font-bold text-zinc-200">Q. 画面を消した状態（スリープ・ポケット）でも遊べますか？</div>
+                    <div class="text-[11px] text-zinc-400">A. はい、iOSネイティブアプリ版ではバックグラウンド位置情報に対応しております。スマホをポケットに入れたまま歩行しても、裏側で自動的に陣地判定とSupabaseへのマス保存が行われます。</div>
+                </div>
+
+                <div class="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800/80 space-y-1">
+                    <div class="font-bold text-zinc-200">Q. 課金で陣取りや勝敗が有利になりますか？</div>
+                    <div class="text-[11px] text-zinc-400">A. いいえ、課金による陣地開拓スピードやオセロ勝敗の有利（Pay to Win）は一切存在しません。コインはマステーマ（ネオン、ゴールド等）や限定称号、週間陣地ポスターの書き出し等の装飾・記念機能にのみ使用されます。</div>
+                </div>
+
+                <div class="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800/80 space-y-1">
+                    <div class="font-bold text-zinc-200">Q. 機種変更や再インストール時のデータ復元はどうすればいいですか？</div>
+                    <div class="text-[11px] text-zinc-400">A. SHOPモーダルのコイン購入画面下部にある「購入の復元（Restore Purchases）」ボタンを押すことで、過去に購入されたアイテムおよびProサポーター状態の再同期が行われます。</div>
+                </div>
+
+                <div class="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800/80 space-y-1">
+                    <div class="font-bold text-zinc-200">Q. シーズンのリセットはいつ行われますか？</div>
+                    <div class="text-[11px] text-zinc-400">A. 毎週月曜日の午前0時（JST / 日本時間）に全マップの白黒マスおよび陣営所属がリセットされ、前週のリザルト発表と新シーズンの開幕が行われます。</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- お問い合わせ窓口 -->
+        <div class="bg-zinc-950 p-4 rounded-xl border border-zinc-800/80 space-y-2">
+            <h2 class="font-bold text-xs text-white">不具合報告・お問い合わせ</h2>
+            <p class="text-[11px] text-zinc-400">
+                本アプリに関する不具合報告、ご意見、ご要望、取材等のお問い合わせは、以下の窓口までご連絡ください。原則2営業日以内に確認・対応いたします。
+            </p>
+            <div class="pt-2 border-t border-zinc-900 space-y-1 text-[11px]">
+                <div>運営主体: お絵描き楽しも委員会（代表: 植田 翔大）</div>
+                <div>開発・サポート窓口: <a href="https://github.com/shodai4/territory-walk/issues" target="_blank" rel="noopener" class="text-sky-400 hover:underline">GitHub Issues (不具合・要望トラッカー)</a></div>
+                <div>所在地: 大阪府</div>
+            </div>
+        </div>
+
+        <!-- フッター -->
+        <div class="border-t border-zinc-800/80 pt-4 flex items-center justify-between text-[10px] text-zinc-500">
+            <div>&copy; 2026 TERRITORY WALK (お絵描き楽しも委員会)</div>
+            <div class="flex items-center gap-3">
+                <a href="privacy.html" class="hover:text-zinc-300">プライバシーポリシー</a>
+                <a href="terms.html" class="hover:text-zinc-300">利用規約</a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

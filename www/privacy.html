@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>プライバシーポリシー - TERRITORY WALK</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="style.css?v=20261113v13">
+</head>
+<body class="bg-black text-zinc-200 font-mono text-xs leading-relaxed min-h-screen flex flex-col p-4 sm:p-8 select-none">
+    <div class="max-w-2xl mx-auto w-full flex-1 flex flex-col gap-6 py-6">
+        <!-- ヘッダー -->
+        <div class="flex items-center justify-between border-b border-zinc-800 pb-4">
+            <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-white animate-pulse"></span>
+                <span class="font-bold text-sm tracking-wider text-white">TERRITORY WALK</span>
+            </div>
+            <a href="index.html" class="px-3 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-300 hover:text-white transition-all text-[11px]">
+                アプリに戻る
+            </a>
+        </div>
+
+        <!-- タイトル -->
+        <div>
+            <h1 class="text-base font-bold text-white tracking-wider mb-1">プライバシーポリシー (Privacy Policy)</h1>
+            <p class="text-[11px] text-zinc-500">制定日: 2026年11月13日 / 最終改定日: 2026年11月13日</p>
+        </div>
+
+        <!-- 本文セクション -->
+        <div class="space-y-5 text-zinc-300">
+            <section class="space-y-1.5 bg-zinc-950 p-4 rounded-xl border border-zinc-800/80">
+                <h2 class="font-bold text-white text-xs">1. はじめに</h2>
+                <p class="text-[11px] text-zinc-400">
+                    お絵描き楽しも委員会（以下「当運営」といいます）は、スマートフォン向け歩行陣取りアプリケーション「TERRITORY WALK」（以下「本アプリ」といいます）における利用者のプライバシーを尊重し、個人情報の保護に関する法律およびApple App Storeのガイドラインを遵守して利用者の情報を適切に取り扱います。
+                </p>
+            </section>
+
+            <section class="space-y-1.5 bg-zinc-950 p-4 rounded-xl border border-zinc-800/80">
+                <h2 class="font-bold text-white text-xs">2. 取得する情報および利用目的</h2>
+                <div class="space-y-2 text-[11px] text-zinc-400">
+                    <div>
+                        <span class="font-bold text-zinc-200">一、位置情報 (GPSデータ)</span>
+                        <p class="mt-0.5">本アプリは、利用者が歩行した経路に応じて約100m四方の陣地マスを白黒に塗り替え、オセロのように陣地を競い合うゲーム機能の提供を目的として位置情報を取得します。取得した緯度経度は端末内で約100mの格子インデックス番号へ変換され、個人を特定可能な生の位置情報履歴を第三者に公開・追跡することはありません。</p>
+                    </div>
+                    <div>
+                        <span class="font-bold text-zinc-200">二、バックグラウンド位置情報</span>
+                        <p class="mt-0.5">利用者がアプリ画面を消灯してスマートフォンをポケットに入れた状態でも歩行陣取りを継続できるよう、バックグラウンドでの位置情報更新を使用します。この処理は陣地マスの塗り替え判定のみに使用されます。</p>
+                    </div>
+                    <div>
+                        <span class="font-bold text-zinc-200">三、端末識別子およびゲーム内データ</span>
+                        <p class="mt-0.5">端末のlocalStorageに保存されるランダム生成UUID（ユーザーID）、任意の表示名、週間開拓マス数、所持コイン数、解放済みテーマ・称号情報を取得・管理します。</p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="space-y-1.5 bg-zinc-950 p-4 rounded-xl border border-zinc-800/80">
+                <h2 class="font-bold text-white text-xs">3. 外部送信および第三者提供</h2>
+                <div class="space-y-2 text-[11px] text-zinc-400">
+                    <div>
+                        <span class="font-bold text-zinc-200">一、データベースサーバー (Supabase)</span>
+                        <p class="mt-0.5">陣地のオンライン同期およびランキング集計のため、マスID・陣営・更新日時・ユーザーUUIDを暗号化通信（HTTPS）経由でSupabaseデータベースへ送信・保存します。</p>
+                    </div>
+                    <div>
+                        <span class="font-bold text-zinc-200">二、広告配信事業者 (Google AdMob)</span>
+                        <p class="mt-0.5">本アプリでは、ゲーム内コインを獲得するための動画リワード広告配信のためにGoogle AdMobを使用する場合があります。App Tracking Transparency（ATT）に基づくトラッキング許可が得られた場合に限り、最適な広告配信のための識別子が利用されることがあります。</p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="space-y-1.5 bg-zinc-950 p-4 rounded-xl border border-zinc-800/80">
+                <h2 class="font-bold text-white text-xs">4. 安全管理措置およびデータの削除</h2>
+                <p class="text-[11px] text-zinc-400">
+                    当運営は、取得したデータの漏洩、滅失または毀損の防止その他の安全管理のために必要かつ適切な措置を講じます。利用者が本アプリのアンインストールまたはブラウザのデータ初期化を行った場合、端末ローカルに保存されたデータは消去されます。サーバー上のデータの削除をご希望の場合は、下記窓口までお問い合わせください。
+                </p>
+            </section>
+
+            <section class="space-y-1.5 bg-zinc-950 p-4 rounded-xl border border-zinc-800/80">
+                <h2 class="font-bold text-white text-xs">5. お問い合わせ窓口</h2>
+                <p class="text-[11px] text-zinc-400">
+                    本ポリシーに関するお問い合わせ、ご質問、ご相談は下記サポート窓口までご連絡ください。<br>
+                    運営者: お絵描き楽しも委員会（代表: 植田 翔大）<br>
+                    サポートページ: <a href="support.html" class="text-sky-400 hover:underline">support.html</a>
+                </p>
+            </section>
+        </div>
+
+        <!-- フッター -->
+        <div class="border-t border-zinc-800/80 pt-4 flex items-center justify-between text-[10px] text-zinc-500">
+            <div>&copy; 2026 TERRITORY WALK (お絵描き楽しも委員会)</div>
+            <div class="flex items-center gap-3">
+                <a href="terms.html" class="hover:text-zinc-300">利用規約</a>
+                <a href="support.html" class="hover:text-zinc-300">サポート</a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
