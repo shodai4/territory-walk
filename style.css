@@ -142,6 +142,9 @@ summary::-webkit-details-marker {
 summary {
     list-style: none !important;
 }
+details[open] {
+    overflow: visible !important;
+}
 
 /* 6 Skin Theme Overrides */
 body[data-skin="neon"] .dark-glass-modal, body[data-skin="neon"] #dpad-container, body[data-skin="neon"] #btn-recenter {

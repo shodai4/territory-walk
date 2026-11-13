@@ -23,14 +23,14 @@ class CoinManager {
 
         // 1. Tile & Grid Skins Catalog
         this.SKINS = {
-            default: { id: 'default', name: '標準 (Default)', cost: 0, desc: '白黒クラシックオセロカラー', class: 'text-zinc-200' },
-            neon: { id: 'neon', name: 'ネオン (Neon)', cost: 100, desc: 'シアンとマゼンタの鮮烈な発光', class: 'text-cyan-400' },
-            gold: { id: 'gold', name: 'ゴールド (Gold)', cost: 200, desc: '富と栄光のシャンパンゴールド', class: 'text-amber-400' },
-            crimson: { id: 'crimson', name: '紅蓮 (Crimson)', cost: 150, desc: '燃え盛る情熱の炎と深紅', class: 'text-orange-400' },
-            sakura: { id: 'sakura', name: 'サクラ (Sakura)', cost: 150, desc: '春風舞う桜ピンクと翡翠ミント', class: 'text-pink-400' },
-            pixel: { id: 'pixel', name: 'レトロ (Pixel)', cost: 100, desc: '80sアーケードライムグリーン', class: 'text-lime-400' },
-            cyberpunk: { id: 'cyberpunk', name: 'サイバー (Cyber)', cost: 250, desc: '近未来パープルとネオンブルー', class: 'text-purple-400' },
-            monochrome: { id: 'monochrome', name: 'モノトーン (Mono)', cost: 150, desc: '氷雪ホワイトと漆黒の高コントラスト', class: 'text-slate-300' }
+            default: { id: 'default', name: '標準', cost: 0, desc: '白黒クラシックオセロカラー', class: 'text-zinc-200' },
+            neon: { id: 'neon', name: 'ネオン', cost: 100, desc: 'シアンとマゼンタの鮮烈な発光', class: 'text-cyan-400' },
+            gold: { id: 'gold', name: 'ゴールド', cost: 200, desc: '富と栄光のシャンパンゴールド', class: 'text-amber-400' },
+            crimson: { id: 'crimson', name: '紅蓮', cost: 150, desc: '燃え盛る情熱の炎と深紅', class: 'text-orange-400' },
+            sakura: { id: 'sakura', name: 'サクラ', cost: 150, desc: '春風舞う桜ピンクと翡翠ミント', class: 'text-pink-400' },
+            pixel: { id: 'pixel', name: 'レトロ', cost: 100, desc: '80sアーケードライムグリーン', class: 'text-lime-400' },
+            cyberpunk: { id: 'cyberpunk', name: 'サイバー', cost: 250, desc: '近未来パープルとネオンブルー', class: 'text-purple-400' },
+            monochrome: { id: 'monochrome', name: 'モノトーン', cost: 150, desc: '氷雪ホワイトと漆黒の高コントラスト', class: 'text-slate-300' }
         };
 
         // 2. Exclusive Shop Titles Catalog
@@ -609,7 +609,57 @@ class CoinManager {
             `;
         }).join('');
 
+        // ポスター出力導線（チケット所持または無制限/Pro時）
+        const hasPosterAccess = isPro || this.isPerkUnlocked('poster_permanent') || tickets > 0;
+        if (hasPosterAccess) {
+            container.innerHTML += `
+                <div class="pt-1">
+                    <button id="btn-export-poster-from-shop" class="w-full py-2 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-black font-bold font-mono text-xs rounded-xl shadow transition-all active:scale-95 flex items-center justify-center gap-1.5">
+                        <svg class="w-3.5 h-3.5 text-black" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                        <span>今すぐ週間陣地ポスターを書き出し</span>
+                    </button>
+                </div>
+            `;
+        }
+
+        // Proサポーター集約カード
+        container.innerHTML += `
+            <div class="bg-gradient-to-r from-zinc-950 to-zinc-900 border border-amber-500/50 p-3 rounded-xl flex items-center justify-between gap-2 mt-2">
+                <div>
+                    <div class="font-bold text-xs text-amber-400 flex items-center gap-1.5">
+                        <span>Proサポーター</span>
+                        <span class="px-1.5 py-0.5 rounded ${isPro ? 'bg-amber-400 text-black font-bold' : 'bg-zinc-800 text-zinc-400'} text-[9px] font-mono">${isPro ? '有効' : '未登録'}</span>
+                    </div>
+                    <div class="text-[10px] text-zinc-400 leading-tight mt-0.5">全スキン解放・無制限ポスター保存・限定サポーターバッジ</div>
+                </div>
+                <button id="btn-open-pro-from-shop" class="shrink-0 px-3 py-1.5 rounded bg-amber-600 hover:bg-amber-500 active:bg-amber-700 text-white text-[10px] font-bold font-mono transition-all active:scale-95">
+                    ${isPro ? '確認' : 'コード入力'}
+                </button>
+            </div>
+        `;
+
         // Attach listeners
+        const exportFromShopBtn = container.querySelector('#btn-export-poster-from-shop');
+        if (exportFromShopBtn) {
+            exportFromShopBtn.addEventListener('click', () => {
+                const shopModal = document.getElementById('shop-modal');
+                if (shopModal) shopModal.classList.add('hidden');
+                if (this.app && this.app.exportPosterAction) {
+                    this.app.exportPosterAction();
+                }
+            });
+        }
+
+        const proFromShopBtn = container.querySelector('#btn-open-pro-from-shop');
+        if (proFromShopBtn) {
+            proFromShopBtn.addEventListener('click', () => {
+                const shopModal = document.getElementById('shop-modal');
+                if (shopModal) shopModal.classList.add('hidden');
+                const proModal = document.getElementById('pro-modal');
+                if (proModal) proModal.classList.remove('hidden');
+            });
+        }
+
         container.querySelectorAll('.btn-buy-perk').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const pid = e.currentTarget.dataset.perk;

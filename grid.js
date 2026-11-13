@@ -16,6 +16,8 @@ class GridManager {
         this.claimedTilesCache = new Map(); // meshId -> 'white' | 'black'
         this.renderedMeshes = new Map();     // meshId -> L.Rectangle layer
 
+        // Use Canvas renderer for low memory footprint and high 60fps performance
+        this.canvasRenderer = (typeof L !== 'undefined' && L.canvas) ? L.canvas({ padding: 0.5 }) : null;
         this.gridLayerGroup = L.layerGroup().addTo(this.map);
 
         this.checkWeekReset();
@@ -273,7 +275,8 @@ class GridManager {
         }
 
         const bounds = this.getMeshBounds(latIdx, lngIdx);
-        const rect = L.rectangle(bounds, this.getTileStyle(team));
+        const options = this.canvasRenderer ? { ...this.getTileStyle(team), renderer: this.canvasRenderer } : this.getTileStyle(team);
+        const rect = L.rectangle(bounds, options);
         rect.addTo(this.gridLayerGroup);
         this.renderedMeshes.set(meshId, rect);
     }

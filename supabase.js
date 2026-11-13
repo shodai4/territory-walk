@@ -102,7 +102,7 @@ class SupabaseManager {
         try {
             const { data, error } = await this.client
                 .from('territory_tiles')
-                .select('*')
+                .select('tile_id, week_id, team, lat_idx, lng_idx, updated_at')
                 .eq('week_id', weekId)
                 .gte('lat_idx', minLatIdx)
                 .lte('lat_idx', maxLatIdx)

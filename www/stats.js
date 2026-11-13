@@ -46,20 +46,31 @@ class StatsManager {
         const today = new Date().toISOString().split('T')[0];
         const lastLogin = localStorage.getItem('tw_last_login');
         let streak = parseInt(localStorage.getItem('tw_login_streak') || '0', 10);
+        let totalDays = parseInt(localStorage.getItem('tw_total_login_days') || '0', 10);
 
         if (lastLogin !== today) {
             const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
             streak = (lastLogin === yesterday) ? (streak + 1) : 1;
+            totalDays = totalDays + 1;
 
             localStorage.setItem('tw_last_login', today);
             localStorage.setItem('tw_login_streak', streak.toString());
+            localStorage.setItem('tw_total_login_days', totalDays.toString());
 
-            if (streak >= 3) this.unlockTitle('日課の達人');
-            if (streak >= 7) this.unlockTitle('継続の鬼');
+            // 連続ログイン称号
+            if (streak >= 3) this.unlockTitle('三日坊主返上');
+            if (streak >= 7) this.unlockTitle('週間ウォーカー');
+            if (streak >= 14) this.unlockTitle('継続の達人');
+            if (streak >= 30) this.unlockTitle('月間マイスター');
 
-            return { isNew: true, streak: streak };
+            // 通算ログイン称号
+            if (totalDays >= 7) this.unlockTitle('初級散歩人');
+            if (totalDays >= 30) this.unlockTitle('常連開拓者');
+            if (totalDays >= 100) this.unlockTitle('百戦錬磨');
+
+            return { isNew: true, streak: streak, totalDays: totalDays };
         }
-        return { isNew: false, streak: streak || 1 };
+        return { isNew: false, streak: streak || 1, totalDays: totalDays || 1 };
     }
 
     checkMilestoneTitles() {

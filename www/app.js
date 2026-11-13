@@ -284,19 +284,19 @@ class TerritoryWalkApp {
     }
 
     updateSkinBadge(skin) {
-        const badge = document.getElementById('current-skin-badge');
-        if (!badge) return;
         const labels = {
-            default: '標準 (Default)',
-            neon: 'ネオン (Neon)',
-            gold: 'ゴールド (Gold)',
-            crimson: '紅蓮 (Crimson)',
-            sakura: 'サクラ (Sakura)',
-            pixel: 'レトロ (Pixel)',
-            cyberpunk: 'サイバー (Cyber)',
-            monochrome: 'モノトーン (Mono)'
+            default: '標準',
+            neon: 'ネオン',
+            gold: 'ゴールド',
+            crimson: '紅蓮',
+            sakura: 'サクラ',
+            pixel: 'レトロ',
+            cyberpunk: 'サイバー',
+            monochrome: 'モノトーン'
         };
-        badge.textContent = labels[skin] || skin;
+        const badge = document.getElementById('current-skin-badge');
+        if (badge) badge.textContent = labels[skin] || skin;
+        this.updateThemeMapBadge();
     }
 
     initMapThemeSelector() {
@@ -328,15 +328,39 @@ class TerritoryWalkApp {
     }
 
     updateMapThemeBadge(theme) {
-        const badge = document.getElementById('current-map-theme-badge');
-        if (!badge) return;
         const labels = {
-            dark: 'ダーク (Dark)',
-            mono: 'モノクロ (Mono)',
-            street: 'ストリート (Street)',
-            sepia: 'セピア (Sepia)'
+            dark: 'ダーク',
+            mono: 'モノクロ',
+            street: 'ストリート',
+            sepia: 'セピア'
         };
-        badge.textContent = labels[theme] || theme;
+        const badge = document.getElementById('current-map-theme-badge');
+        if (badge) badge.textContent = labels[theme] || theme;
+        this.updateThemeMapBadge();
+    }
+
+    updateThemeMapBadge() {
+        const badge = document.getElementById('current-theme-map-badge');
+        if (!badge) return;
+        const skin = document.body.dataset.skin || 'default';
+        const mapTheme = localStorage.getItem('tw_map_theme') || 'dark';
+        const skinLabels = {
+            default: '標準',
+            neon: 'ネオン',
+            gold: 'ゴールド',
+            crimson: '紅蓮',
+            sakura: 'サクラ',
+            pixel: 'レトロ',
+            cyberpunk: 'サイバー',
+            monochrome: 'モノトーン'
+        };
+        const mapLabels = {
+            dark: 'ダーク',
+            mono: 'モノクロ',
+            street: 'ストリート',
+            sepia: 'セピア'
+        };
+        badge.textContent = `${skinLabels[skin] || skin} / ${mapLabels[mapTheme] || mapTheme}`;
     }
 
     initStatsModal() {
@@ -448,7 +472,13 @@ class TerritoryWalkApp {
         const streakEl = document.getElementById('stat-login-streak');
         if (streakEl) {
             const streak = localStorage.getItem('tw_login_streak') || '1';
-            streakEl.textContent = `${streak}日目 (本日受取済)`;
+            streakEl.textContent = `${streak}日目`;
+        }
+
+        const totalLoginEl = document.getElementById('stat-total-login-days');
+        if (totalLoginEl) {
+            const totalDays = localStorage.getItem('tw_total_login_days') || '1';
+            totalLoginEl.textContent = `${totalDays}日`;
         }
 
         const tileEl = document.getElementById('stat-lifetime-tiles');
@@ -696,42 +726,39 @@ class TerritoryWalkApp {
         return true;
     }
 
+    async exportPosterAction() {
+        const hasAccess = (this.proManager && this.proManager.isPro()) ||
+                          (this.coinManager && this.coinManager.canAccessPosterExport());
+        if (!hasAccess) {
+            const ok = confirm('【ポスター保存】\n週間陣地ポスターの書き出しはPro機能またはチケット（30 COIN）が必要です。\nショップでチケットを入手しますか？');
+            if (ok && this.coinManager) {
+                if (this.menuModal) this.menuModal.classList.add('hidden');
+                this.coinManager.openShopModal('perks');
+            }
+            return;
+        }
+
+        try {
+            this.showToast('ポスターを生成中...');
+            const weekId = this.supabaseManager.getCurrentWeekId();
+            await this.posterGenerator.exportWeeklyPoster(
+                this.gridManager.claimedTilesCache,
+                this.currentTeam,
+                this.statsManager.nickname,
+                weekId
+            );
+            this.showToast('ポスターの書き出しが完了しました');
+        } catch (err) {
+            console.error('Poster export failed:', err);
+            alert('ポスターの書き出しに失敗しました。');
+        }
+    }
+
     initExportButton() {
         const exportBtn = document.getElementById('btn-export-poster');
-        if (!exportBtn) return;
-
-        exportBtn.addEventListener('click', async () => {
-            const hasAccess = (this.proManager && this.proManager.isPro()) ||
-                              (this.coinManager && this.coinManager.canAccessPosterExport());
-            if (!hasAccess) {
-                const ok = confirm('【ポスター保存】\n週間陣地ポスターの書き出しはPro機能またはチケット（30 COIN）が必要です。\nショップを開いてチケットを入手しますか？');
-                if (ok && this.coinManager) {
-                    if (this.menuModal) this.menuModal.classList.add('hidden');
-                    this.coinManager.openShopModal('perks');
-                }
-                return;
-            }
-
-            const originalHtml = exportBtn.innerHTML;
-            exportBtn.innerHTML = '<span>ポスター生成中...</span>';
-            exportBtn.disabled = true;
-
-            try {
-                const weekId = this.supabaseManager.getCurrentWeekId();
-                await this.posterGenerator.exportWeeklyPoster(
-                    this.gridManager.claimedTilesCache,
-                    this.currentTeam,
-                    this.statsManager.nickname,
-                    weekId
-                );
-            } catch (err) {
-                console.error('Poster export failed:', err);
-                alert('ポスターの書き出しに失敗しました。');
-            } finally {
-                exportBtn.innerHTML = originalHtml;
-                exportBtn.disabled = false;
-            }
-        });
+        if (exportBtn) {
+            exportBtn.addEventListener('click', () => this.exportPosterAction());
+        }
     }
 
     toggleMapVisibility() {
@@ -884,7 +911,10 @@ class TerritoryWalkApp {
     }
 
     handlePositionUpdate(position, isFirst = false) {
-        const { latitude, longitude } = position.coords;
+        const rawLat = position.coords.latitude;
+        const rawLng = position.coords.longitude;
+        const latitude = parseFloat(rawLat.toFixed(5));
+        const longitude = parseFloat(rawLng.toFixed(5));
         this.virtualPos = [latitude, longitude];
 
         this.updateGPSStatus('GPS: 測位中', 'bg-emerald-400', 'text-emerald-400');

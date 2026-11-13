@@ -169,8 +169,8 @@
 
     <!-- メニューモーダル -->
     <div id="menu-modal" class="fixed inset-0 z-[2000] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 overflow-x-hidden box-border hidden">
-        <div class="bg-zinc-900 border border-zinc-700/90 rounded-2xl max-w-[calc(100vw-2rem)] sm:max-w-sm w-full p-4 shadow-2xl flex flex-col gap-2.5 text-zinc-200 box-border overflow-x-hidden max-h-[90vh] overflow-y-auto">
-            <div class="flex items-center justify-between border-b border-zinc-800 pb-2">
+        <div class="bg-zinc-900 border border-zinc-700/90 rounded-2xl max-w-[calc(100vw-2rem)] sm:max-w-sm w-full p-4 pb-6 shadow-2xl flex flex-col gap-2.5 text-zinc-200 box-border overflow-x-hidden max-h-[85vh] overflow-y-auto">
+            <div class="flex items-center justify-between border-b border-zinc-800 pb-2 shrink-0">
                 <div class="flex items-center gap-2">
                     <span class="w-2.5 h-2.5 rounded-full bg-white"></span>
                     <h2 class="font-bold text-sm tracking-wider text-white">TERRITORY WALK MENU</h2>
@@ -180,65 +180,59 @@
                 </button>
             </div>
 
-            <!-- トップアクションボタン: ショップ ＆ コイン -->
-            <button id="btn-open-shop-from-menu" class="w-full py-2.5 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 border border-amber-400 text-black font-mono text-xs font-bold rounded-xl shadow transition-all active:scale-95 flex items-center justify-center gap-1.5">
-                <svg class="w-4 h-4 text-black" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="9"></circle>
-                    <path d="M12 7v10"></path>
-                    <path d="M15 9.5a2.5 2.5 0 0 0-5 0c0 1.5 1.5 2 3 2.5s3 1 3 2.5a2.5 2.5 0 0 1-5 0"></path>
-                </svg>
-                <span>ショップ ＆ コイン獲得</span>
-            </button>
-
-            <!-- トップアクションボタン: ランキング・マイ戦績 -->
-            <button id="btn-open-stats" class="w-full py-2.5 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 border border-zinc-700 text-amber-400 font-mono text-xs font-bold rounded-xl shadow transition-all active:scale-95 flex items-center justify-center">
+            <!-- 1. ランキング・マイ戦績 -->
+            <button id="btn-open-stats" class="w-full py-2.5 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 border border-zinc-700 text-amber-400 font-mono text-xs font-bold rounded-xl shadow transition-all active:scale-95 flex items-center justify-center shrink-0">
                 <span>ランキング・マイ戦績</span>
             </button>
 
-            <!-- アコーディオン1: マップ＆マステーマ切替 -->
-            <details class="group bg-zinc-950/80 border border-zinc-800 rounded-xl overflow-hidden">
+            <!-- 2. 統合アコーディオン: テーマ・マップ設定 -->
+            <details class="group bg-zinc-950/80 border border-zinc-800 rounded-xl shrink-0">
                 <summary class="flex items-center justify-between p-2.5 cursor-pointer text-xs font-bold text-white select-none list-none">
                     <span class="flex items-center gap-2">
-                        <span>マップ＆マステーマ</span>
-                        <span id="current-skin-badge" class="text-[10px] text-zinc-400 font-mono font-normal">標準 (Default)</span>
+                        <span>テーマ・マップ設定</span>
+                        <span id="current-theme-map-badge" class="text-[10px] text-zinc-400 font-mono font-normal">標準 / ダーク</span>
                     </span>
                     <svg class="w-3.5 h-3.5 text-zinc-400 group-open:rotate-180 transition-transform duration-200 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
                     </svg>
                 </summary>
-                <div class="p-2.5 pt-0 grid grid-cols-2 gap-2 border-t border-zinc-900/60 mt-1">
-                    <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[10px] hover:border-white transition-all active:scale-95 text-zinc-200" data-skin="default">標準 (Default)</button>
-                    <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[10px] hover:border-white transition-all active:scale-95 text-cyan-400" data-skin="neon">ネオン (Neon)</button>
-                    <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[10px] hover:border-white transition-all active:scale-95 text-amber-400" data-skin="gold">ゴールド (Gold)</button>
-                    <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[10px] hover:border-white transition-all active:scale-95 text-orange-400" data-skin="crimson">紅蓮 (Crimson)</button>
-                    <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[10px] hover:border-white transition-all active:scale-95 text-pink-400" data-skin="sakura">サクラ (Sakura)</button>
-                    <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[10px] hover:border-white transition-all active:scale-95 text-lime-400" data-skin="pixel">レトロ (Pixel)</button>
-                    <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[10px] hover:border-white transition-all active:scale-95 text-purple-400" data-skin="cyberpunk">サイバー (Cyber)</button>
-                    <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[10px] hover:border-white transition-all active:scale-95 text-slate-300" data-skin="monochrome">モノトーン (Mono)</button>
+                <div class="p-2.5 pt-1 space-y-3 border-t border-zinc-900/60 mt-1">
+                    <!-- サブセクション1: マステーマ (8種) -->
+                    <div class="space-y-1.5">
+                        <div class="flex items-center justify-between">
+                            <span class="text-[11px] font-bold text-zinc-300">マステーマ</span>
+                            <span id="current-skin-badge" class="text-[10px] text-zinc-400 font-mono font-normal">標準</span>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[11px] hover:border-white transition-all active:scale-95 text-zinc-200" data-skin="default">標準</button>
+                            <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[11px] hover:border-white transition-all active:scale-95 text-cyan-400" data-skin="neon">ネオン</button>
+                            <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[11px] hover:border-white transition-all active:scale-95 text-amber-400" data-skin="gold">ゴールド</button>
+                            <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[11px] hover:border-white transition-all active:scale-95 text-orange-400" data-skin="crimson">紅蓮</button>
+                            <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[11px] hover:border-white transition-all active:scale-95 text-pink-400" data-skin="sakura">サクラ</button>
+                            <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[11px] hover:border-white transition-all active:scale-95 text-lime-400" data-skin="pixel">レトロ</button>
+                            <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[11px] hover:border-white transition-all active:scale-95 text-purple-400" data-skin="cyberpunk">サイバー</button>
+                            <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[11px] hover:border-white transition-all active:scale-95 text-slate-300" data-skin="monochrome">モノトーン</button>
+                        </div>
+                    </div>
+
+                    <!-- サブセクション2: 背景地図カラー (4種) -->
+                    <div class="space-y-1.5 pt-2 border-t border-zinc-900/60">
+                        <div class="flex items-center justify-between">
+                            <span class="text-[11px] font-bold text-zinc-300">背景地図カラー</span>
+                            <span id="current-map-theme-badge" class="text-[10px] text-zinc-400 font-mono font-normal">ダーク</span>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button class="map-theme-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[11px] hover:border-white transition-all active:scale-95 text-zinc-200" data-map-theme="dark">ダーク</button>
+                            <button class="map-theme-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[11px] hover:border-white transition-all active:scale-95 text-zinc-300" data-map-theme="mono">モノクロ</button>
+                            <button class="map-theme-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[11px] hover:border-white transition-all active:scale-95 text-emerald-400" data-map-theme="street">ストリート</button>
+                            <button class="map-theme-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[11px] hover:border-white transition-all active:scale-95 text-amber-300" data-map-theme="sepia">セピア</button>
+                        </div>
+                    </div>
                 </div>
             </details>
 
-            <!-- アコーディオン2: 背景地図カラー -->
-            <details class="group bg-zinc-950/80 border border-zinc-800 rounded-xl overflow-hidden">
-                <summary class="flex items-center justify-between p-2.5 cursor-pointer text-xs font-bold text-white select-none list-none">
-                    <span class="flex items-center gap-2">
-                        <span>背景地図カラー</span>
-                        <span id="current-map-theme-badge" class="text-[10px] text-zinc-400 font-mono font-normal">ダーク (Dark)</span>
-                    </span>
-                    <svg class="w-3.5 h-3.5 text-zinc-400 group-open:rotate-180 transition-transform duration-200 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                    </svg>
-                </summary>
-                <div class="p-2.5 pt-0 grid grid-cols-2 gap-2 border-t border-zinc-900/60 mt-1">
-                    <button class="map-theme-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[10px] hover:border-white transition-all active:scale-95 text-zinc-200" data-map-theme="dark">ダーク (Dark)</button>
-                    <button class="map-theme-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[10px] hover:border-white transition-all active:scale-95 text-zinc-300" data-map-theme="mono">モノクロ (Mono)</button>
-                    <button class="map-theme-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[10px] hover:border-white transition-all active:scale-95 text-emerald-400" data-map-theme="street">ストリート (Street)</button>
-                    <button class="map-theme-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[10px] hover:border-white transition-all active:scale-95 text-amber-300" data-map-theme="sepia">セピア (Sepia)</button>
-                </div>
-            </details>
-
-            <!-- アコーディオン3: 表示・動作設定 -->
-            <details class="group bg-zinc-950/80 border border-zinc-800 rounded-xl overflow-hidden">
+            <!-- 3. 表示・動作設定 -->
+            <details class="group bg-zinc-950/80 border border-zinc-800 rounded-xl shrink-0">
                 <summary class="flex items-center justify-between p-2.5 cursor-pointer text-xs font-bold text-white select-none list-none">
                     <span>表示・動作設定</span>
                     <svg class="w-3.5 h-3.5 text-zinc-400 group-open:rotate-180 transition-transform duration-200 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -270,8 +264,8 @@
                 </div>
             </details>
 
-            <!-- アコーディオン3: シーズン & チーム情報 -->
-            <details class="group bg-zinc-950/80 border border-zinc-800 rounded-xl overflow-hidden">
+            <!-- 4. シーズン & チーム情報 -->
+            <details class="group bg-zinc-950/80 border border-zinc-800 rounded-xl shrink-0">
                 <summary class="flex items-center justify-between p-2.5 cursor-pointer text-xs font-bold text-white select-none list-none">
                     <span class="flex items-center gap-2">
                         <span>シーズン ＆ チーム</span>
@@ -294,22 +288,23 @@
                 </div>
             </details>
 
-            <!-- アクションボタン群 -->
-            <div class="flex flex-col gap-2 pt-1">
-                <button id="btn-export-poster" class="w-full py-2 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 border border-zinc-700 text-amber-400 font-mono text-xs font-bold rounded-xl shadow transition-all active:scale-95 flex items-center justify-center">
-                    <span>週間陣地ポスター保存</span>
-                </button>
+            <!-- 5. ルール・遊び方を見る -->
+            <button id="btn-open-rules" class="w-full py-2.5 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 border border-zinc-700 text-zinc-200 font-mono text-xs font-bold rounded-xl shadow transition-all active:scale-95 shrink-0">
+                ルール・遊び方を見る
+            </button>
 
-                <button id="btn-open-pro-modal" class="w-full py-2 bg-amber-600 hover:bg-amber-500 text-white font-mono text-xs font-bold rounded-xl shadow transition-all active:scale-95 flex items-center justify-center">
-                    <span>Pro / サポーター</span>
-                </button>
+            <!-- 6. ショップ ＆ コイン獲得（「閉じる」の直上、アクセントカラー） -->
+            <button id="btn-open-shop-from-menu" class="w-full py-2.5 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 border border-amber-400 text-black font-mono text-xs font-bold rounded-xl shadow transition-all active:scale-95 flex items-center justify-center gap-1.5 shrink-0">
+                <svg class="w-4 h-4 text-black" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="9"></circle>
+                    <path d="M12 7v10"></path>
+                    <path d="M15 9.5a2.5 2.5 0 0 0-5 0c0 1.5 1.5 2 3 2.5s3 1 3 2.5a2.5 2.5 0 0 1-5 0"></path>
+                </svg>
+                <span>ショップ ＆ コイン獲得</span>
+            </button>
 
-                <button id="btn-open-rules" class="w-full py-2 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 border border-zinc-700 text-zinc-200 font-mono text-xs font-bold rounded-xl shadow transition-all active:scale-95">
-                    ルール・遊び方を見る
-                </button>
-            </div>
-
-            <button id="btn-close-menu" class="w-full py-2 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 border border-zinc-700 text-white font-bold font-mono text-xs rounded-xl shadow transition-all active:scale-95 mt-0.5">
+            <!-- 7. 閉じる -->
+            <button id="btn-close-menu" class="w-full py-2.5 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 border border-zinc-700 text-white font-bold font-mono text-xs rounded-xl shadow transition-all active:scale-95 shrink-0">
                 閉じる
             </button>
         </div>
@@ -354,10 +349,16 @@
                         </div>
                     </div>
 
-                    <!-- 連続ログイン記録 -->
-                    <div class="bg-zinc-950/80 border border-zinc-800 p-2.5 rounded-xl flex items-center justify-between font-mono text-xs">
-                        <span class="text-zinc-400">連続ログイン:</span>
-                        <span id="stat-login-streak" class="font-bold text-amber-400 text-[11px]">1日目達成</span>
+                    <!-- ログイン記録（連続＆通算） -->
+                    <div class="grid grid-cols-2 gap-2 font-mono text-xs">
+                        <div class="bg-zinc-950/80 border border-zinc-800 p-2.5 rounded-xl flex flex-col gap-0.5">
+                            <span class="text-zinc-400 text-[10px]">連続ログイン</span>
+                            <span id="stat-login-streak" class="font-bold text-amber-400 text-xs">1日目</span>
+                        </div>
+                        <div class="bg-zinc-950/80 border border-zinc-800 p-2.5 rounded-xl flex flex-col gap-0.5">
+                            <span class="text-zinc-400 text-[10px]">通算ログイン</span>
+                            <span id="stat-total-login-days" class="font-bold text-white text-xs">1日</span>
+                        </div>
                     </div>
 
                     <div class="grid grid-cols-2 gap-2 font-mono">
