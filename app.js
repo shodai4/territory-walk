@@ -292,25 +292,47 @@ class TerritoryWalkApp {
     }
 
     renderTeamBadge() {
-        if (!this.teamBadgeContainer) return;
-
         const isPro = this.proManager && this.proManager.isPro();
         const supporterBadge = isPro ? this.proManager.getSupporterBadgeHtml() : '';
 
+        // 対戦バー上部の「YOU」インジケーターを自陣営側のみ点灯表示
+        const youBlack = document.getElementById('you-indicator-black');
+        const youWhite = document.getElementById('you-indicator-white');
+
         if (this.currentTeam === 'white') {
-            this.teamBadgeContainer.innerHTML = `
-                ${supporterBadge}
-                <span class="w-2.5 h-2.5 rounded-full bg-white border border-zinc-300"></span>
-                <span class="text-zinc-100 font-bold">White</span>
-            `;
+            if (youWhite) {
+                youWhite.className = 'flex items-center gap-1 text-amber-400 transition-all opacity-100';
+                youWhite.innerHTML = `${supporterBadge}<span class="px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/50 text-[9px] tracking-wider font-mono">YOU (白陣営)</span>`;
+            }
+            if (youBlack) {
+                youBlack.className = 'flex items-center gap-1 text-zinc-600 transition-all opacity-0 pointer-events-none';
+            }
             if (this.menuTeamText) this.menuTeamText.textContent = 'White Team';
         } else {
-            this.teamBadgeContainer.innerHTML = `
-                ${supporterBadge}
-                <span class="w-2.5 h-2.5 rounded-full bg-black border border-zinc-500 shadow-sm"></span>
-                <span class="text-zinc-100 font-bold">Black</span>
-            `;
+            if (youBlack) {
+                youBlack.className = 'flex items-center gap-1 text-amber-400 transition-all opacity-100';
+                youBlack.innerHTML = `${supporterBadge}<span class="px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/50 text-[9px] tracking-wider font-mono">YOU (黒陣営)</span>`;
+            }
+            if (youWhite) {
+                youWhite.className = 'flex items-center gap-1 text-zinc-600 transition-all opacity-0 pointer-events-none';
+            }
             if (this.menuTeamText) this.menuTeamText.textContent = 'Black Team';
+        }
+
+        if (this.teamBadgeContainer) {
+            if (this.currentTeam === 'white') {
+                this.teamBadgeContainer.innerHTML = `
+                    ${supporterBadge}
+                    <span class="w-2.5 h-2.5 rounded-full bg-white border border-zinc-300"></span>
+                    <span class="text-zinc-100 font-bold">White</span>
+                `;
+            } else {
+                this.teamBadgeContainer.innerHTML = `
+                    ${supporterBadge}
+                    <span class="w-2.5 h-2.5 rounded-full bg-black border border-zinc-500 shadow-sm"></span>
+                    <span class="text-zinc-100 font-bold">Black</span>
+                `;
+            }
         }
     }
 
@@ -1395,13 +1417,14 @@ class TerritoryWalkApp {
             whitePct = 100 - blackPct;
         }
 
-        this.scoreBlackEl.textContent = `${blackPct}%`;
-        this.scoreWhiteEl.textContent = `${whitePct}%`;
+        this.scoreBlackEl.textContent = blackPct >= 8 ? `${blackPct}%` : '';
+        this.scoreWhiteEl.textContent = whitePct >= 8 ? `${whitePct}%` : '';
 
         this.barBlackEl.style.width = `${blackPct}%`;
         this.barWhiteEl.style.width = `${whitePct}%`;
 
-        this.updateAutoBalanceUI();
+        this.renderTeamBadge();
+        this.updateTeamStatusUI();
     }
 
     initDPad() {
