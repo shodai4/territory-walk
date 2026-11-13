@@ -1176,14 +1176,6 @@ class TerritoryWalkApp {
             }
         }
     }
-                try {
-                    await this.supabaseManager.claimTile(meshId, latIdx, lngIdx, this.currentTeam);
-                } catch (e) {
-                    console.warn('Supabase claimTile sync failed:', e);
-                }
-            }
-        }
-    }
 
     playClaimSound() {
         try {
