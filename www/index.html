@@ -23,19 +23,18 @@
                 <span class="font-mono tracking-wider font-bold">TERRITORY WALK</span>
             </div>
 
-            <!-- 右：コイン残高 & MENUボタン（チーム表示は対戦バー上YOUマークへ統合し2要素にスッキリ整理） -->
+            <!-- 右：コイン残高 & MENUボタン（チーム表示は対戦バー上YOUマークへ統合し2要素にスッキリ整理、親指タップ性向上） -->
             <div class="flex items-center gap-1.5 shrink-0">
-                <button id="btn-header-coins" class="flex items-center gap-1 bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-700 border border-zinc-700/80 hover:border-amber-400/80 px-2.5 py-1 rounded-lg font-mono text-xs text-amber-400 shadow transition-all active:scale-95" title="コイン・ショップを開く">
-                    <svg class="w-3.5 h-3.5 text-amber-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <button id="btn-header-coins" class="flex items-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-700 border border-zinc-700/80 hover:border-amber-400/80 px-3 py-1.5 rounded-xl font-mono text-xs text-amber-400 shadow transition-all active:scale-95 min-h-[34px]" title="コイン・ショップを開く">
+                    <svg class="w-4 h-4 text-amber-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <circle cx="12" cy="12" r="9"></circle>
                         <path d="M12 7v10"></path>
                         <path d="M15 9.5a2.5 2.5 0 0 0-5 0c0 1.5 1.5 2 3 2.5s3 1 3 2.5a2.5 2.5 0 0 1-5 0"></path>
                     </svg>
-                    <span id="header-coin-count" class="font-bold">100</span>
-                    <span class="text-[9px] text-zinc-400">C</span>
+                    <span id="header-coin-count" class="font-bold text-xs tracking-tight">100</span>
                 </button>
-                <button id="btn-menu" class="bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-700 border border-zinc-700/80 text-zinc-200 px-2.5 py-1 rounded-lg text-xs font-mono font-bold flex items-center gap-1.5 shadow transition-all active:scale-95">
-                    <svg class="w-3.5 h-3.5 text-zinc-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <button id="btn-menu" class="bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-700 border border-zinc-700/80 text-zinc-200 px-3 py-1.5 rounded-xl text-xs font-mono font-bold flex items-center gap-1.5 shadow transition-all active:scale-95 min-h-[34px]">
+                    <svg class="w-4 h-4 text-zinc-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
                     </svg>
                     <span>MENU</span>
@@ -45,18 +44,18 @@
 
         <!-- 2行目（全幅左右対称対戦バー・インラインパーセント・自陣営YOUマーク） -->
         <div class="w-full flex flex-col gap-1 select-none">
-            <!-- バー上部：所属陣営YOUインジケーター（自チーム側のみ点灯表示） -->
+            <!-- バー上部：左上固定YOUインジケーター（自陣営）＆ 右側相手陣営インジケーター -->
             <div class="flex items-center justify-between px-1 text-[10px] font-mono font-bold leading-none">
-                <div id="you-indicator-black" class="flex items-center gap-1 text-amber-400 transition-all opacity-100">
-                    <span class="px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/50 text-[9px] tracking-wider font-mono">YOU (黒陣営)</span>
+                <div id="you-indicator" class="flex items-center gap-1 text-amber-400 transition-all">
+                    <span id="you-indicator-badge" class="px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/50 text-[9px] tracking-wider font-mono">YOU (黒陣営)</span>
                 </div>
-                <div id="you-indicator-white" class="flex items-center gap-1 text-amber-400 transition-all opacity-0">
-                    <span class="px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/50 text-[9px] tracking-wider font-mono">YOU (白陣営)</span>
+                <div id="opponent-indicator" class="flex items-center gap-1 text-zinc-500 transition-all text-[9px] tracking-wider font-mono">
+                    VS 白陣営
                 </div>
             </div>
 
-            <!-- 全幅対戦パーセンテージバー（バー内にパーセント数値をインライン中央配置） -->
-            <div class="w-full h-7 bg-zinc-950 rounded-xl overflow-hidden flex border border-zinc-700 shadow-inner relative">
+            <!-- 全幅対戦パーセンテージバー（バー内にパーセント数値をインライン中央配置、左側が常に自陣営） -->
+            <div id="battle-bar-container" class="w-full h-7 bg-zinc-950 rounded-xl overflow-hidden flex flex-row border border-zinc-700 shadow-inner relative">
                 <!-- 黒チームバー（内部に白文字でパーセント表示） -->
                 <div id="bar-black" class="bg-black border-r border-zinc-600 transition-all duration-500 flex items-center justify-center overflow-hidden shrink-0" style="width: 50%;">
                     <span id="score-black" class="text-white font-mono font-bold text-xs whitespace-nowrap px-1">50%</span>
@@ -75,7 +74,7 @@
                     <circle cx="11" cy="11" r="8"></circle>
                     <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                 </svg>
-                <input id="input-inline-search" type="text" placeholder="地名・駅名で検索（例: 渋谷、梅田、東大阪）" class="w-full bg-zinc-900/90 border border-zinc-700/80 focus:border-sky-400 rounded-xl pl-9 pr-8 py-1.5 text-white font-mono text-xs placeholder:text-zinc-500 focus:outline-none transition-all">
+                <input id="input-inline-search" type="text" placeholder="地名・駅名で検索..." class="w-full bg-zinc-900/90 border border-zinc-700/80 focus:border-sky-400 rounded-xl pl-9 pr-8 py-1.5 text-white font-mono text-xs placeholder:text-zinc-500 focus:outline-none transition-all">
                 <button id="btn-clear-inline-search" class="hidden absolute right-2.5 text-zinc-500 hover:text-white p-1">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                 </button>

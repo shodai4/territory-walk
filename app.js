@@ -291,26 +291,43 @@ class TerritoryWalkApp {
         const isPro = this.proManager && this.proManager.isPro();
         const supporterBadge = isPro ? this.proManager.getSupporterBadgeHtml() : '';
 
-        // 対戦バー上部の「YOU」インジケーターを自陣営側のみ点灯表示
-        const youBlack = document.getElementById('you-indicator-black');
-        const youWhite = document.getElementById('you-indicator-white');
+        // 対戦バー上部の「YOU」インジケーターを左上に完全固定 ＆ 対戦バーの自陣営「左側」固定
+        const youIndicator = document.getElementById('you-indicator');
+        const opponentIndicator = document.getElementById('opponent-indicator');
+        const barContainer = document.getElementById('battle-bar-container');
 
         if (this.currentTeam === 'white') {
-            if (youWhite) {
-                youWhite.className = 'flex items-center gap-1 text-amber-400 transition-all opacity-100';
-                youWhite.innerHTML = `${supporterBadge}<span class="px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/50 text-[9px] tracking-wider font-mono">YOU (白陣営)</span>`;
+            if (youIndicator) {
+                youIndicator.innerHTML = `${supporterBadge}<span class="px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/50 text-[9px] tracking-wider font-mono">YOU (白陣営)</span>`;
             }
-            if (youBlack) {
-                youBlack.className = 'flex items-center gap-1 text-zinc-600 transition-all opacity-0 pointer-events-none';
+            if (opponentIndicator) {
+                opponentIndicator.textContent = 'VS 黒陣営';
+            }
+            if (barContainer) {
+                barContainer.className = 'w-full h-7 bg-zinc-950 rounded-xl overflow-hidden flex flex-row-reverse border border-zinc-700 shadow-inner relative';
+            }
+            if (this.barWhiteEl) {
+                this.barWhiteEl.className = 'bg-white border-r border-zinc-400 transition-all duration-500 flex items-center justify-center overflow-hidden shrink-0';
+            }
+            if (this.barBlackEl) {
+                this.barBlackEl.className = 'bg-black transition-all duration-500 flex items-center justify-center overflow-hidden shrink-0';
             }
             if (this.menuTeamText) this.menuTeamText.textContent = 'White Team';
         } else {
-            if (youBlack) {
-                youBlack.className = 'flex items-center gap-1 text-amber-400 transition-all opacity-100';
-                youBlack.innerHTML = `${supporterBadge}<span class="px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/50 text-[9px] tracking-wider font-mono">YOU (黒陣営)</span>`;
+            if (youIndicator) {
+                youIndicator.innerHTML = `${supporterBadge}<span class="px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/50 text-[9px] tracking-wider font-mono">YOU (黒陣営)</span>`;
             }
-            if (youWhite) {
-                youWhite.className = 'flex items-center gap-1 text-zinc-600 transition-all opacity-0 pointer-events-none';
+            if (opponentIndicator) {
+                opponentIndicator.textContent = 'VS 白陣営';
+            }
+            if (barContainer) {
+                barContainer.className = 'w-full h-7 bg-zinc-950 rounded-xl overflow-hidden flex flex-row border border-zinc-700 shadow-inner relative';
+            }
+            if (this.barBlackEl) {
+                this.barBlackEl.className = 'bg-black border-r border-zinc-600 transition-all duration-500 flex items-center justify-center overflow-hidden shrink-0';
+            }
+            if (this.barWhiteEl) {
+                this.barWhiteEl.className = 'bg-white transition-all duration-500 flex items-center justify-center overflow-hidden shrink-0';
             }
             if (this.menuTeamText) this.menuTeamText.textContent = 'Black Team';
         }
