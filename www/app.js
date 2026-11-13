@@ -148,36 +148,39 @@ class TerritoryWalkApp {
         if (!container) {
             container = document.createElement('div');
             container.id = 'toast-container';
-            container.className = 'fixed top-[136px] left-1/2 -translate-x-1/2 z-[3000] flex flex-col items-center gap-2 pointer-events-none max-w-[92vw] w-max';
+            container.className = 'fixed top-[148px] left-1/2 -translate-x-1/2 z-[3000] flex flex-col items-center gap-2 pointer-events-none max-w-[92vw] w-max';
             document.body.appendChild(container);
         }
 
         const toast = document.createElement('div');
-        toast.className = 'bg-zinc-950/95 border border-amber-500/80 text-amber-300 text-xs font-mono px-4 py-2.5 rounded-xl shadow-2xl backdrop-blur-md transition-all duration-300 pointer-events-none text-center flex flex-col items-center opacity-0 -translate-y-2';
+        toast.className = 'bg-zinc-950/95 border border-amber-500/80 text-amber-300 text-xs font-mono px-4 py-2 rounded-xl shadow-2xl backdrop-blur-md pointer-events-none text-center flex flex-col items-center';
+        toast.style.transition = 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)';
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(-10px)';
 
         if (subtitle) {
-            toast.innerHTML = `<div class="font-bold text-xs text-white leading-tight break-keep whitespace-nowrap">${message}</div><div class="text-[11px] text-amber-400 mt-1 leading-tight break-keep whitespace-nowrap">${subtitle}</div>`;
+            toast.innerHTML = `<div class="font-bold text-xs text-white leading-tight break-keep whitespace-nowrap">${message}</div><div class="text-[11px] text-amber-400 mt-0.5 leading-tight break-keep whitespace-nowrap">${subtitle}</div>`;
         } else {
             toast.innerHTML = `<div class="font-bold text-xs text-amber-300 leading-tight break-keep whitespace-nowrap">${message}</div>`;
         }
 
         container.appendChild(toast);
 
-        // アニメーション入場
-        requestAnimationFrame(() => {
-            toast.classList.remove('opacity-0', '-translate-y-2');
-            toast.classList.add('opacity-100', 'translate-y-0');
-        });
+        // スムーズな出現アニメーション
+        setTimeout(() => {
+            toast.style.opacity = '1';
+            toast.style.transform = 'translateY(0)';
+        }, 20);
 
         // 3.2秒後にフェードアウト＆DOM削除
         setTimeout(() => {
-            toast.classList.remove('opacity-100', 'translate-y-0');
-            toast.classList.add('opacity-0', '-translate-y-2');
+            toast.style.opacity = '0';
+            toast.style.transform = 'translateY(-10px)';
             setTimeout(() => {
                 if (toast.parentNode) {
                     toast.parentNode.removeChild(toast);
                 }
-            }, 300);
+            }, 350);
         }, 3200);
     }
 
