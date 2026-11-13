@@ -464,4 +464,84 @@ class StatsManager {
             return null;
         }
     }
+
+    async getCurrentWeekLiveResult() {
+        const currentWeekId = this.supabaseManager ? this.supabaseManager.getCurrentWeekId() : '2026-W46';
+        let blackTotal = 0;
+        let whiteTotal = 0;
+        let myTiles = 0;
+        let myTeam = this.app ? this.app.currentTeam : 'black';
+
+        // 1. Supabaseの今週ランキングレコードから取得
+        if (this.supabaseManager && this.supabaseManager.client) {
+            try {
+                const { data } = await this.supabaseManager.client
+                    .from('territory_weekly_rankings')
+                    .select('user_id, team, tiles_count')
+                    .eq('week_id', currentWeekId);
+
+                if (data && data.length > 0) {
+                    data.forEach(row => {
+                        if (row.team === 'black') blackTotal += (row.tiles_count || 0);
+                        if (row.team === 'white') whiteTotal += (row.tiles_count || 0);
+                        if (row.user_id === this.userId) {
+                            myTiles = row.tiles_count || 0;
+                            if (row.team) myTeam = row.team;
+                        }
+                    });
+                }
+            } catch (e) {
+                console.warn('[Stats] Failed to fetch current week rankings for live result:', e);
+            }
+        }
+
+        // 2. マップ上のclaimedTilesCache（現在の描画マス数）も加味
+        if (this.app && this.app.gridManager && this.app.gridManager.claimedTilesCache) {
+            let mapBlack = 0;
+            let mapWhite = 0;
+            for (const team of this.app.gridManager.claimedTilesCache.values()) {
+                if (team === 'black') mapBlack++;
+                else if (team === 'white') mapWhite++;
+            }
+            if (mapBlack + mapWhite > blackTotal + whiteTotal) {
+                blackTotal = mapBlack;
+                whiteTotal = mapWhite;
+            }
+        }
+
+        // 3. 自分のマス数（myTiles）が0の場合、statsのlifetime_tiles等から補完
+        if (myTiles === 0 && this.stats) {
+            myTiles = this.stats.lifetime_tiles || 0;
+        }
+
+        // 所属チームの最新状態を最優先
+        if (this.app && this.app.currentTeam) {
+            myTeam = this.app.currentTeam;
+        }
+
+        const total = blackTotal + whiteTotal;
+        const blackPct = total > 0 ? Math.round((blackTotal / total) * 100) : 50;
+        const whitePct = total > 0 ? 100 - blackPct : 50;
+
+        let winnerTeam = 'draw';
+        if (blackTotal > whiteTotal) winnerTeam = 'black';
+        else if (whiteTotal > blackTotal) winnerTeam = 'white';
+
+        let isWin = false;
+        let isDraw = (winnerTeam === 'draw');
+        if (winnerTeam === myTeam) isWin = true;
+
+        return {
+            weekId: currentWeekId,
+            blackTotal,
+            whiteTotal,
+            blackPct,
+            whitePct,
+            winnerTeam,
+            myTeam,
+            myTiles,
+            isWin,
+            isDraw
+        };
+    }
 }

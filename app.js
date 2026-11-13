@@ -1003,28 +1003,50 @@ class TerritoryWalkApp {
         if (!modal) return;
 
         const currentWeek = this.supabaseManager ? this.supabaseManager.getCurrentWeekId() : '2026-W46';
-        const weekToShow = targetWeek || this.getPreviousWeekId(currentWeek);
+        const weekToShow = targetWeek || (isManual ? currentWeek : this.getPreviousWeekId(currentWeek));
 
-        document.getElementById('result-week-id').textContent = weekToShow;
+        document.getElementById('result-week-id').textContent = isManual ? `${currentWeek} (現在)` : weekToShow;
         document.getElementById('result-winner-banner').textContent = '集計中...';
         modal.classList.remove('hidden');
 
-        let result = this.statsManager ? await this.statsManager.getPreviousWeekResult(weekToShow) : null;
+        let result = null;
+        if (isManual) {
+            // デバッグプレビュー時は現在のリアルタイム実データを動的に取得
+            if (this.statsManager && this.statsManager.getCurrentWeekLiveResult) {
+                result = await this.statsManager.getCurrentWeekLiveResult();
+            }
+            if (!result) {
+                let bCount = 0;
+                let wCount = 0;
+                if (this.gridManager) {
+                    for (const team of this.gridManager.claimedTilesCache.values()) {
+                        if (team === 'black') bCount++;
+                        else if (team === 'white') wCount++;
+                    }
+                }
+                const tot = bCount + wCount;
+                const bPct = tot > 0 ? Math.round((bCount / tot) * 100) : 50;
+                const wPct = tot > 0 ? 100 - bPct : 50;
+                const myT = this.currentTeam || 'black';
+                let winT = 'draw';
+                if (bCount > wCount) winT = 'black';
+                else if (wCount > bCount) winT = 'white';
 
-        // デバッグプレビュー時で過去週レコードがない場合は、バーの視覚化が確認できるリアルなシミュレーションデータを表示
-        if (!result && isManual) {
-            result = {
-                weekId: weekToShow,
-                blackTotal: 142,
-                whiteTotal: 88,
-                blackPct: 62,
-                whitePct: 38,
-                winnerTeam: 'black',
-                isDraw: false,
-                myTeam: this.currentTeam || 'black',
-                myTiles: 18,
-                isWin: this.currentTeam === 'black'
-            };
+                result = {
+                    weekId: currentWeek,
+                    blackTotal: bCount,
+                    whiteTotal: wCount,
+                    blackPct: bPct,
+                    whitePct: wPct,
+                    winnerTeam: winT,
+                    isDraw: (winT === 'draw'),
+                    myTeam: myT,
+                    myTiles: (this.statsManager && this.statsManager.stats) ? (this.statsManager.stats.lifetime_tiles || 0) : 0,
+                    isWin: (winT === myT)
+                };
+            }
+        } else {
+            result = this.statsManager ? await this.statsManager.getPreviousWeekResult(weekToShow) : null;
         }
 
         const banner = document.getElementById('result-winner-banner');
@@ -1043,6 +1065,12 @@ class TerritoryWalkApp {
             document.getElementById('result-my-tiles').textContent = '0 マス';
             document.getElementById('result-battle-outcome').textContent = '対戦なし';
             return;
+        }
+
+        if (isManual) {
+            document.getElementById('result-winner-subtitle').textContent = '今シーズン終了時のリアルタイム判定シミュレーション';
+        } else {
+            document.getElementById('result-winner-subtitle').textContent = '前週のシーズン対戦が決着しました';
         }
 
         if (result.winnerTeam === 'black') {
