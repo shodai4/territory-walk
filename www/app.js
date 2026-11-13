@@ -88,14 +88,63 @@ class TerritoryWalkApp {
         }, 3000);
     }
 
-    initTeam() {
+    async initTeam() {
         let savedTeam = localStorage.getItem('player_team');
         if (!savedTeam || (savedTeam !== 'white' && savedTeam !== 'black')) {
-            savedTeam = Math.random() < 0.5 ? 'white' : 'black';
+            if (this.statsManager) {
+                savedTeam = await this.statsManager.getRecommendedTeam();
+            } else {
+                savedTeam = Math.random() < 0.5 ? 'white' : 'black';
+            }
             localStorage.setItem('player_team', savedTeam);
         }
         this.currentTeam = savedTeam;
         this.applyTheme();
+        this.updateAutoBalanceUI();
+    }
+
+    async autoBalanceTeam(force = false) {
+        if (!this.statsManager) return;
+        const recommended = await this.statsManager.getRecommendedTeam();
+        if (force || this.currentTeam !== recommended) {
+            this.currentTeam = recommended;
+            localStorage.setItem('player_team', recommended);
+            this.applyTheme();
+            if (this.statsManager) this.statsManager.syncUserProfileImmediate();
+            this.showToast(`チーム自動均等化: ${recommended === 'black' ? 'Black (黒)' : 'White (白)'} 陣営に配属されました`);
+            this.updateAutoBalanceUI();
+        } else {
+            this.showToast(`現在のチームは既に人数バランスが取れています (${this.currentTeam === 'black' ? 'Black (黒)' : 'White (白)'})`);
+        }
+    }
+
+    isUnderdogTeam() {
+        if (!this.gridManager) return false;
+        let blackCount = 0;
+        let whiteCount = 0;
+        for (const team of this.gridManager.claimedTilesCache.values()) {
+            if (team === 'black') blackCount++;
+            else if (team === 'white') whiteCount++;
+        }
+        const total = blackCount + whiteCount;
+        if (total === 0) return false;
+        const myCount = this.currentTeam === 'black' ? blackCount : whiteCount;
+        const myPct = Math.round((myCount / total) * 100);
+        return myPct <= 40;
+    }
+
+    updateAutoBalanceUI() {
+        const teamInfoEl = document.getElementById('menu-current-team-info');
+        if (teamInfoEl) {
+            const teamName = this.currentTeam === 'black' ? 'Black (黒)' : 'White (白)';
+            teamInfoEl.textContent = teamName;
+        }
+        const underdogEl = document.getElementById('menu-underdog-status');
+        if (underdogEl) {
+            const isUnderdog = this.isUnderdogTeam();
+            underdogEl.textContent = isUnderdog ? '劣勢逆転ボーナス発動中 (コイン2倍)' : '通常 (陣地40%以下で2倍発動)';
+            underdogEl.className = isUnderdog ? 'text-amber-400 font-bold' : 'text-zinc-400';
+        }
     }
 
     applyTheme() {
@@ -427,6 +476,22 @@ class TerritoryWalkApp {
                 }
             });
         }
+
+        // X Share Button in Stats Modal
+        const btnStatsXShare = document.getElementById('btn-stats-x-share');
+        if (btnStatsXShare) {
+            btnStatsXShare.addEventListener('click', () => {
+                if (this.coinManager) this.coinManager.shareToX();
+            });
+        }
+
+        // Copy Referral in Stats Modal
+        const btnStatsCopyRef = document.getElementById('btn-stats-copy-referral');
+        if (btnStatsCopyRef) {
+            btnStatsCopyRef.addEventListener('click', () => {
+                if (this.coinManager) this.coinManager.copyReferralCode();
+            });
+        }
     }
 
     async switchStatsTab(tabKey) {
@@ -495,6 +560,34 @@ class TerritoryWalkApp {
 
         const battleEl = document.getElementById('stat-battles-record');
         if (battleEl) battleEl.textContent = `${stats.battles_won}勝 ${stats.battles_lost}敗`;
+
+        const referralCodeDisplay = document.getElementById('stats-referral-code-display');
+        if (referralCodeDisplay && this.statsManager) {
+            referralCodeDisplay.textContent = this.statsManager.getOrCreateReferralCode();
+        }
+
+        this.updateStatsXShareButton();
+    }
+
+    updateStatsXShareButton() {
+        const btn = document.getElementById('btn-stats-x-share');
+        if (!btn || !this.coinManager) return;
+        const canShare = this.coinManager.canShareToXToday();
+        if (canShare) {
+            btn.disabled = false;
+            btn.className = 'w-full py-2 bg-zinc-100 hover:bg-white text-black font-bold font-mono text-xs rounded-lg shadow transition-all active:scale-95 flex items-center justify-center gap-1.5';
+            btn.innerHTML = `
+                <svg class="w-3.5 h-3.5 text-black" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+                <span>Xで現在の戦績をシェア (+30 COIN)</span>
+            `;
+        } else {
+            btn.disabled = true;
+            btn.className = 'w-full py-2 bg-zinc-800 text-zinc-500 font-bold font-mono text-xs rounded-lg cursor-not-allowed flex items-center justify-center gap-1.5';
+            btn.innerHTML = `
+                <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                <span>本日獲得済み (明日またシェアできます)</span>
+            `;
+        }
     }
 
     parseNicknameAndTitle(raw) {
@@ -852,6 +945,7 @@ class TerritoryWalkApp {
 
         const openModal = () => {
             this.menuModal.classList.remove('hidden');
+            this.updateAutoBalanceUI();
             this.resetViewportScroll();
         };
 
@@ -863,6 +957,13 @@ class TerritoryWalkApp {
         if (this.btnMenu) this.btnMenu.addEventListener('click', openModal);
         if (this.btnCloseMenu) this.btnCloseMenu.addEventListener('click', closeModal);
         if (this.btnModalCloseIcon) this.btnModalCloseIcon.addEventListener('click', closeModal);
+
+        const btnRebalance = document.getElementById('btn-rebalance-team');
+        if (btnRebalance) {
+            btnRebalance.addEventListener('click', () => {
+                this.autoBalanceTeam(true);
+            });
+        }
 
         if (this.btnOpenRules) {
             this.btnOpenRules.addEventListener('click', () => {
@@ -1087,6 +1188,8 @@ class TerritoryWalkApp {
 
         this.barBlackEl.style.width = `${blackPct}%`;
         this.barWhiteEl.style.width = `${whitePct}%`;
+
+        this.updateAutoBalanceUI();
     }
 
     initDPad() {

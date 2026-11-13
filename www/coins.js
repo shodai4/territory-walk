@@ -1,6 +1,6 @@
 /**
  * TERRITORY WALK - coins.js
- * In-game Coin Economy, Ad Reward Simulation & Shop Manager
+ * In-game Coin Economy, Ad Reward Simulation, Shop Manager & Viral Growth
  * Zero-emoji, strictly minimal and high-contrast dark UI design.
  */
 
@@ -21,34 +21,42 @@ class CoinManager {
         this.adTimer = null;
         this.adSecondsLeft = 5;
 
-        // 1. Tile & Grid Skins Catalog
+        // 1. Tile & Grid Skins Catalog (Rebalanced Price Hierarchy)
         this.SKINS = {
             default: { id: 'default', name: '標準', cost: 0, desc: '白黒クラシックオセロカラー', class: 'text-zinc-200' },
-            neon: { id: 'neon', name: 'ネオン', cost: 100, desc: 'シアンとマゼンタの鮮烈な発光', class: 'text-cyan-400' },
-            gold: { id: 'gold', name: 'ゴールド', cost: 200, desc: '富と栄光のシャンパンゴールド', class: 'text-amber-400' },
-            crimson: { id: 'crimson', name: '紅蓮', cost: 150, desc: '燃え盛る情熱の炎と深紅', class: 'text-orange-400' },
-            sakura: { id: 'sakura', name: 'サクラ', cost: 150, desc: '春風舞う桜ピンクと翡翠ミント', class: 'text-pink-400' },
             pixel: { id: 'pixel', name: 'レトロ', cost: 100, desc: '80sアーケードライムグリーン', class: 'text-lime-400' },
-            cyberpunk: { id: 'cyberpunk', name: 'サイバー', cost: 250, desc: '近未来パープルとネオンブルー', class: 'text-purple-400' },
-            monochrome: { id: 'monochrome', name: 'モノトーン', cost: 150, desc: '氷雪ホワイトと漆黒の高コントラスト', class: 'text-slate-300' }
+            sakura: { id: 'sakura', name: 'サクラ', cost: 150, desc: '春風舞う桜ピンクと翡翠ミント', class: 'text-pink-400' },
+            monochrome: { id: 'monochrome', name: 'モノトーン', cost: 150, desc: '氷雪ホワイトと漆黒の高コントラスト', class: 'text-slate-300' },
+            crimson: { id: 'crimson', name: '紅蓮', cost: 200, desc: '燃え盛る情熱の炎と深紅', class: 'text-orange-400' },
+            neon: { id: 'neon', name: 'ネオン', cost: 250, desc: 'シアンとマゼンタの鮮烈な発光', class: 'text-cyan-400' },
+            gold: { id: 'gold', name: 'ゴールド', cost: 500, desc: '富と栄光のシャンパンゴールド（プレミアム）', class: 'text-amber-400' },
+            cyberpunk: { id: 'cyberpunk', name: 'サイバー', cost: 800, desc: '近未来パープルとネオンブルー（ハイエンド）', class: 'text-purple-400' }
         };
 
-        // 2. Exclusive Shop Titles Catalog
+        // 2. Exclusive Shop Titles Catalog (Rebalanced Price Hierarchy)
         this.TITLES = {
-            '夜の徘徊者': { name: '夜の徘徊者', cost: 100, desc: '月明かりの街を静寂に歩く者' },
-            '地図の魔術師': { name: '地図の魔術師', cost: 150, desc: '幾何学の境界を操る達人' },
-            'ストリートファイター': { name: 'ストリートファイター', cost: 200, desc: '幾多の奪還戦を制した猛者' },
-            'コイン長者': { name: 'コイン長者', cost: 300, desc: '歩きとリワードで富を築いた者' },
-            'ナスカの末裔': { name: 'ナスカの末裔', cost: 400, desc: '大地に壮大な紋様を刻む者' },
-            'ウォーキングレジェンド': { name: 'ウォーキングレジェンド', cost: 500, desc: '歩行陣取りの頂点を極めし伝説' }
+            '夜の徘徊者': { name: '夜の徘徊者', cost: 150, desc: '月明かりの街を静寂に歩く者' },
+            '地図の魔術師': { name: '地図の魔術師', cost: 200, desc: '幾何学の境界を操る達人' },
+            'ストリートファイター': { name: 'ストリートファイター', cost: 300, desc: '幾多の奪還戦を制した猛者' },
+            'コイン長者': { name: 'コイン長者', cost: 400, desc: '歩きとリワードで富を築いた者' },
+            'ナスカの末裔': { name: 'ナスカの末裔', cost: 500, desc: '大地に壮大な紋様を刻む者' },
+            'ウォーキングレジェンド': { name: 'ウォーキングレジェンド', cost: 800, desc: '歩行陣取りの頂点を極めし伝説' }
         };
 
-        // 3. Special Perks Catalog
+        // 3. Special Perks Catalog (Rebalanced Price Hierarchy)
         this.PERKS = {
-            'poster_ticket': { id: 'poster_ticket', name: '週間ポスター書き出し (1回分)', cost: 30, desc: '今週の陣地をA4アートポスターPNG保存' },
-            'poster_permanent': { id: 'poster_permanent', name: 'ポスター書き出し無制限パス', cost: 300, desc: 'いつでも何度でもポスター保存が可能に' },
-            'pin_neon': { id: 'pin_neon', name: '現在地ピン: シアン光彩パルス', cost: 150, desc: '現在地マーカーに強いネオン発光エフェクト' },
-            'pin_gold': { id: 'pin_gold', name: '現在地ピン: 黄金オーラ', cost: 200, desc: '現在地マーカーが黄金の輝きを放つ' }
+            'poster_ticket': { id: 'poster_ticket', name: '週間ポスター書き出し (1回分)', cost: 50, desc: '今週の陣地をA4アートポスターPNG保存' },
+            'pin_neon': { id: 'pin_neon', name: '現在地ピン: シアン光彩パルス', cost: 300, desc: '現在地マーカーに強いネオン発光エフェクト' },
+            'pin_gold': { id: 'pin_gold', name: '現在地ピン: 黄金オーラ', cost: 500, desc: '現在地マーカーが黄金の輝きを放つ' },
+            'poster_permanent': { id: 'poster_permanent', name: 'ポスター書き出し無制限パス', cost: 800, desc: 'いつでも何度でもポスター保存が可能に' }
+        };
+
+        // 4. In-App Purchase Coin Packs Catalog
+        this.PACKS = {
+            'beginner': { id: 'beginner', name: 'ビギナーパック', yen: 120, coins: 120, bonus: '', desc: 'テーマや称号を手軽にアンロック' },
+            'standard': { id: 'standard', name: 'スタンダードパック', yen: 300, coins: 350, bonus: '+16%増量', desc: '人気スキンや限定称号をしっかり解放' },
+            'premium': { id: 'premium', name: 'プレミアムパック', yen: 600, coins: 750, bonus: '+25%増量 (人気)', desc: 'ゴールドスキンや無制限パスに最適' },
+            'ultimate': { id: 'ultimate', name: 'アルティメットパック', yen: 1200, coins: 1600, bonus: '+33%増量 (最高効率)', desc: '全コンテンツを一気に揃える豪華セット' }
         };
 
         // Global callback for external AdSense / AdMob Rewarded Video completion
@@ -64,7 +72,6 @@ class CoinManager {
     loadCoins() {
         const stored = localStorage.getItem(this.STORAGE_KEY_COINS);
         if (stored === null) {
-            // Initial Welcome Bonus
             localStorage.setItem(this.STORAGE_KEY_COINS, '100');
             return 100;
         }
@@ -105,7 +112,6 @@ class CoinManager {
             this.app.showToast(`+${n} COIN 獲得 (${reason})`);
         }
 
-        // Animate coin indicator
         this.animateCoinBadge();
         this.syncCoinsToSupabase();
     }
@@ -195,7 +201,6 @@ class CoinManager {
         this.unlockedSkins.push(skinId);
         localStorage.setItem(this.STORAGE_KEY_UNLOCKED_SKINS, JSON.stringify(this.unlockedSkins));
 
-        // Immediately apply skin
         document.body.dataset.skin = skinId;
         localStorage.setItem('territory_skin', skinId);
         if (this.app.updateSkinBadge) this.app.updateSkinBadge(skinId);
@@ -217,9 +222,9 @@ class CoinManager {
                 this.unlockSkin(skinId);
             }
         } else {
-            const ok = confirm(`【コイン不足】\n「${skin.name}」の解放には ${skin.cost} COIN 必要です。\n（現在所持: ${this.coins} COIN）\n\nショップを開いてリワード広告でコインを獲得しますか？`);
+            const ok = confirm(`【コイン不足】\n「${skin.name}」の解放には ${skin.cost} COIN 必要です。\n（現在所持: ${this.coins} COIN）\n\nショップを開いてリワード広告やコイン購入で獲得しますか？`);
             if (ok) {
-                this.openShopModal('earn');
+                this.openShopModal('packs');
             }
         }
     }
@@ -275,7 +280,6 @@ class CoinManager {
         if (!perk) return false;
 
         if (perkId === 'poster_ticket') {
-            // Purchase 1 ticket
             if (!this.spendCoins(perk.cost, perk.name)) return false;
             const current = parseInt(localStorage.getItem(this.STORAGE_KEY_POSTER_TICKETS) || '0', 10);
             localStorage.setItem(this.STORAGE_KEY_POSTER_TICKETS, (current + 1).toString());
@@ -318,13 +322,138 @@ class CoinManager {
         }
     }
 
-    // --- Tile Walking Hook ---
+    // --- Tile Walking Hook with Underdog Comeback Double Coins ---
     onTileClaimed(isReclaimed) {
-        const amount = isReclaimed ? 2 : 1;
-        this.coins += amount;
+        let base = isReclaimed ? 2 : 1;
+        let isComeback = false;
+
+        // Comeback Bonus: Tile reclaiming when user is underdog (<= 40% territory)
+        if (isReclaimed && this.app && this.app.isUnderdogTeam && this.app.isUnderdogTeam()) {
+            base = 4; // 2x double coin bonus
+            isComeback = true;
+        }
+
+        this.coins += base;
         localStorage.setItem(this.STORAGE_KEY_COINS, this.coins.toString());
         this.updateCoinUI();
         this.syncCoinsToSupabase();
+
+        if (isComeback && this.app && this.app.showToast) {
+            this.app.showToast('劣勢逆転ボーナス発動！獲得コイン2倍 (+4 COIN)');
+        }
+    }
+
+    // --- Coin Packs (IAP / Stripe / Web Simulation) ---
+    purchaseCoinPack(packId) {
+        const pack = this.PACKS[packId];
+        if (!pack) return;
+
+        // Native Capacitor StoreKit / In-App Purchase hook
+        if (window.Capacitor && window.Capacitor.isNativePlatform()) {
+            console.log('[Coins] Native StoreKit purchase hook invoked for:', packId);
+        }
+
+        // Web simulation / Stripe fallback
+        this.addCoins(pack.coins, `${pack.name} 購入`);
+        if (this.app && this.app.showToast) {
+            this.app.showToast(`【購入完了】+${pack.coins.toLocaleString()} COIN を獲得しました (${pack.name})`);
+        }
+
+        if (window.onCoinPackPurchased) {
+            window.onCoinPackPurchased(packId, pack.coins, pack.yen);
+        }
+
+        this.renderShopPanels();
+    }
+
+    // --- Viral Sharing: X (Twitter) Daily Share Bonus (+30 COIN) ---
+    canShareToXToday() {
+        const today = new Date().toISOString().split('T')[0];
+        const lastShare = localStorage.getItem('tw_last_x_share_date');
+        return lastShare !== today;
+    }
+
+    shareToX() {
+        const today = new Date().toISOString().split('T')[0];
+        const canEarn = this.canShareToXToday();
+        
+        const tiles = (this.app && this.app.statsManager && this.app.statsManager.stats) 
+            ? this.app.statsManager.stats.lifetime_tiles 
+            : 0;
+        const myTeam = this.app ? (this.app.currentTeam === 'black' ? 'Black (黒)' : 'White (白)') : 'Black';
+        const code = (this.app && this.app.statsManager) ? this.app.statsManager.getOrCreateReferralCode() : 'WALK';
+
+        const tweetText = `歩行陣取り #テリトリーウォーク で現在 ${tiles} マス開拓中！今週は【${myTeam}】陣営で白熱バトル！一緒に歩いて陣地を奪い合おう！\n招待コード: ${code}\n#TerritoryWalk`;
+        const tweetUrl = 'https://shodai4.github.io/territory-walk/';
+        const xUrl = `https://x.com/intent/tweet?text=${encodeURIComponent(tweetText)}&url=${encodeURIComponent(tweetUrl)}`;
+
+        window.open(xUrl, '_blank');
+
+        if (canEarn) {
+            localStorage.setItem('tw_last_x_share_date', today);
+            this.addCoins(30, 'Xシェアボーナス');
+            this.renderEarnPanel();
+            if (this.app && this.app.updateStatsXShareButton) {
+                this.app.updateStatsXShareButton();
+            }
+        } else {
+            if (this.app && this.app.showToast) {
+                this.app.showToast('Xシェア画面を開きました (本日のボーナスは獲得済みです)');
+            }
+        }
+    }
+
+    // --- Viral Sharing: Friend Referral (+150 COIN) ---
+    copyReferralCode() {
+        const code = this.app && this.app.statsManager ? this.app.statsManager.getOrCreateReferralCode() : '';
+        if (!code) return;
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(code).then(() => {
+                if (this.app && this.app.showToast) {
+                    this.app.showToast(`招待コード [${code}] をコピーしました`);
+                }
+            }).catch(() => {
+                prompt('招待コードをコピーしてください:', code);
+            });
+        } else {
+            prompt('招待コードをコピーしてください:', code);
+        }
+    }
+
+    shareReferralNative() {
+        const code = this.app && this.app.statsManager ? this.app.statsManager.getOrCreateReferralCode() : '';
+        const url = 'https://shodai4.github.io/territory-walk/';
+        const text = `リアル歩行陣取り「テリトリーウォーク」で白黒の陣地を奪い合おう！\n招待コード【${code}】を入力すると +150 COIN プレゼント！\n`;
+
+        if (navigator.share) {
+            navigator.share({
+                title: 'TERRITORY WALK - 白黒歩行オセロ陣取り',
+                text: text,
+                url: url
+            }).catch((err) => {
+                if (err && err.name !== 'AbortError') {
+                    this.copyReferralCode();
+                }
+            });
+        } else {
+            this.copyReferralCode();
+        }
+    }
+
+    async submitReferralCode(inputEl) {
+        if (!inputEl) return;
+        const val = inputEl.value;
+        if (!this.app || !this.app.statsManager) return;
+
+        const res = await this.app.statsManager.applyReferralCode(val);
+        if (this.app.showToast) {
+            this.app.showToast(res.message);
+        }
+        if (res.success) {
+            inputEl.value = '';
+            this.renderEarnPanel();
+        }
     }
 
     // --- DOM & Modals Initialization ---
@@ -342,7 +471,7 @@ class CoinManager {
         if (menuShopBtn) {
             menuShopBtn.addEventListener('click', () => {
                 if (this.app.menuModal) this.app.menuModal.classList.add('hidden');
-                this.openShopModal('skins');
+                this.openShopModal('packs');
             });
         }
 
@@ -367,17 +496,13 @@ class CoinManager {
             });
         }
 
-        // Shop Tabs
-        const tabEarn = document.getElementById('tab-shop-earn');
-        const tabSkins = document.getElementById('tab-shop-skins');
-        const tabTitles = document.getElementById('tab-shop-titles');
-        const tabPerks = document.getElementById('tab-shop-perks');
-
+        // Shop Tabs (5 Tabs: earn, packs, skins, titles, perks)
         const tabs = [
-            { btn: tabEarn, key: 'earn' },
-            { btn: tabSkins, key: 'skins' },
-            { btn: tabTitles, key: 'titles' },
-            { btn: tabPerks, key: 'perks' }
+            { btn: document.getElementById('tab-shop-earn'), key: 'earn' },
+            { btn: document.getElementById('tab-shop-packs'), key: 'packs' },
+            { btn: document.getElementById('tab-shop-skins'), key: 'skins' },
+            { btn: document.getElementById('tab-shop-titles'), key: 'titles' },
+            { btn: document.getElementById('tab-shop-perks'), key: 'perks' }
         ];
 
         tabs.forEach(({ btn, key }) => {
@@ -386,11 +511,40 @@ class CoinManager {
             }
         });
 
-        // Earn Coins Panel action button (Watch Ad)
+        // Earn Coins Panel action buttons
         const btnWatchAd = document.getElementById('btn-watch-reward-ad');
         if (btnWatchAd) {
             btnWatchAd.addEventListener('click', () => {
                 this.startRewardAdSimulation();
+            });
+        }
+
+        const btnXShare = document.getElementById('btn-x-share-shop');
+        if (btnXShare) {
+            btnXShare.addEventListener('click', () => {
+                this.shareToX();
+            });
+        }
+
+        const btnCopyReferral = document.getElementById('btn-copy-my-referral');
+        if (btnCopyReferral) {
+            btnCopyReferral.addEventListener('click', () => {
+                this.copyReferralCode();
+            });
+        }
+
+        const btnShareReferral = document.getElementById('btn-share-my-referral');
+        if (btnShareReferral) {
+            btnShareReferral.addEventListener('click', () => {
+                this.shareReferralNative();
+            });
+        }
+
+        const btnApplyReferral = document.getElementById('btn-apply-friend-referral');
+        const inputReferral = document.getElementById('input-friend-referral');
+        if (btnApplyReferral && inputReferral) {
+            btnApplyReferral.addEventListener('click', () => {
+                this.submitReferralCode(inputReferral);
             });
         }
     }
@@ -412,6 +566,7 @@ class CoinManager {
     switchShopTab(tabKey) {
         const tabs = {
             earn: { btn: document.getElementById('tab-shop-earn'), panel: document.getElementById('panel-shop-earn') },
+            packs: { btn: document.getElementById('tab-shop-packs'), panel: document.getElementById('panel-shop-packs') },
             skins: { btn: document.getElementById('tab-shop-skins'), panel: document.getElementById('panel-shop-skins') },
             titles: { btn: document.getElementById('tab-shop-titles'), panel: document.getElementById('panel-shop-titles') },
             perks: { btn: document.getElementById('tab-shop-perks'), panel: document.getElementById('panel-shop-perks') }
@@ -421,9 +576,9 @@ class CoinManager {
             const { btn, panel } = tabs[k];
             if (btn) {
                 if (k === tabKey) {
-                    btn.className = 'shop-tab-btn active flex-1 py-1.5 rounded-lg border-b-2 border-amber-500 font-bold text-center text-amber-400 bg-zinc-900/60';
+                    btn.className = 'shop-tab-btn active flex-1 py-1.5 px-2 rounded-lg border-b-2 border-amber-500 font-bold text-center text-amber-400 bg-zinc-900/60 shrink-0';
                 } else {
-                    btn.className = 'shop-tab-btn flex-1 py-1.5 rounded-lg border-b-2 border-transparent font-medium text-center text-zinc-400 hover:text-white';
+                    btn.className = 'shop-tab-btn flex-1 py-1.5 px-2 rounded-lg border-b-2 border-transparent font-medium text-center text-zinc-400 hover:text-white shrink-0';
                 }
             }
             if (panel) {
@@ -436,9 +591,84 @@ class CoinManager {
     }
 
     renderShopPanels() {
+        this.renderEarnPanel();
+        this.renderPacksPanel();
         this.renderSkinsPanel();
         this.renderTitlesPanel();
         this.renderPerksPanel();
+    }
+
+    renderEarnPanel() {
+        // Update X Share Button
+        const btnXShare = document.getElementById('btn-x-share-shop');
+        const canShareX = this.canShareToXToday();
+        if (btnXShare) {
+            if (canShareX) {
+                btnXShare.disabled = false;
+                btnXShare.className = 'w-full py-2 bg-zinc-100 hover:bg-white text-black font-bold font-mono text-xs rounded-lg shadow transition-all active:scale-95 flex items-center justify-center gap-1.5';
+                btnXShare.innerHTML = `
+                    <svg class="w-3.5 h-3.5 text-black" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+                    <span>Xで戦績をシェアして +30 COIN 獲得</span>
+                `;
+            } else {
+                btnXShare.disabled = true;
+                btnXShare.className = 'w-full py-2 bg-zinc-800 text-zinc-500 font-bold font-mono text-xs rounded-lg cursor-not-allowed flex items-center justify-center gap-1.5';
+                btnXShare.innerHTML = `
+                    <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                    <span>本日獲得済み (明日またシェアできます)</span>
+                `;
+            }
+        }
+
+        // Update Referral Code Display
+        const code = (this.app && this.app.statsManager) ? this.app.statsManager.getOrCreateReferralCode() : '';
+        const codeEl = document.getElementById('display-my-referral-code');
+        if (codeEl) codeEl.textContent = code;
+
+        // Update Referral Input Status
+        const used = localStorage.getItem('tw_referred_used');
+        const referralInputContainer = document.getElementById('friend-referral-input-container');
+        if (referralInputContainer) {
+            if (used) {
+                referralInputContainer.innerHTML = `
+                    <div class="bg-zinc-900 border border-zinc-800 p-2.5 rounded-lg text-center font-mono text-xs text-zinc-400">
+                        <span class="text-emerald-400 font-bold">招待特典適用済み</span> [コード: ${used}]
+                    </div>
+                `;
+            }
+        }
+    }
+
+    renderPacksPanel() {
+        const container = document.getElementById('container-shop-packs');
+        if (!container) return;
+
+        container.innerHTML = Object.values(this.PACKS).map(pack => {
+            return `
+                <div class="bg-zinc-950/80 border ${pack.id === 'premium' ? 'border-amber-500/80 ring-1 ring-amber-500/50' : 'border-zinc-800'} p-3 rounded-xl flex items-center justify-between gap-2">
+                    <div>
+                        <div class="flex items-center gap-1.5">
+                            <span class="font-bold text-xs text-white">${pack.name}</span>
+                            ${pack.bonus ? `<span class="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 text-[9px] font-mono font-bold">${pack.bonus}</span>` : ''}
+                        </div>
+                        <div class="text-[10px] text-zinc-400 leading-tight mt-0.5">${pack.desc}</div>
+                        <div class="text-amber-400 font-mono text-xs font-bold mt-1">+${pack.coins.toLocaleString()} COIN</div>
+                    </div>
+                    <div class="shrink-0">
+                        <button class="btn-buy-pack px-3 py-1.5 rounded bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-black text-xs font-bold font-mono transition-all active:scale-95 shadow" data-pack="${pack.id}">
+                            ¥${pack.yen.toLocaleString()}
+                        </button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        container.querySelectorAll('.btn-buy-pack').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const pid = e.currentTarget.dataset.pack;
+                this.purchaseCoinPack(pid);
+            });
+        });
     }
 
     renderSkinsPanel() {
@@ -477,7 +707,6 @@ class CoinManager {
             `;
         }).join('');
 
-        // Attach listeners
         container.querySelectorAll('.btn-equip-skin').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const s = e.currentTarget.dataset.skin;
@@ -535,7 +764,6 @@ class CoinManager {
             `;
         }).join('');
 
-        // Attach listeners
         container.querySelectorAll('.btn-equip-title').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const t = e.currentTarget.dataset.title;
@@ -567,7 +795,6 @@ class CoinManager {
             let actionButton = '';
 
             if (perk.id === 'poster_ticket') {
-                const canAfford = this.coins >= perk.cost;
                 actionButton = `
                     <div class="flex items-center gap-1.5">
                         <span class="text-[10px] font-mono text-zinc-400">所持: ${tickets}枚</span>
@@ -609,7 +836,6 @@ class CoinManager {
             `;
         }).join('');
 
-        // ポスター出力導線（チケット所持または無制限/Pro時）
         const hasPosterAccess = isPro || this.isPerkUnlocked('poster_permanent') || tickets > 0;
         if (hasPosterAccess) {
             container.innerHTML += `
@@ -622,7 +848,6 @@ class CoinManager {
             `;
         }
 
-        // Proサポーター集約カード
         container.innerHTML += `
             <div class="bg-gradient-to-r from-zinc-950 to-zinc-900 border border-amber-500/50 p-3 rounded-xl flex items-center justify-between gap-2 mt-2">
                 <div>
@@ -638,7 +863,6 @@ class CoinManager {
             </div>
         `;
 
-        // Attach listeners
         const exportFromShopBtn = container.querySelector('#btn-export-poster-from-shop');
         if (exportFromShopBtn) {
             exportFromShopBtn.addEventListener('click', () => {
@@ -712,7 +936,7 @@ class CoinManager {
         if (this.adTimer) clearInterval(this.adTimer);
 
         this.adSecondsLeft = 5;
-        if (timerText) timerText.textContent = `リワード付与まで: 5秒`;
+        if (timerText) timerText.textContent = 'リワード付与まで: 5秒';
         if (progressBar) progressBar.style.width = '0%';
         if (claimBtn) {
             claimBtn.classList.add('hidden');

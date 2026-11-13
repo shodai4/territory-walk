@@ -18,6 +18,7 @@ class StatsManager {
         this.app = appInstance;
 
         this.userId = this.getOrCreateUserId();
+        this.referralCode = this.getOrCreateReferralCode();
         this.nickname = localStorage.getItem('tw_nickname') || '名もなき歩行者';
         this.unlockedTitles = this.loadUnlockedTitles();
         this.activeTitle = localStorage.getItem('tw_active_title') || '';
@@ -119,6 +120,104 @@ class StatsManager {
         return uid;
     }
 
+    getOrCreateReferralCode() {
+        let code = localStorage.getItem('tw_referral_code');
+        if (!code) {
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+            let res = '';
+            for (let i = 0; i < 6; i++) {
+                res += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            code = res;
+            localStorage.setItem('tw_referral_code', code);
+        }
+        return code;
+    }
+
+    async applyReferralCode(rawCode) {
+        if (!rawCode || typeof rawCode !== 'string') {
+            return { success: false, message: '招待コードを入力してください' };
+        }
+        const code = rawCode.trim().toUpperCase();
+        if (code.length < 4 || code.length > 10) {
+            return { success: false, message: '無効な招待コードです (英数6文字)' };
+        }
+
+        const myCode = this.getOrCreateReferralCode();
+        if (code === myCode) {
+            return { success: false, message: '自分自身の招待コードは利用できません' };
+        }
+
+        const used = localStorage.getItem('tw_referred_used');
+        if (used) {
+            return { success: false, message: `招待コードはすでに適用済みです [${used}]` };
+        }
+
+        // Grant coins to current user
+        if (this.app && this.app.coinManager) {
+            this.app.coinManager.addCoins(150, '友達招待ボーナス');
+        }
+
+        localStorage.setItem('tw_referred_used', code);
+
+        // Supabase sync for inviter
+        if (this.supabaseManager && this.supabaseManager.client) {
+            try {
+                const { data: inviter } = await this.supabaseManager.client
+                    .from('territory_users')
+                    .select('user_id, coins')
+                    .eq('referral_code', code)
+                    .single();
+
+                if (inviter) {
+                    const newCoins = (inviter.coins || 0) + 150;
+                    await this.supabaseManager.client
+                        .from('territory_users')
+                        .update({ coins: newCoins, updated_at: new Date().toISOString() })
+                        .eq('user_id', inviter.user_id);
+                }
+
+                await this.supabaseManager.client
+                    .from('territory_users')
+                    .update({ referred_by: code, updated_at: new Date().toISOString() })
+                    .eq('user_id', this.userId);
+            } catch (e) {
+                console.warn('[Stats] Inviter credit sync note:', e);
+            }
+        }
+
+        return { success: true, message: `招待コード【${code}】を適用しました！双方に +150 COIN が付与されました` };
+    }
+
+    async getRecommendedTeam() {
+        if (!this.supabaseManager || !this.supabaseManager.client) {
+            return Math.random() < 0.5 ? 'white' : 'black';
+        }
+        try {
+            const { data, error } = await this.supabaseManager.client
+                .from('territory_users')
+                .select('team');
+
+            if (error || !data || data.length === 0) {
+                return Math.random() < 0.5 ? 'white' : 'black';
+            }
+
+            let blackCount = 0;
+            let whiteCount = 0;
+            data.forEach(u => {
+                if (u.team === 'black') blackCount++;
+                else if (u.team === 'white') whiteCount++;
+            });
+
+            if (blackCount < whiteCount) return 'black';
+            if (whiteCount < blackCount) return 'white';
+            return Math.random() < 0.5 ? 'white' : 'black';
+        } catch (e) {
+            console.warn('[Stats] Failed to get team balance:', e);
+            return Math.random() < 0.5 ? 'white' : 'black';
+        }
+    }
+
     async setNickname(name) {
         if (!name || typeof name !== 'string') return;
         this.nickname = name.trim().substring(0, 20) || '名もなき歩行者';
@@ -135,7 +234,7 @@ class StatsManager {
 
             // 1. Upsert territory_users
             const formattedName = this.getFormattedDisplayName();
-            await this.supabaseManager.client.from('territory_users').upsert({
+            const upsertPayload = {
                 user_id: this.userId,
                 nickname: formattedName,
                 team: myTeam,
@@ -143,8 +242,15 @@ class StatsManager {
                 lifetime_reclaimed: this.stats.lifetime_reclaimed,
                 battles_won: this.stats.battles_won,
                 battles_lost: this.stats.battles_lost,
+                referral_code: this.getOrCreateReferralCode(),
                 updated_at: new Date().toISOString()
-            }, { onConflict: 'user_id' });
+            };
+            try {
+                await this.supabaseManager.client.from('territory_users').upsert(upsertPayload, { onConflict: 'user_id' });
+            } catch (err) {
+                delete upsertPayload.referral_code;
+                await this.supabaseManager.client.from('territory_users').upsert(upsertPayload, { onConflict: 'user_id' });
+            }
 
             // 2. Update territory_weekly_rankings
             await this.supabaseManager.client.from('territory_weekly_rankings').update({

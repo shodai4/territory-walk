@@ -55,6 +55,9 @@ CREATE TABLE IF NOT EXISTS territory_users (
 
 -- Migration for existing tables:
 ALTER TABLE territory_users ADD COLUMN IF NOT EXISTS coins INTEGER NOT NULL DEFAULT 100;
+ALTER TABLE territory_users ADD COLUMN IF NOT EXISTS referral_code TEXT;
+ALTER TABLE territory_users ADD COLUMN IF NOT EXISTS referred_by TEXT;
+CREATE INDEX IF NOT EXISTS idx_territory_users_referral_code ON territory_users (referral_code);
 
 -- 2. Weekly Rankings Table (territory_weekly_rankings)
 CREATE TABLE IF NOT EXISTS territory_weekly_rankings (
