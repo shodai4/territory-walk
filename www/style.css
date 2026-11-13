@@ -37,7 +37,7 @@ html, body {
 
 /* Map tiles hidden (Black/White Othello Mode) */
 #map.map-tiles-hidden, #map.map-tiles-hidden .leaflet-container {
-    background-color: #09090b !important; /* Zinc-950 漆黒キャンバス */
+    background-color: #262a34 !important; /* 未開拓エリア: 落ち着いたダークグレー (黒マスとの同化防止) */
 }
 #map.map-tiles-hidden .leaflet-tile-pane {
     display: none !important;

@@ -788,11 +788,52 @@ class TerritoryWalkApp {
 
     async loadWeeklyRankings() {
         const listEl = document.getElementById('list-weekly-rank');
+        const myRankEl = document.getElementById('my-weekly-rank');
         if (!listEl || !this.statsManager || !this.supabaseManager) return;
+
+        if (myRankEl) {
+            myRankEl.innerHTML = `
+                <span class="text-zinc-400">あなたの順位:</span>
+                <span id="my-weekly-rank-value" class="font-bold text-zinc-400 font-mono">集計中...</span>
+            `;
+        }
 
         listEl.innerHTML = '<li class="text-zinc-500 text-center py-2">読み込み中...</li>';
         const weekId = this.supabaseManager.getCurrentWeekId();
         const data = await this.statsManager.getWeeklyLeaderboard(weekId);
+
+        // 自分の順位判定・DOM反映
+        let myRankText = '未参加 (0マス)';
+        let myRankColor = 'text-zinc-400';
+
+        if (data && Array.isArray(data) && data.length > 0 && !data[0].message) {
+            const myIdx = data.findIndex(item => item.user_id === this.statsManager.userId || item.nickname === this.statsManager.nickname);
+            if (myIdx !== -1) {
+                const rank = myIdx + 1;
+                const tiles = data[myIdx].tiles_count || 0;
+                myRankText = `${rank}位 (${tiles}マス)`;
+                myRankColor = 'text-amber-400';
+            } else if (typeof this.statsManager.getMyWeeklyRank === 'function') {
+                const myRankInfo = await this.statsManager.getMyWeeklyRank(weekId);
+                if (myRankInfo) {
+                    myRankText = myRankInfo.text || '未参加 (0マス)';
+                    myRankColor = myRankInfo.tilesCount > 0 ? 'text-amber-400' : 'text-zinc-400';
+                }
+            }
+        } else if (typeof this.statsManager.getMyWeeklyRank === 'function') {
+            const myRankInfo = await this.statsManager.getMyWeeklyRank(weekId);
+            if (myRankInfo) {
+                myRankText = myRankInfo.text || '未参加 (0マス)';
+                myRankColor = myRankInfo.tilesCount > 0 ? 'text-amber-400' : 'text-zinc-400';
+            }
+        }
+
+        if (myRankEl) {
+            myRankEl.innerHTML = `
+                <span class="text-zinc-400">あなたの順位:</span>
+                <span id="my-weekly-rank-value" class="font-bold font-mono ${myRankColor}">${myRankText}</span>
+            `;
+        }
 
         if (!data || data.length === 0 || data[0].message) {
             listEl.innerHTML = '<li class="text-zinc-500 text-center py-2">今週の記録はまだありません</li>';
@@ -1689,6 +1730,16 @@ class TerritoryWalkApp {
                 if (this.gridManager) this.gridManager.redrawTiles();
                 this.updateScoreUI();
                 this.showToast('【デバッグ】White陣営に変更しました');
+            });
+        }
+
+        // Debug Reset Purchased Items
+        const btnDebugResetPurchases = document.getElementById('btn-debug-reset-purchases');
+        if (btnDebugResetPurchases) {
+            btnDebugResetPurchases.addEventListener('click', () => {
+                if (this.coinManager && typeof this.coinManager.resetPurchasedItems === 'function') {
+                    this.coinManager.resetPurchasedItems();
+                }
             });
         }
 

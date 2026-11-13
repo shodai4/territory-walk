@@ -336,6 +336,46 @@ class StatsManager {
         return data || [];
     }
 
+    async getMyWeeklyRank(weekId) {
+        if (!this.supabaseManager || !this.supabaseManager.client) {
+            return { rank: '--', tilesCount: 0, text: 'オフライン' };
+        }
+        try {
+            const { data: myData, error: myErr } = await this.supabaseManager.client
+                .from('territory_weekly_rankings')
+                .select('tiles_count')
+                .eq('week_id', weekId)
+                .eq('user_id', this.userId)
+                .maybeSingle();
+
+            if (myErr || !myData || !myData.tiles_count || myData.tiles_count === 0) {
+                return { rank: '未参加', tilesCount: 0, text: '未参加 (0マス)' };
+            }
+
+            const myTiles = myData.tiles_count;
+            const { count, error: countErr } = await this.supabaseManager.client
+                .from('territory_weekly_rankings')
+                .select('*', { count: 'exact', head: true })
+                .eq('week_id', weekId)
+                .gt('tiles_count', myTiles);
+
+            if (countErr || count === null || count === undefined) {
+                return { rank: '集計中', tilesCount: myTiles, text: `${myTiles}マス` };
+            }
+
+            const rank = count + 1;
+            const rankLabel = rank <= 10 ? `${rank}位` : '圏外';
+            return {
+                rank: rank,
+                tilesCount: myTiles,
+                text: `${rankLabel} (${myTiles}マス)`
+            };
+        } catch (e) {
+            console.warn('[Stats] getMyWeeklyRank error:', e);
+            return { rank: '--', tilesCount: 0, text: '集計エラー' };
+        }
+    }
+
     async getLifetimeLeaderboard() {
         if (!this.supabaseManager || !this.supabaseManager.client) {
             return [{ message: '現在オフラインです' }];

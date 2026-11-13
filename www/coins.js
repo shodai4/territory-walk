@@ -365,6 +365,48 @@ class CoinManager {
         this.renderShopPanels();
     }
 
+    resetPurchasedItems() {
+        // 1. スキン初期化
+        this.unlockedSkins = ['default'];
+        localStorage.setItem(this.STORAGE_KEY_UNLOCKED_SKINS, JSON.stringify(['default']));
+        document.body.dataset.skin = 'default';
+        localStorage.setItem('territory_skin', 'default');
+        if (this.app.updateSkinBadge) this.app.updateSkinBadge('default');
+        if (this.app.updateCycleSkinButtonUI) this.app.updateCycleSkinButtonUI();
+        if (this.app.gridManager) this.app.gridManager.redrawTiles();
+
+        // 2. パーク・特別機能初期化
+        this.unlockedPerks = [];
+        localStorage.setItem(this.STORAGE_KEY_UNLOCKED_PERKS, JSON.stringify([]));
+        localStorage.removeItem(this.STORAGE_KEY_POSTER_TICKETS);
+        document.body.removeAttribute('data-pin-effect');
+        localStorage.removeItem('tw_pin_effect');
+
+        // 3. 広告非表示パス (Ad-Free) 解除
+        this.setAdFree(false);
+
+        // 4. Proアンロック情報初期化
+        localStorage.removeItem('tw_pro_unlocked');
+        if (this.app.proManager) {
+            this.app.proManager.isPro = false;
+        }
+
+        // 5. 称号初期化
+        if (this.app.statsManager) {
+            this.app.statsManager.unlockedTitles = ['初陣'];
+            this.app.statsManager.activeTitle = '';
+            localStorage.setItem('tw_unlocked_titles', JSON.stringify(['初陣']));
+            localStorage.setItem('tw_active_title', '');
+        }
+
+        // 6. ショップ画面再描画
+        this.renderShopPanels();
+
+        if (this.app && this.app.showToast) {
+            this.app.showToast('購入アイテムリセット完了', 'テーマ・機能・広告パスを初期化しました');
+        }
+    }
+
     // --- Step-Up Walking Bonus System ---
     getStepUpBonusInfo() {
         const todayStr = new Date().toISOString().split('T')[0];

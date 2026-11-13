@@ -9,7 +9,7 @@
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
     <!-- Custom CSS -->
-    <link rel="stylesheet" href="style.css?v=20261113v19">
+    <link rel="stylesheet" href="style.css?v=20261113v20">
 </head>
 <body class="bg-black text-white overflow-hidden overflow-x-hidden h-screen w-screen max-w-full flex flex-col m-0 p-0 select-none" data-theme="black" data-skin="default">
 
@@ -245,15 +245,6 @@
                 <span>ランキング・マイ戦績</span>
             </button>
 
-            <!-- 2. 地図検索 (遠隔地の塗り状況を見る) -->
-            <button id="btn-open-search-from-menu" class="w-full py-2.5 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 border border-zinc-700 text-sky-400 font-mono text-xs font-bold rounded-xl shadow transition-all active:scale-95 flex items-center justify-center gap-1.5 shrink-0">
-                <svg class="w-4 h-4 text-sky-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="11" cy="11" r="8"></circle>
-                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                </svg>
-                <span>地図検索 (遠隔地の塗り状況を見る)</span>
-            </button>
-
             <!-- 3. 統合アコーディオン: テーマ・マップ設定 -->
             <details class="group bg-zinc-950/80 border border-zinc-800 rounded-xl shrink-0">
                 <summary class="flex items-center justify-between p-2.5 cursor-pointer text-xs font-bold text-white select-none list-none">
@@ -358,6 +349,14 @@
                                 <span>Whiteに変更</span>
                             </button>
                         </div>
+                    </div>
+
+                    <!-- デバッグ購入アイテムリセット -->
+                    <div class="pt-2 border-t border-zinc-900/80 space-y-1.5">
+                        <div class="text-[10px] text-zinc-400 font-mono">購入アイテム検証:</div>
+                        <button id="btn-debug-reset-purchases" class="w-full py-2 px-2 bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-700 border border-zinc-800 text-[10px] font-mono text-fuchsia-400 rounded-lg text-center transition-all active:scale-95 flex items-center justify-center gap-1.5">
+                            <span>購入アイテムをリセット (初期状態に戻す)</span>
+                        </button>
                     </div>
                 </div>
             </details>
@@ -942,16 +941,16 @@
     <!-- Supabase JS v2 CDN -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <!-- Feature Modules -->
-    <script src="poster.js?v=20261113v19"></script>
-    <script src="pro.js?v=20261113v19"></script>
-    <script src="search.js?v=20261113v19"></script>
-    <script src="coins.js?v=20261113v19"></script>
-    <script src="admob.js?v=20261113v19"></script>
-    <script src="iap.js?v=20261113v19"></script>
-    <script src="stats.js?v=20261113v19"></script>
-    <script src="supabase.js?v=20261113v19"></script>
-    <script src="grid.js?v=20261113v19"></script>
+    <script src="poster.js?v=20261113v20"></script>
+    <script src="pro.js?v=20261113v20"></script>
+    <script src="search.js?v=20261113v20"></script>
+    <script src="coins.js?v=20261113v20"></script>
+    <script src="admob.js?v=20261113v20"></script>
+    <script src="iap.js?v=20261113v20"></script>
+    <script src="stats.js?v=20261113v20"></script>
+    <script src="supabase.js?v=20261113v20"></script>
+    <script src="grid.js?v=20261113v20"></script>
     <!-- Main Application Logic -->
-    <script src="app.js?v=20261113v19"></script>
+    <script src="app.js?v=20261113v20"></script>
 </body>
 </html>
