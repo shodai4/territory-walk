@@ -189,10 +189,11 @@ class StatsManager {
         try {
             const weekId = this.supabaseManager.getCurrentWeekId();
             const myTeam = this.app && this.app.currentTeam ? this.app.currentTeam : 'black';
+            const displayName = this.getFormattedDisplayName();
 
             await this.supabaseManager.client.from('territory_users').upsert({
                 user_id: this.userId,
-                nickname: this.nickname,
+                nickname: displayName,
                 team: myTeam,
                 lifetime_tiles: this.stats.lifetime_tiles,
                 lifetime_reclaimed: this.stats.lifetime_reclaimed,
@@ -211,7 +212,7 @@ class StatsManager {
             await this.supabaseManager.client.from('territory_weekly_rankings').upsert({
                 week_id: weekId,
                 user_id: this.userId,
-                nickname: this.nickname,
+                nickname: displayName,
                 team: myTeam,
                 tiles_count: (existing ? existing.tiles_count : 0) + tilesToSync,
                 reclaimed_count: (existing ? existing.reclaimed_count : 0) + reclaimedToSync,
@@ -242,11 +243,88 @@ class StatsManager {
         if (!this.supabaseManager || !this.supabaseManager.client) {
             return [{ message: '現在オフラインです' }];
         }
-        const { data } = await this.supabaseManager.client
-            .from('territory_users')
-            .select('user_id, nickname, lifetime_tiles')
-            .order('lifetime_tiles', { ascending: false })
-            .limit(10);
-        return data || [];
+        try {
+            const { data } = await this.supabaseManager.client
+                .from('territory_users')
+                .select('user_id, nickname, lifetime_tiles')
+                .order('lifetime_tiles', { ascending: false })
+                .limit(10);
+            return data || [];
+        } catch (e) {
+            return [{ message: '現在オフラインです' }];
+        }
+    }
+
+    async getLifetimeReclaimedLeaderboard() {
+        if (!this.supabaseManager || !this.supabaseManager.client) {
+            return [];
+        }
+        try {
+            const { data } = await this.supabaseManager.client
+                .from('territory_users')
+                .select('user_id, nickname, lifetime_reclaimed')
+                .order('lifetime_reclaimed', { ascending: false })
+                .limit(10);
+            return data || [];
+        } catch (e) {
+            console.warn('[Stats] Failed to get reclaim leaderboard:', e);
+            return [];
+        }
+    }
+
+    async getPreviousWeekResult(prevWeekId) {
+        if (!this.supabaseManager || !this.supabaseManager.client) {
+            return null;
+        }
+        try {
+            const { data } = await this.supabaseManager.client
+                .from('territory_weekly_rankings')
+                .select('user_id, team, tiles_count')
+                .eq('week_id', prevWeekId);
+
+            let blackTotal = 0;
+            let whiteTotal = 0;
+            let myTiles = 0;
+            let myTeam = this.app ? this.app.currentTeam : 'black';
+
+            if (data && data.length > 0) {
+                data.forEach(row => {
+                    if (row.team === 'black') blackTotal += (row.tiles_count || 0);
+                    if (row.team === 'white') whiteTotal += (row.tiles_count || 0);
+                    if (row.user_id === this.userId) {
+                        myTiles = row.tiles_count || 0;
+                        if (row.team) myTeam = row.team;
+                    }
+                });
+            }
+
+            const total = blackTotal + whiteTotal;
+            const blackPct = total > 0 ? Math.round((blackTotal / total) * 100) : 50;
+            const whitePct = total > 0 ? 100 - blackPct : 50;
+
+            let winnerTeam = 'draw';
+            if (blackTotal > whiteTotal) winnerTeam = 'black';
+            else if (whiteTotal > blackTotal) winnerTeam = 'white';
+
+            let isWin = false;
+            let isDraw = (winnerTeam === 'draw');
+            if (winnerTeam === myTeam) isWin = true;
+
+            return {
+                weekId: prevWeekId,
+                blackTotal,
+                whiteTotal,
+                blackPct,
+                whitePct,
+                winnerTeam,
+                myTeam,
+                myTiles,
+                isWin,
+                isDraw
+            };
+        } catch (e) {
+            console.warn('[Stats] Failed to fetch prev week result:', e);
+            return null;
+        }
     }
 }

@@ -38,7 +38,9 @@ class TerritoryWalkApp {
         this.initMap();
         this.initGrid();
         this.initSkinSelector();
+        this.initMapThemeSelector();
         this.initStatsModal();
+        this.initWeeklyResultModal();
         this.initProModal();
         this.initExportButton();
         this.initGeolocation();
@@ -54,6 +56,9 @@ class TerritoryWalkApp {
                 this.showToast(`DAILY BONUS: 連続ログイン ${bonus.streak}日目達成！`);
             }, 1200);
         }
+
+        // Check Season / Weekly Reset Result
+        this.checkWeeklyResetResult();
 
         // Periodic polling fallback (every 8s) to ensure other players' tiles appear even without map drag
         setInterval(() => {
@@ -279,6 +284,46 @@ class TerritoryWalkApp {
         badge.textContent = labels[skin] || skin;
     }
 
+    initMapThemeSelector() {
+        const savedTheme = localStorage.getItem('tw_map_theme') || 'dark';
+        this.setMapTheme(savedTheme, false);
+
+        const themeButtons = document.querySelectorAll('.map-theme-btn');
+        themeButtons.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const targetTheme = e.currentTarget.dataset.mapTheme;
+                this.setMapTheme(targetTheme, true);
+            });
+        });
+    }
+
+    setMapTheme(theme, notify = false) {
+        document.body.setAttribute('data-map-theme', theme);
+        localStorage.setItem('tw_map_theme', theme);
+        this.updateMapThemeBadge(theme);
+        if (notify) {
+            const labels = {
+                dark: 'ダーク',
+                mono: 'モノクロ',
+                street: 'ストリート',
+                sepia: 'セピア'
+            };
+            this.showToast(`地図カラー変更: ${labels[theme] || theme}`);
+        }
+    }
+
+    updateMapThemeBadge(theme) {
+        const badge = document.getElementById('current-map-theme-badge');
+        if (!badge) return;
+        const labels = {
+            dark: 'ダーク (Dark)',
+            mono: 'モノクロ (Mono)',
+            street: 'ストリート (Street)',
+            sepia: 'セピア (Sepia)'
+        };
+        badge.textContent = labels[theme] || theme;
+    }
+
     initStatsModal() {
         const modal = document.getElementById('stats-modal');
         const openBtn = document.getElementById('btn-open-stats');
@@ -297,6 +342,11 @@ class TerritoryWalkApp {
         const closeModal = () => modal.classList.add('hidden');
         if (closeBtn) closeBtn.addEventListener('click', closeModal);
         if (footerCloseBtn) footerCloseBtn.addEventListener('click', closeModal);
+
+        // Close on backdrop overlay click
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) closeModal();
+        });
 
         // Tab buttons
         const tabs = ['my-stats', 'weekly-rank', 'lifetime-rank'];
@@ -402,6 +452,15 @@ class TerritoryWalkApp {
         if (battleEl) battleEl.textContent = `${stats.battles_won}勝 ${stats.battles_lost}敗`;
     }
 
+    parseNicknameAndTitle(raw) {
+        if (!raw) return { name: '名もなき歩行者', title: '' };
+        const match = String(raw).match(/^\[(.*?)\]\s*(.*)$/);
+        if (match) {
+            return { title: match[1], name: match[2] || '名もなき歩行者' };
+        }
+        return { title: '', name: String(raw) };
+    }
+
     async loadWeeklyRankings() {
         const listEl = document.getElementById('list-weekly-rank');
         if (!listEl || !this.statsManager || !this.supabaseManager) return;
@@ -417,38 +476,191 @@ class TerritoryWalkApp {
 
         listEl.innerHTML = data.map((item, idx) => {
             const isMe = item.user_id === this.statsManager.userId || item.nickname === this.statsManager.nickname;
+            const parsed = this.parseNicknameAndTitle(item.nickname);
             return `
-            <li class="flex items-center justify-between py-1.5 px-2 rounded border-b border-zinc-800 ${isMe ? 'bg-amber-500/10 border-amber-500/40' : ''}">
-                <span class="font-bold ${idx < 3 ? 'text-amber-400' : 'text-zinc-300'}">
-                    ${idx + 1}. ${item.nickname} ${isMe ? '<span class="text-[9px] bg-amber-400 text-black px-1.5 py-0.5 rounded font-bold ml-1">YOU</span>' : ''}
-                </span>
-                <span class="font-mono text-zinc-400">${item.tiles_count} マス</span>
+            <li class="flex items-center justify-between py-2 px-2.5 rounded-lg border-b border-zinc-800/80 ${isMe ? 'bg-amber-500/10 border-amber-500/30' : 'hover:bg-zinc-800/40'} text-xs">
+                <div class="flex items-center gap-2 min-w-0 pr-2">
+                    <span class="font-bold font-mono text-xs ${idx < 3 ? 'text-amber-400' : 'text-zinc-400'} shrink-0 w-4 text-right">${idx + 1}</span>
+                    <span class="truncate font-medium text-zinc-200">${parsed.name}</span>
+                    ${parsed.title ? `<span class="text-[9px] px-1.5 py-0.5 bg-zinc-800 border border-zinc-700 text-amber-400 rounded shrink-0 font-mono font-normal">${parsed.title}</span>` : ''}
+                    ${isMe ? '<span class="text-[9px] bg-amber-400 text-black px-1.5 py-0.5 rounded font-bold shrink-0 font-mono">YOU</span>' : ''}
+                </div>
+                <span class="font-mono text-zinc-300 font-bold shrink-0 text-right">${item.tiles_count || 0} <span class="text-[10px] text-zinc-500 font-normal">マス</span></span>
             </li>`;
         }).join('');
     }
 
     async loadLifetimeRankings() {
         const listEl = document.getElementById('list-lifetime-rank');
-        if (!listEl || !this.statsManager) return;
+        const reclaimListEl = document.getElementById('list-reclaim-rank');
+        if (!this.statsManager) return;
 
-        listEl.innerHTML = '<li class="text-zinc-500 text-center py-2">読み込み中...</li>';
-        const data = await this.statsManager.getLifetimeLeaderboard();
+        if (listEl) {
+            listEl.innerHTML = '<li class="text-zinc-500 text-center py-2">読み込み中...</li>';
+            const data = await this.statsManager.getLifetimeLeaderboard();
 
-        if (!data || data.length === 0 || data[0].message) {
-            listEl.innerHTML = '<li class="text-zinc-500 text-center py-2">記録がありません</li>';
+            if (!data || data.length === 0 || data[0].message) {
+                listEl.innerHTML = '<li class="text-zinc-500 text-center py-2">記録がありません</li>';
+            } else {
+                listEl.innerHTML = data.map((item, idx) => {
+                    const isMe = item.user_id === this.statsManager.userId || item.nickname === this.statsManager.nickname;
+                    const parsed = this.parseNicknameAndTitle(item.nickname);
+                    return `
+                    <li class="flex items-center justify-between py-2 px-2.5 rounded-lg border-b border-zinc-800/80 ${isMe ? 'bg-amber-500/10 border-amber-500/30' : 'hover:bg-zinc-800/40'} text-xs">
+                        <div class="flex items-center gap-2 min-w-0 pr-2">
+                            <span class="font-bold font-mono text-xs ${idx < 3 ? 'text-amber-400' : 'text-zinc-400'} shrink-0 w-4 text-right">${idx + 1}</span>
+                            <span class="truncate font-medium text-zinc-200">${parsed.name}</span>
+                            ${parsed.title ? `<span class="text-[9px] px-1.5 py-0.5 bg-zinc-800 border border-zinc-700 text-amber-400 rounded shrink-0 font-mono font-normal">${parsed.title}</span>` : ''}
+                            ${isMe ? '<span class="text-[9px] bg-amber-400 text-black px-1.5 py-0.5 rounded font-bold shrink-0 font-mono">YOU</span>' : ''}
+                        </div>
+                        <span class="font-mono text-zinc-300 font-bold shrink-0 text-right">${item.lifetime_tiles || 0} <span class="text-[10px] text-zinc-500 font-normal">マス</span></span>
+                    </li>`;
+                }).join('');
+            }
+        }
+
+        if (reclaimListEl) {
+            reclaimListEl.innerHTML = '<li class="text-zinc-500 text-center py-2">読み込み中...</li>';
+            const reclaimData = await this.statsManager.getLifetimeReclaimedLeaderboard();
+
+            if (!reclaimData || reclaimData.length === 0) {
+                reclaimListEl.innerHTML = '<li class="text-zinc-500 text-center py-2">記録がありません</li>';
+            } else {
+                reclaimListEl.innerHTML = reclaimData.map((item, idx) => {
+                    const isMe = item.user_id === this.statsManager.userId || item.nickname === this.statsManager.nickname;
+                    const parsed = this.parseNicknameAndTitle(item.nickname);
+                    return `
+                    <li class="flex items-center justify-between py-2 px-2.5 rounded-lg border-b border-zinc-800/80 ${isMe ? 'bg-amber-500/10 border-amber-500/30' : 'hover:bg-zinc-800/40'} text-xs">
+                        <div class="flex items-center gap-2 min-w-0 pr-2">
+                            <span class="font-bold font-mono text-xs ${idx < 3 ? 'text-emerald-400' : 'text-zinc-400'} shrink-0 w-4 text-right">${idx + 1}</span>
+                            <span class="truncate font-medium text-zinc-200">${parsed.name}</span>
+                            ${parsed.title ? `<span class="text-[9px] px-1.5 py-0.5 bg-zinc-800 border border-zinc-700 text-amber-400 rounded shrink-0 font-mono font-normal">${parsed.title}</span>` : ''}
+                            ${isMe ? '<span class="text-[9px] bg-amber-400 text-black px-1.5 py-0.5 rounded font-bold shrink-0 font-mono">YOU</span>' : ''}
+                        </div>
+                        <span class="font-mono text-emerald-400 font-bold shrink-0 text-right">${item.lifetime_reclaimed || 0} <span class="text-[10px] text-zinc-500 font-normal">マス</span></span>
+                    </li>`;
+                }).join('');
+            }
+        }
+    }
+
+    initWeeklyResultModal() {
+        const modal = document.getElementById('weekly-result-modal');
+        const closeBtn = document.getElementById('btn-close-weekly-result');
+        const openFromMenuBtn = document.getElementById('btn-open-weekly-result');
+
+        if (closeBtn && modal) {
+            closeBtn.addEventListener('click', () => {
+                modal.classList.add('hidden');
+                const currentWeek = this.supabaseManager.getCurrentWeekId();
+                localStorage.setItem('tw_last_seen_week', currentWeek);
+                this.showToast('新シーズンスタート！陣地を開拓しましょう');
+            });
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    modal.classList.add('hidden');
+                    const currentWeek = this.supabaseManager.getCurrentWeekId();
+                    localStorage.setItem('tw_last_seen_week', currentWeek);
+                }
+            });
+        }
+
+        if (openFromMenuBtn) {
+            openFromMenuBtn.addEventListener('click', () => {
+                if (this.menuModal) this.menuModal.classList.add('hidden');
+                this.showWeeklyResultModal(true);
+            });
+        }
+    }
+
+    async checkWeeklyResetResult() {
+        if (!this.supabaseManager || !this.statsManager) return;
+        const currentWeek = this.supabaseManager.getCurrentWeekId();
+        const lastSeen = localStorage.getItem('tw_last_seen_week');
+
+        // If first time ever on this device, just mark current week
+        if (!lastSeen) {
+            localStorage.setItem('tw_last_seen_week', currentWeek);
             return;
         }
 
-        listEl.innerHTML = data.map((item, idx) => {
-            const isMe = item.user_id === this.statsManager.userId || item.nickname === this.statsManager.nickname;
-            return `
-            <li class="flex items-center justify-between py-1.5 px-2 rounded border-b border-zinc-800 ${isMe ? 'bg-amber-500/10 border-amber-500/40' : ''}">
-                <span class="font-bold ${idx < 3 ? 'text-amber-400' : 'text-zinc-300'}">
-                    ${idx + 1}. ${item.nickname} ${isMe ? '<span class="text-[9px] bg-amber-400 text-black px-1.5 py-0.5 rounded font-bold ml-1">YOU</span>' : ''}
-                </span>
-                <span class="font-mono text-zinc-400">${item.lifetime_tiles} マス</span>
-            </li>`;
-        }).join('');
+        if (lastSeen !== currentWeek) {
+            // New week has arrived!
+            setTimeout(() => {
+                this.showWeeklyResultModal(false, lastSeen);
+            }, 1000);
+        }
+    }
+
+    async showWeeklyResultModal(isManual = false, targetWeek = null) {
+        const modal = document.getElementById('weekly-result-modal');
+        if (!modal) return;
+
+        const currentWeek = this.supabaseManager.getCurrentWeekId();
+        const weekToShow = targetWeek || this.getPreviousWeekId(currentWeek);
+
+        document.getElementById('result-week-id').textContent = weekToShow;
+        document.getElementById('result-winner-banner').textContent = '集計中...';
+        modal.classList.remove('hidden');
+
+        const result = await this.statsManager.getPreviousWeekResult(weekToShow);
+        if (!result) {
+            document.getElementById('result-winner-banner').textContent = '記録なし';
+            document.getElementById('result-winner-subtitle').textContent = `${weekToShow} の対戦データはありません`;
+            document.getElementById('result-score-black').textContent = '-';
+            document.getElementById('result-score-white').textContent = '-';
+            document.getElementById('result-my-team').textContent = this.currentTeam === 'black' ? 'Black' : 'White';
+            document.getElementById('result-my-tiles').textContent = '0 マス';
+            document.getElementById('result-battle-outcome').textContent = '対戦なし';
+            return;
+        }
+
+        const banner = document.getElementById('result-winner-banner');
+        const outcome = document.getElementById('result-battle-outcome');
+
+        if (result.winnerTeam === 'black') {
+            banner.innerHTML = '<span class="text-zinc-100">BLACK TEAM WIN</span>';
+        } else if (result.winnerTeam === 'white') {
+            banner.innerHTML = '<span class="text-zinc-100">WHITE TEAM WIN</span>';
+        } else {
+            banner.innerHTML = '<span class="text-amber-400">DRAW (引き分け)</span>';
+        }
+
+        document.getElementById('result-score-black').textContent = `${result.blackPct}% (${result.blackTotal}マス)`;
+        document.getElementById('result-score-white').textContent = `${result.whitePct}% (${result.whiteTotal}マス)`;
+        document.getElementById('result-my-team').textContent = result.myTeam === 'black' ? 'Black' : 'White';
+        document.getElementById('result-my-tiles').textContent = `${result.myTiles.toLocaleString()} マス`;
+
+        if (result.isDraw) {
+            outcome.innerHTML = '<span class="text-zinc-400">引き分け</span>';
+        } else if (result.isWin) {
+            outcome.innerHTML = '<span class="text-amber-400 font-bold">VICTORY (勝利陣営)</span>';
+            if (!isManual) {
+                this.statsManager.stats.battles_won += 1;
+                this.statsManager.saveLocalStats();
+            }
+        } else {
+            outcome.innerHTML = '<span class="text-zinc-400">DEFEAT (敗北陣営)</span>';
+            if (!isManual) {
+                this.statsManager.stats.battles_lost += 1;
+                this.statsManager.saveLocalStats();
+            }
+        }
+    }
+
+    getPreviousWeekId(currentWeekId) {
+        // e.g., '2026-W46' -> '2026-W45'
+        const parts = currentWeekId.split('-W');
+        if (parts.length === 2) {
+            const year = parseInt(parts[0], 10);
+            const week = parseInt(parts[1], 10);
+            if (week > 1) {
+                return `${year}-W${String(week - 1).padStart(2, '0')}`;
+            } else {
+                return `${year - 1}-W52`;
+            }
+        }
+        return currentWeekId;
     }
 
     initProModal() {
@@ -472,7 +684,7 @@ class TerritoryWalkApp {
                 const input = document.getElementById('input-pro-code');
                 const code = input ? input.value : '';
                 if (this.proManager && this.proManager.activateCode(code)) {
-                    alert('🎉 Proサポーター機能が有効になりました！限定スキンとポスター出力をご利用いただけます。');
+                    alert('Proサポーター機能が有効になりました！限定スキンとポスター出力をご利用いただけます。');
                     modal.classList.add('hidden');
                     this.renderTeamBadge();
                     this.updateStatsDisplay();
@@ -506,7 +718,7 @@ class TerritoryWalkApp {
             if (!this.checkProAccess('ポスター保存')) return;
 
             const originalHtml = exportBtn.innerHTML;
-            exportBtn.innerHTML = '<span>⏳ ポスター生成中...</span>';
+            exportBtn.innerHTML = '<span>ポスター生成中...</span>';
             exportBtn.disabled = true;
 
             try {

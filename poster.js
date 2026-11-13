@@ -53,7 +53,7 @@ class PosterGenerator {
         
         ctx.fillStyle = '#71717a';
         ctx.font = '20px monospace';
-        ctx.fillText('Created with ❤️ for お絵描き楽しも委員会', 80, 1550);
+        ctx.fillText('Created for お絵描き楽しも委員会', 80, 1550);
 
         // 5. Output
         canvas.toBlob(async (blob) => {

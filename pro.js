@@ -24,7 +24,7 @@ class ProManager {
     getSupporterBadgeHtml() {
         return `
             <span class="inline-flex items-center gap-0.5 bg-gradient-to-r from-amber-300 to-amber-600 text-[9px] font-bold text-black px-1.5 py-0.5 rounded shadow-sm">
-                ★ SUPPORTER
+                PRO SUPPORTER
             </span>
         `;
     }
