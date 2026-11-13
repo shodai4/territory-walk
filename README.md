@@ -83,3 +83,44 @@ npx cap open ios
 - `NSLocationAlwaysAndWhenInUseUsageDescription`（バックグラウンド歩行・画面消灯時の追従）
 - `UIBackgroundModes: ["location"]`（バックグラウンドGPS位置情報更新）
 - `UIViewControllerBasedStatusBarAppearance: false`（ダークテーマステータスバー）
+
+---
+
+## 課金（IAP）の仕組み
+
+iOS の課金は `cordova-plugin-purchase`（CdvPurchase v13+、StoreKit 連携）で実装しています（`iap.js`）。
+
+- 購入フロー: 注文 → `approved` → レシート検証 `verify()` → `verified` で初めて特典を付与 → `finish()`
+- ネイティブでは検証済みレシート以外からコイン／特典を付与しません。プラグイン未読込時は購入を中断します（無料付与のフォールバックはありません）
+- 消耗型コインパックはトランザクションID単位で付与済み記録（localStorage `tw_iap_processed_tx_v1`）を持ち、二重付与を防ぎます
+- ショップの価格表示は App Store から取得したローカライズ価格を優先し、未取得時のみカタログ価格（円）を表示します
+- 復元（Restore）対象は非消耗型の広告非表示パスのみです。消耗型コインパックは Apple の仕様上復元できません
+
+### サーバー側レシート検証（任意）
+
+既定ではプラグインが端末側でレシートを検証します。本番でサーバー検証を行う場合は、レシートJSONを POST で受け取り `{ "ok": true }` を返すエンドポイント（Supabase Edge Function 等）を用意し、アプリ読み込み前に以下を設定してください。
+
+```js
+window.TW_IAP_VALIDATOR_URL = 'https://<your-project>.supabase.co/functions/v1/verify-iap';
+```
+
+設定がある場合のみ `store.validator` に割り当てられます。
+
+## App Store Connect で必要な登録（課金）
+
+コード側の商品IDと **完全一致** する商品を App Store Connect に登録する必要があります。
+
+| 商品ID | 種別 | 価格（目安） | 内容 |
+|---|---|---|---|
+| `com.shodai.territorywalk.coins1000` | 消耗型 | ¥120 | 1,000 COIN（ビギナーパック） |
+| `com.shodai.territorywalk.coins4500` | 消耗型 | ¥500 | 4,500 COIN（スタンダードパック） |
+| `com.shodai.territorywalk.coins14000` | 消耗型 | ¥1,500 | 14,000 COIN（プレミアムパック） |
+| `com.shodai.territorywalk.coins50000` | 消耗型 | ¥5,000 | 50,000 COIN（アルティメットパック） |
+| `com.shodai.territorywalk.adfree` | 非消耗型 | ¥480 | 広告完全非表示パス |
+
+手順の要点:
+
+1. App Store Connect で「有料アプリ」契約（Paid Apps Agreement）と銀行口座・税務情報を有効化する
+2. 上記5商品を作成し、表示名・説明・価格を設定する（初回はアプリバージョンと一緒に審査へ提出）
+3. Sandbox テスターを作成し、実機（TestFlight 含む）で購入・キャンセル・復元・二重付与防止を検証する
+4. 商品IDはアプリID（`com.oekaki.territorywalk`）とは独立した識別子です。未登録の場合は上記のIDで新規登録してください（登録済みの場合はコード側を変更しないこと）

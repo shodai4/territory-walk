@@ -866,7 +866,7 @@ class CoinManager {
                         </button>
                     ` : `
                         <button id="btn-buy-ad-free" class="px-3 py-1.5 rounded bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-black text-xs font-bold font-mono transition-all active:scale-95 shadow">
-                            ¥480
+                            ${(this.app && this.app.iapManager && this.app.iapManager.getDisplayPrice('ad-free')) || '¥480'}
                         </button>
                     `}
                 </div>
@@ -886,7 +886,7 @@ class CoinManager {
                     </div>
                     <div class="shrink-0">
                         <button class="btn-buy-pack px-3 py-1.5 rounded bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-black text-xs font-bold font-mono transition-all active:scale-95 shadow" data-pack="${pack.id}">
-                            ¥${pack.yen.toLocaleString()}
+                            ${(this.app && this.app.iapManager && this.app.iapManager.getDisplayPriceForYen(pack.yen)) || ('¥' + pack.yen.toLocaleString())}
                         </button>
                     </div>
                 </div>

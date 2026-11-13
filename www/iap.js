@@ -1,7 +1,31 @@
 /**
  * TERRITORY WALK - iap.js
- * In-App Purchase (IAP) & StoreKit Integration for iOS (Capacitor) & Web Simulator Fallback
- * Compliant with Apple App Store Review Guidelines (Guideline 3.1.1 In-App Purchase)
+ * In-App Purchase (StoreKit) integration for iOS via cordova-plugin-purchase
+ * (CdvPurchase v13+) running on Capacitor, with a Web simulator fallback.
+ *
+ * Purchase flow (native):
+ *   order -> approved -> verify (App Store receipt validation)
+ *           -> verified -> grant content (idempotent per transaction)
+ *           -> finish -> finished
+ *
+ * Safety rules:
+ * - On native platforms, content is granted ONLY from a verified receipt.
+ *   There is no fallback that grants coins without a completed StoreKit
+ *   transaction. If the purchase plugin is missing or the store is not
+ *   ready, the purchase is aborted with an error message.
+ * - Each transaction is granted at most once: processed transaction IDs
+ *   are persisted in localStorage, so an app restart between "grant" and
+ *   "finish" cannot double-credit consumable coin packs.
+ * - Consumable coin packs cannot be restored (Apple policy). Only the
+ *   non-consumable Ad-Free pass is restored / re-applied.
+ *
+ * Receipt validation:
+ * - By default the plugin validates the App Store receipt locally.
+ * - For server-side validation, set window.TW_IAP_VALIDATOR_URL (or the
+ *   localStorage key "tw_iap_validator_url") to an endpoint that accepts
+ *   the plugin's receipt JSON via POST and answers { "ok": true }.
+ *   It is then assigned to store.validator before initialization.
+ *   A Supabase Edge Function is a good fit for this endpoint.
  */
 
 class IAPManager {
@@ -9,66 +33,73 @@ class IAPManager {
         this.app = appInstance;
         this.isNative = typeof window.Capacitor !== 'undefined' && window.Capacitor.isNativePlatform();
 
-        // App Store Connect Product IDs
+        // Canonical product catalog. The `id` values are the App Store
+        // Connect product IDs and must be registered there exactly as
+        // written here (see README "App Store Connect で必要な登録").
+        // type: 'consumable' (coin packs) / 'non-consumable' (ad-free).
         this.products = {
             'pack-120': {
                 id: 'com.shodai.territorywalk.coins1000',
+                type: 'consumable',
                 coins: 1000,
-                price: '¥120',
+                yen: 120,
+                fallbackPrice: '¥120',
                 title: 'ビギナーパック'
             },
             'pack-500': {
                 id: 'com.shodai.territorywalk.coins4500',
+                type: 'consumable',
                 coins: 4500,
-                price: '¥500',
+                yen: 500,
+                fallbackPrice: '¥500',
                 title: 'スタンダードパック'
             },
             'pack-1500': {
                 id: 'com.shodai.territorywalk.coins14000',
+                type: 'consumable',
                 coins: 14000,
-                price: '¥1,500',
+                yen: 1500,
+                fallbackPrice: '¥1,500',
                 title: 'プレミアムパック'
             },
             'pack-5000': {
                 id: 'com.shodai.territorywalk.coins50000',
+                type: 'consumable',
                 coins: 50000,
-                price: '¥5,000',
-                title: 'アルティメットパック'
-            },
-            // Backward compatibility aliases
-            'pack-300': {
-                id: 'com.shodai.territorywalk.coins4500',
-                coins: 4500,
-                price: '¥500',
-                title: 'スタンダードパック'
-            },
-            'pack-600': {
-                id: 'com.shodai.territorywalk.coins14000',
-                coins: 14000,
-                price: '¥1,500',
-                title: 'プレミアムパック'
-            },
-            'pack-1200': {
-                id: 'com.shodai.territorywalk.coins50000',
-                coins: 50000,
-                price: '¥5,000',
+                yen: 5000,
+                fallbackPrice: '¥5,000',
                 title: 'アルティメットパック'
             },
             'ad-free': {
                 id: 'com.shodai.territorywalk.adfree',
+                type: 'non-consumable',
                 coins: 0,
-                price: '¥480',
+                yen: 480,
+                fallbackPrice: '¥480',
                 title: '広告完全非表示パス (Ad-Free Pro)'
             }
         };
 
+        this.PROCESSED_KEY = 'tw_iap_processed_tx_v1';
+        this.store = null;          // CdvPurchase.store (native only)
+        this.storeReady = false;    // store.initialize() completed
+        this.initStarted = false;
+        this.pendingProductId = null; // product id with an order in flight
+        this.priceByProductId = {};   // product id -> localized price string
+
         this.init();
     }
 
+    // ---------------------------------------------------------------
+    // Initialization
+    // ---------------------------------------------------------------
+
     init() {
         console.log(`[IAP] IAPManager initialized. Mode: ${this.isNative ? 'Native StoreKit' : 'Web Simulator'}`);
-        
-        // Listen for restore purchases button
+
+        // The restore button is rendered dynamically by the shop, so this
+        // direct binding may not find it; coins.js also wires the button
+        // to restorePurchases(). Keep the guarded binding for safety.
         const btnRestore = document.getElementById('btn-restore-purchases');
         if (btnRestore) {
             btnRestore.addEventListener('click', (e) => {
@@ -76,86 +107,414 @@ class IAPManager {
                 this.restorePurchases();
             });
         }
+
+        if (!this.isNative) return;
+
+        // CdvPurchase is injected by the native plugin at startup. It may
+        // not exist yet when this script runs, so wait for deviceready
+        // and also poll briefly as a fallback.
+        const tryInit = () => this.initStore();
+        document.addEventListener('deviceready', tryInit, { once: true });
+
+        let attempts = 0;
+        const timer = setInterval(() => {
+            attempts++;
+            if (this.initStarted || attempts > 40) {
+                clearInterval(timer);
+                return;
+            }
+            if (typeof window.CdvPurchase !== 'undefined') {
+                clearInterval(timer);
+                tryInit();
+            }
+        }, 250);
     }
 
-    /**
-     * Purchase a coin pack (StoreKit Native or Web Simulator)
-     */
+    initStore() {
+        if (this.initStarted) return;
+        if (typeof window.CdvPurchase === 'undefined' || !window.CdvPurchase.store) {
+            // Not ready yet; the poller / deviceready listener will retry.
+            return;
+        }
+        this.initStarted = true;
+
+        const CdvPurchase = window.CdvPurchase;
+        const store = CdvPurchase.store;
+        this.store = store;
+
+        try {
+            store.verbosity = CdvPurchase.LogLevel.WARNING;
+
+            // Optional server-side receipt validation endpoint.
+            const validatorUrl = window.TW_IAP_VALIDATOR_URL
+                || localStorage.getItem('tw_iap_validator_url')
+                || null;
+            if (validatorUrl) {
+                store.validator = validatorUrl;
+                console.log('[IAP] Server-side receipt validation enabled.');
+            }
+
+            store.register(Object.values(this.products).map(item => ({
+                id: item.id,
+                type: item.type === 'consumable'
+                    ? CdvPurchase.ProductType.CONSUMABLE
+                    : CdvPurchase.ProductType.NON_CONSUMABLE,
+                platform: CdvPurchase.Platform.APPLE_APPSTORE
+            })));
+
+            store.when()
+                .productUpdated(product => this.onProductUpdated(product))
+                .approved(transaction => {
+                    console.log('[IAP] Transaction approved, verifying receipt...');
+                    transaction.verify();
+                })
+                .verified(receipt => {
+                    try {
+                        this.handleVerifiedReceipt(receipt);
+                    } catch (err) {
+                        console.error('[IAP] Failed to grant verified purchase:', err);
+                    }
+                    receipt.finish();
+                })
+                .finished(() => {
+                    this.pendingProductId = null;
+                    this.refreshShopUI();
+                });
+
+            store.error(err => this.onStoreError(err));
+
+            store.ready(() => {
+                this.storeReady = true;
+                console.log('[IAP] Store is ready.');
+                // Re-apply the non-consumable entitlement if already owned.
+                this.syncEntitlements();
+                this.refreshShopUI();
+            });
+
+            store.initialize([{
+                platform: CdvPurchase.Platform.APPLE_APPSTORE,
+                options: { needAppReceipt: true }
+            }]);
+        } catch (err) {
+            this.initStarted = false;
+            console.error('[IAP] Store initialization failed:', err);
+        }
+    }
+
+    onProductUpdated(product) {
+        if (!product || !product.id) return;
+        const price = this.extractLocalizedPrice(product);
+        if (price) {
+            this.priceByProductId[product.id] = price;
+            this.refreshShopUI();
+        }
+        // Ownership of the ad-free pass can also arrive as a product update.
+        if (product.id === this.products['ad-free'].id && product.owned) {
+            this.applyAdFree();
+        }
+    }
+
+    extractLocalizedPrice(product) {
+        try {
+            const offer = typeof product.getOffer === 'function' ? product.getOffer() : null;
+            const phases = offer && offer.pricingPhases;
+            if (phases && phases.length > 0 && phases[0].price) return phases[0].price;
+            if (product.price) return product.price;
+        } catch (e) { /* fall through */ }
+        return null;
+    }
+
+    onStoreError(err) {
+        if (!err) return;
+        const CdvPurchase = window.CdvPurchase;
+        if (CdvPurchase && err.code === CdvPurchase.ErrorCode.PAYMENT_CANCELLED) {
+            console.log('[IAP] Purchase cancelled by user.');
+            this.pendingProductId = null;
+            return;
+        }
+        console.error('[IAP] Store error:', err.code, err.message);
+        this.pendingProductId = null;
+        this.toast('ストアでエラーが発生しました', '時間をおいてもう一度お試しください');
+    }
+
+    // ---------------------------------------------------------------
+    // Prices (used by the shop UI; falls back to the catalog price)
+    // ---------------------------------------------------------------
+
+    getDisplayPrice(packKey) {
+        const item = this.products[packKey];
+        if (!item) return null;
+        return this.priceByProductId[item.id] || item.fallbackPrice;
+    }
+
+    getDisplayPriceForYen(yen) {
+        const item = Object.values(this.products).find(p => p.yen === yen);
+        if (!item) return null;
+        return this.priceByProductId[item.id] || item.fallbackPrice;
+    }
+
+    // ---------------------------------------------------------------
+    // Purchasing
+    // ---------------------------------------------------------------
+
     async purchasePack(packKey) {
         const item = this.products[packKey];
         if (!item) {
+            // Backward compatibility: earlier shop code used pack-300 /
+            // pack-600 / pack-1200 keys for the 500 / 1500 / 5000 packs.
+            const legacy = { 'pack-300': 'pack-500', 'pack-600': 'pack-1500', 'pack-1200': 'pack-5000' };
+            if (legacy[packKey]) return this.purchasePack(legacy[packKey]);
             console.error('[IAP] Unknown pack key:', packKey);
             return;
         }
 
-        if (this.isNative) {
-            // iOS Native StoreKit Purchase Flow
-            try {
-                if (window.CdvPurchase || (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Purchases)) {
-                    console.log(`[IAP] Initiating StoreKit purchase for product: ${item.id}`);
-                    // Native purchase request hook
-                } else {
-                    console.log(`[IAP] Native StoreKit plugin pending, executing safe native fallback for ${item.id}`);
-                }
-                
-                // Credit coins on successful purchase verification
-                this.onPurchaseComplete(item);
-            } catch (err) {
-                console.error('[IAP] StoreKit purchase error:', err);
-                if (this.app) {
-                    this.app.showToast('購入処理に失敗しました。App Storeの設定をご確認ください');
-                }
-            }
-        } else {
-            // Web Simulator Mode (instant test purchase)
+        if (!this.isNative) {
+            // Web simulator (GitHub Pages build). Never used on native.
             console.log(`[IAP] Web Simulator purchase complete: ${item.title} (+${item.coins} COIN)`);
-            this.onPurchaseComplete(item);
-        }
-    }
-
-    onPurchaseComplete(item) {
-        if (item.id.includes('adfree') || item.id.includes('ad-free')) {
-            if (this.app && this.app.coinManager) {
-                this.app.coinManager.setAdFree(true);
-            }
-            if (this.app) {
-                this.app.showToast('購入完了！広告完全非表示パス', '下部バナー広告を消去し動画スキップを適用しました');
-            }
+            this.grantItem(item, 1);
             return;
         }
 
-        if (this.app && this.app.coinManager) {
-            this.app.coinManager.addCoins(item.coins, `IAP購入: ${item.title} (${item.price})`);
-            if (this.app) {
-                this.app.showToast(`購入完了！ +${item.coins.toLocaleString()} COIN`, `${item.title} (${item.price}) を獲得しました`);
+        if (this.pendingProductId) {
+            this.toast('購入処理中です', '前の購入が完了するまでお待ちください');
+            return;
+        }
+
+        this.initStore();
+        if (!this.store) {
+            // Plugin missing (e.g. `npx cap sync` was not run). Granting
+            // anything here would hand out paid content for free, so stop.
+            console.error('[IAP] Purchase plugin (CdvPurchase) is not available.');
+            this.toast('購入機能を読み込めませんでした', 'アプリを再起動しても直らない場合はサポートへご連絡ください');
+            return;
+        }
+
+        const CdvPurchase = window.CdvPurchase;
+        let product = null;
+        try {
+            product = this.store.get(item.id, CdvPurchase.Platform.APPLE_APPSTORE)
+                || this.store.get(item.id);
+        } catch (e) { /* handled below */ }
+
+        if (!product) {
+            this.toast('商品情報を読み込み中です', '通信状態のよい場所でもう一度お試しください');
+            // Trigger a refresh so a retry can succeed.
+            if (typeof this.store.update === 'function') this.store.update();
+            return;
+        }
+
+        if (item.type === 'non-consumable' && product.owned) {
+            this.applyAdFree();
+            this.toast('購入済みです', '広告完全非表示パスはすでに有効です');
+            return;
+        }
+
+        const offer = typeof product.getOffer === 'function' ? product.getOffer() : null;
+        if (!offer) {
+            this.toast('商品情報を読み込めませんでした', '時間をおいてもう一度お試しください');
+            return;
+        }
+
+        this.pendingProductId = item.id;
+        try {
+            await this.store.order(offer);
+        } catch (err) {
+            this.pendingProductId = null;
+            if (CdvPurchase && err && err.code === CdvPurchase.ErrorCode.PAYMENT_CANCELLED) {
+                console.log('[IAP] Order cancelled by user.');
+                return;
             }
+            console.error('[IAP] Order failed:', err);
+            this.toast('購入処理に失敗しました', 'App Store の設定をご確認ください');
+        }
+        // Completion is handled by the approved -> verified -> finished
+        // event chain registered in initStore().
+    }
+
+    // ---------------------------------------------------------------
+    // Verified receipt handling (the only place content is granted)
+    // ---------------------------------------------------------------
+
+    handleVerifiedReceipt(receipt) {
+        const purchases = (receipt && receipt.collection) || [];
+        if (purchases.length === 0) {
+            // Some verified events carry no collection (e.g. app receipt
+            // refresh). Fall back to an entitlement sync only.
+            this.syncEntitlements();
+            return;
+        }
+
+        for (const purchase of purchases) {
+            const productId = purchase.id || purchase.productId;
+            const item = Object.values(this.products).find(p => p.id === productId);
+            if (!item) continue;
+
+            if (item.type === 'non-consumable') {
+                // Entitlements are state-based; applying them is idempotent.
+                this.applyAdFree();
+                continue;
+            }
+
+            // Consumables: grant once per transaction.
+            const txKey = this.transactionKey(purchase, receipt);
+            if (txKey && this.isProcessed(txKey)) {
+                console.log('[IAP] Transaction already granted, skipping:', txKey);
+                continue;
+            }
+            const quantity = parseInt(purchase.quantity, 10) || 1;
+            // Mark BEFORE granting/finishing so a crash cannot re-grant.
+            if (txKey) this.markProcessed(txKey);
+            this.grantItem(item, quantity);
         }
     }
 
-    /**
-     * Restore Purchases (Apple App Store Review Mandatory Requirement)
-     */
-    async restorePurchases() {
-        if (this.app) {
-            this.app.showToast('購入履歴の確認中...');
+    transactionKey(purchase, receipt) {
+        const txId = purchase.transactionId
+            || (purchase.id && (purchase.purchaseTime || purchase.expiryDate))
+            || (receipt && receipt.transactionId)
+            || null;
+        if (!txId) return null;
+        const productId = purchase.id || purchase.productId || 'unknown';
+        return `${productId}:${txId}`;
+    }
+
+    loadProcessed() {
+        try {
+            const raw = localStorage.getItem(this.PROCESSED_KEY);
+            const arr = raw ? JSON.parse(raw) : [];
+            return Array.isArray(arr) ? arr : [];
+        } catch (e) {
+            return [];
+        }
+    }
+
+    isProcessed(txKey) {
+        return this.loadProcessed().includes(txKey);
+    }
+
+    markProcessed(txKey) {
+        const arr = this.loadProcessed();
+        if (!arr.includes(txKey)) {
+            arr.push(txKey);
+            // Keep the registry bounded; receipts older than this are
+            // finished transactions that will not be delivered again.
+            while (arr.length > 500) arr.shift();
+            try {
+                localStorage.setItem(this.PROCESSED_KEY, JSON.stringify(arr));
+            } catch (e) { /* storage full etc. - granting continues */ }
+        }
+    }
+
+    grantItem(item, quantity = 1) {
+        if (!this.app || !this.app.coinManager) return;
+
+        if (item.type === 'non-consumable') {
+            this.applyAdFree();
+            this.toast('購入完了！広告完全非表示パス', '下部バナー広告を消去し動画スキップを適用しました');
+            return;
         }
 
-        setTimeout(() => {
-            // Re-sync Pro status and unlocked themes/titles/ad-free from localStorage / Supabase
-            if (this.app && this.app.proManager) {
-                this.app.proManager.checkProStatus();
-            }
-            if (this.app && this.app.coinManager) {
-                this.app.coinManager.updateCoinDisplay();
-                if (localStorage.getItem('tw_is_ad_free') === 'true') {
-                    this.app.coinManager.setAdFree(true);
-                }
-            }
+        const packKey = Object.keys(this.products).find(k => this.products[k] === item);
+        const total = item.coins * quantity;
+        this.app.coinManager.addCoins(total, `IAP購入: ${item.title}`);
+        this.toast(
+            `購入完了！ +${total.toLocaleString()} COIN`,
+            `${item.title} (${this.getDisplayPrice(packKey) || item.fallbackPrice}) を獲得しました`
+        );
+        this.refreshShopUI();
+    }
 
-            console.log('[IAP] Restore purchases verified.');
-            if (this.app) {
-                this.app.showToast('購入の復元が完了しました', '所持アイテム・Ad-Free状態を同期しました');
+    applyAdFree() {
+        if (this.app && this.app.coinManager) {
+            this.app.coinManager.setAdFree(true);
+        } else {
+            localStorage.setItem('tw_is_ad_free', 'true');
+        }
+    }
+
+    // ---------------------------------------------------------------
+    // Restore & entitlement sync
+    // ---------------------------------------------------------------
+
+    syncEntitlements() {
+        // Ad-Free is the only restorable (non-consumable) product.
+        if (!this.store) return;
+        try {
+            const CdvPurchase = window.CdvPurchase;
+            const adFree = this.products['ad-free'];
+            const product = this.store.get(adFree.id, CdvPurchase.Platform.APPLE_APPSTORE)
+                || this.store.get(adFree.id);
+            let owned = !!(product && product.owned);
+            if (!owned && product && typeof this.store.findInVerifiedReceipts === 'function') {
+                owned = !!this.store.findInVerifiedReceipts(product);
             }
-        }, 1000);
+            if (owned) this.applyAdFree();
+        } catch (e) {
+            console.warn('[IAP] Entitlement sync skipped:', e);
+        }
+    }
+
+    async restorePurchases() {
+        if (!this.isNative) {
+            // Web build: nothing to restore from a store; just re-apply
+            // the locally persisted entitlement state.
+            if (localStorage.getItem('tw_is_ad_free') === 'true') this.applyAdFree();
+            this.toast('購入の復元が完了しました', '保存されている状態を同期しました');
+            return;
+        }
+
+        this.toast('購入履歴の確認中...');
+
+        this.initStore();
+        if (!this.store) {
+            this.toast('購入機能を読み込めませんでした', 'アプリを再起動しても直らない場合はサポートへご連絡ください');
+            return;
+        }
+
+        try {
+            if (typeof this.store.restorePurchases === 'function') {
+                await this.store.restorePurchases();
+            }
+            if (typeof this.store.update === 'function') {
+                await this.store.update();
+            }
+        } catch (err) {
+            console.error('[IAP] Restore failed:', err);
+            this.toast('購入の復元に失敗しました', '通信状態のよい場所でもう一度お試しください');
+            return;
+        }
+
+        const wasAdFree = localStorage.getItem('tw_is_ad_free') === 'true';
+        this.syncEntitlements();
+        const isAdFreeNow = localStorage.getItem('tw_is_ad_free') === 'true';
+
+        if (isAdFreeNow) {
+            this.toast('購入の復元が完了しました', '広告完全非表示パスを再適用しました');
+        } else if (!wasAdFree) {
+            this.toast('復元できる購入がありませんでした', 'コインパックは消耗型のため復元できません');
+        } else {
+            this.toast('購入の復元が完了しました', '購入状態を同期しました');
+        }
+        this.refreshShopUI();
+    }
+
+    // ---------------------------------------------------------------
+    // Helpers
+    // ---------------------------------------------------------------
+
+    refreshShopUI() {
+        if (this.app && this.app.coinManager
+            && typeof this.app.coinManager.renderPacksPanel === 'function'
+            && document.getElementById('container-shop-packs')) {
+            this.app.coinManager.renderPacksPanel();
+        }
+    }
+
+    toast(title, subtitle) {
+        if (this.app && typeof this.app.showToast === 'function') {
+            this.app.showToast(title, subtitle);
+        } else {
+            console.log('[IAP]', title, subtitle || '');
+        }
     }
 }
