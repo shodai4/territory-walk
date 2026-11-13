@@ -481,17 +481,94 @@ class TerritoryWalkApp {
         });
     }
 
+    setupSwipeUpToClose(modalId, closeFn) {
+        const modal = document.getElementById(modalId);
+        if (!modal) return;
+        const card = modal.querySelector('div');
+        if (!card) return;
+
+        let startY = 0;
+        let startX = 0;
+        let startTime = 0;
+        let isSwiping = false;
+
+        modal.addEventListener('touchstart', (e) => {
+            const touch = e.touches[0];
+            startY = touch.clientY;
+            startX = touch.clientX;
+            startTime = Date.now();
+            isSwiping = false;
+        }, { passive: true });
+
+        modal.addEventListener('touchmove', (e) => {
+            const touch = e.touches[0];
+            const deltaY = touch.clientY - startY;
+            const deltaX = touch.clientX - startX;
+
+            const scrollableEl = card.querySelector('.overflow-y-auto') || card;
+            const isAtTop = scrollableEl.scrollTop <= 5;
+
+            if (isAtTop && deltaY < -15 && Math.abs(deltaY) > Math.abs(deltaX)) {
+                isSwiping = true;
+                card.style.transition = 'none';
+                card.style.transform = `translateY(${deltaY}px)`;
+                card.style.opacity = `${Math.max(0.3, 1 + deltaY / 400)}`;
+            }
+        }, { passive: true });
+
+        const endHandler = (e) => {
+            if (!isSwiping) return;
+            isSwiping = false;
+
+            const touch = e.changedTouches ? e.changedTouches[0] : null;
+            const deltaY = touch ? touch.clientY - startY : 0;
+            const elapsed = Math.max(1, Date.now() - startTime);
+            const velocity = Math.abs(deltaY) / elapsed;
+
+            if (deltaY < -60 || (velocity > 0.35 && deltaY < -20)) {
+                card.style.transition = 'all 0.22s cubic-bezier(0.16, 1, 0.3, 1)';
+                card.style.transform = 'translateY(-120%)';
+                card.style.opacity = '0';
+                setTimeout(() => {
+                    closeFn();
+                    card.style.transform = '';
+                    card.style.opacity = '';
+                    card.style.transition = '';
+                }, 220);
+            } else {
+                card.style.transition = 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)';
+                card.style.transform = 'translateY(0)';
+                card.style.opacity = '1';
+            }
+        };
+
+        modal.addEventListener('touchend', endHandler, { passive: true });
+        modal.addEventListener('touchcancel', endHandler, { passive: true });
+    }
+
     setMapTheme(theme, notify = false) {
         const mapContainer = document.getElementById('map');
+        const tilePanes = document.querySelectorAll('.leaflet-tile-pane');
+
         if (theme === 'none') {
             document.body.setAttribute('data-map-theme', 'none');
             localStorage.setItem('tw_map_theme', 'none');
             if (mapContainer) mapContainer.classList.add('map-tiles-hidden');
+            tilePanes.forEach(p => {
+                p.style.display = 'none';
+                p.style.opacity = '0';
+                p.style.visibility = 'hidden';
+            });
             this.isMapVisible = false;
         } else {
             document.body.setAttribute('data-map-theme', theme);
             localStorage.setItem('tw_map_theme', theme);
             if (mapContainer) mapContainer.classList.remove('map-tiles-hidden');
+            tilePanes.forEach(p => {
+                p.style.display = '';
+                p.style.opacity = '1';
+                p.style.visibility = 'visible';
+            });
             this.isMapVisible = true;
         }
 
@@ -542,6 +619,7 @@ class TerritoryWalkApp {
         const closeModal = () => modal.classList.add('hidden');
         if (closeBtn) closeBtn.addEventListener('click', closeModal);
         if (footerCloseBtn) footerCloseBtn.addEventListener('click', closeModal);
+        this.setupSwipeUpToClose('stats-modal', closeModal);
 
         // Close on backdrop overlay click
         modal.addEventListener('click', (e) => {
@@ -807,6 +885,7 @@ class TerritoryWalkApp {
 
         if (closeBtn) closeBtn.addEventListener('click', closeModal);
         if (closeIconBtn) closeIconBtn.addEventListener('click', closeModal);
+        this.setupSwipeUpToClose('weekly-result-modal', closeModal);
 
         if (modal) {
             modal.addEventListener('click', (e) => {
@@ -1107,6 +1186,12 @@ class TerritoryWalkApp {
                 }
             });
         }
+        this.setupSwipeUpToClose('rules-modal', () => {
+            if (this.rulesModal) {
+                this.rulesModal.classList.add('hidden');
+                localStorage.setItem('territory_rules_seen_v1', 'true');
+            }
+        });
     }
 
     initMenuModal() {
@@ -1126,6 +1211,7 @@ class TerritoryWalkApp {
         if (this.btnMenu) this.btnMenu.addEventListener('click', openModal);
         if (this.btnCloseMenu) this.btnCloseMenu.addEventListener('click', closeModal);
         if (this.btnModalCloseIcon) this.btnModalCloseIcon.addEventListener('click', closeModal);
+        this.setupSwipeUpToClose('menu-modal', closeModal);
 
         if (this.btnOpenRules) {
             this.btnOpenRules.addEventListener('click', () => {
@@ -1547,6 +1633,62 @@ class TerritoryWalkApp {
             btnCloseTeamResetModal.addEventListener('click', () => {
                 const modal = document.getElementById('team-reset-modal');
                 if (modal) modal.classList.add('hidden');
+            });
+        }
+
+        // Setup swipe up to close for SHOP modal
+        this.setupSwipeUpToClose('shop-modal', () => {
+            if (this.coinManager) this.coinManager.closeShopModal();
+        });
+
+        // Debug Coin Operations
+        const btnDebugResetCoins = document.getElementById('btn-debug-reset-coins');
+        if (btnDebugResetCoins) {
+            btnDebugResetCoins.addEventListener('click', () => {
+                if (this.coinManager) {
+                    this.coinManager.coins = 0;
+                    localStorage.setItem(this.coinManager.STORAGE_KEY_COINS, '0');
+                    this.coinManager.updateCoinUI();
+                    this.coinManager.syncCoinsToSupabase();
+                    this.showToast('【デバッグ】コインを 0 C にリセットしました');
+                }
+            });
+        }
+
+        const btnDebugAdd1000 = document.getElementById('btn-debug-add-1000-coins');
+        if (btnDebugAdd1000) {
+            btnDebugAdd1000.addEventListener('click', () => {
+                if (this.coinManager) {
+                    this.coinManager.addCoins(1000, 'デバッグ付与');
+                    this.showToast('【デバッグ】+1000 C を付与しました');
+                }
+            });
+        }
+
+        // Debug Team Switch
+        const btnDebugSetBlack = document.getElementById('btn-debug-set-black');
+        if (btnDebugSetBlack) {
+            btnDebugSetBlack.addEventListener('click', () => {
+                this.currentTeam = 'black';
+                localStorage.setItem('player_team', 'black');
+                this.applyTheme();
+                if (this.statsManager) this.statsManager.syncUserProfileImmediate();
+                if (this.gridManager) this.gridManager.redrawTiles();
+                this.updateScoreUI();
+                this.showToast('【デバッグ】Black陣営に変更しました');
+            });
+        }
+
+        const btnDebugSetWhite = document.getElementById('btn-debug-set-white');
+        if (btnDebugSetWhite) {
+            btnDebugSetWhite.addEventListener('click', () => {
+                this.currentTeam = 'white';
+                localStorage.setItem('player_team', 'white');
+                this.applyTheme();
+                if (this.statsManager) this.statsManager.syncUserProfileImmediate();
+                if (this.gridManager) this.gridManager.redrawTiles();
+                this.updateScoreUI();
+                this.showToast('【デバッグ】White陣営に変更しました');
             });
         }
 

@@ -37,7 +37,12 @@ html, body {
 
 /* Map tiles hidden (Black/White Othello Mode) */
 #map.map-tiles-hidden, #map.map-tiles-hidden .leaflet-container {
-    background-color: #18181b !important; /* Zinc-900 Dark Gray Canvas */
+    background-color: #09090b !important; /* Zinc-950 漆黒キャンバス */
+}
+#map.map-tiles-hidden .leaflet-tile-pane {
+    display: none !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
 }
 
 /* Safe Area Inset Support for iOS Notch & Dynamic Island & Home Bar */
