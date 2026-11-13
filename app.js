@@ -153,10 +153,9 @@ class TerritoryWalkApp {
         }
 
         const toast = document.createElement('div');
-        toast.className = 'bg-zinc-950/95 border border-amber-500/80 text-amber-300 text-xs font-mono px-4 py-2 rounded-xl shadow-2xl backdrop-blur-md pointer-events-none text-center flex flex-col items-center';
-        toast.style.transition = 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)';
-        toast.style.opacity = '0';
-        toast.style.transform = 'translateY(-10px)';
+        toast.className = 'bg-zinc-950/95 border border-amber-500/80 text-amber-300 text-xs font-mono px-4 py-2 rounded-xl shadow-2xl backdrop-blur-md pointer-events-none text-center flex flex-col items-center transition-all duration-300';
+        toast.style.opacity = '1';
+        toast.style.transform = 'translateY(0)';
 
         if (subtitle) {
             toast.innerHTML = `<div class="font-bold text-xs text-white leading-tight break-keep whitespace-nowrap">${message}</div><div class="text-[11px] text-amber-400 mt-0.5 leading-tight break-keep whitespace-nowrap">${subtitle}</div>`;
@@ -166,13 +165,7 @@ class TerritoryWalkApp {
 
         container.appendChild(toast);
 
-        // スムーズな出現アニメーション
-        setTimeout(() => {
-            toast.style.opacity = '1';
-            toast.style.transform = 'translateY(0)';
-        }, 20);
-
-        // 3.2秒後にフェードアウト＆DOM削除
+        // 3.5秒後にフェードアウト＆DOM削除
         setTimeout(() => {
             toast.style.opacity = '0';
             toast.style.transform = 'translateY(-10px)';
@@ -181,7 +174,7 @@ class TerritoryWalkApp {
                     toast.parentNode.removeChild(toast);
                 }
             }, 350);
-        }, 3200);
+        }, 3500);
     }
 
     flushToastQueue() {
