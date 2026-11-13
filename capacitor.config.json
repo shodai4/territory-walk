@@ -1,6 +1,14 @@
 {
   "appId": "com.oekaki.territorywalk",
   "appName": "TerritoryWalk",
-  "webDir": ".",
-  "bundledWebRuntime": false
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https",
+    "iosScheme": "capacitor"
+  },
+  "ios": {
+    "contentInset": "always",
+    "backgroundColor": "#000000",
+    "preferredContentMode": "mobile"
+  }
 }

@@ -468,12 +468,9 @@ class TerritoryWalkApp {
     }
 
     parseNicknameAndTitle(raw) {
-        if (!raw) return { name: '名もなき歩行者', title: '' };
-        const match = String(raw).match(/^\[(.*?)\]\s*(.*)$/);
-        if (match) {
-            return { title: match[1], name: match[2] || '名もなき歩行者' };
-        }
-        return { title: '', name: String(raw) };
+        return typeof StatsManager !== 'undefined' && typeof StatsManager.parseFormattedName === 'function'
+            ? StatsManager.parseFormattedName(raw)
+            : { title: '', name: String(raw || '名もなき歩行者') };
     }
 
     async loadWeeklyRankings() {
@@ -679,34 +676,8 @@ class TerritoryWalkApp {
     }
 
     initProModal() {
-        const modal = document.getElementById('pro-modal');
-        const openBtn = document.getElementById('btn-open-pro-modal');
-        const closeBtn = document.getElementById('btn-close-pro');
-        const activateBtn = document.getElementById('btn-activate-pro');
-
-        if (openBtn) {
-            openBtn.addEventListener('click', () => {
-                if (this.menuModal) this.menuModal.classList.add('hidden');
-                modal.classList.remove('hidden');
-            });
-        }
-
-        const closeModal = () => modal.classList.add('hidden');
-        if (closeBtn) closeBtn.addEventListener('click', closeModal);
-
-        if (activateBtn) {
-            activateBtn.addEventListener('click', () => {
-                const input = document.getElementById('input-pro-code');
-                const code = input ? input.value : '';
-                if (this.proManager && this.proManager.activateCode(code)) {
-                    alert('Proサポーター機能が有効になりました！限定スキンとポスター出力をご利用いただけます。');
-                    modal.classList.add('hidden');
-                    this.renderTeamBadge();
-                    this.updateStatsDisplay();
-                } else {
-                    alert('無効なコードです。正しいアクティベーションコードを入力してください。');
-                }
-            });
+        if (this.proManager && typeof this.proManager.initModal === 'function') {
+            this.proManager.initModal(this);
         }
     }
 
@@ -931,6 +902,7 @@ class TerritoryWalkApp {
         switch (error.code) {
             case error.PERMISSION_DENIED:
                 this.updateGPSStatus('GPS: 拒否', 'bg-red-500', 'text-red-400');
+                this.showToast('位置情報の利用が許可されていません（端末の設定をご確認ください）');
                 break;
             case error.POSITION_UNAVAILABLE:
                 this.updateGPSStatus('GPS: 圏外', 'bg-amber-500', 'text-amber-400');

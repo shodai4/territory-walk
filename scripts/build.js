@@ -1,0 +1,45 @@
+/**
+ * TERRITORY WALK - build.js
+ * Synchronizes web distribution assets into www/ for Capacitor iOS build
+ */
+
+const fs = require('fs');
+const path = require('path');
+
+const ROOT_DIR = path.resolve(__dirname, '..');
+const WWW_DIR = path.join(ROOT_DIR, 'www');
+
+const ASSETS_TO_COPY = [
+    'index.html',
+    'style.css',
+    'app.js',
+    'coins.js',
+    'grid.js',
+    'poster.js',
+    'pro.js',
+    'stats.js',
+    'supabase.js'
+];
+
+console.log('[Build] Preparing www/ directory for Capacitor iOS...');
+
+if (!fs.existsSync(WWW_DIR)) {
+    fs.mkdirSync(WWW_DIR, { recursive: true });
+    console.log('[Build] Created www/ directory.');
+}
+
+let copiedCount = 0;
+for (const file of ASSETS_TO_COPY) {
+    const srcPath = path.join(ROOT_DIR, file);
+    const destPath = path.join(WWW_DIR, file);
+
+    if (fs.existsSync(srcPath)) {
+        fs.copyFileSync(srcPath, destPath);
+        console.log(`[Build] Synced: ${file} -> www/${file}`);
+        copiedCount++;
+    } else {
+        console.warn(`[Build] Warning: Source file ${file} not found.`);
+    }
+}
+
+console.log(`[Build] Complete! Successfully synced ${copiedCount} files into www/`);

@@ -28,4 +28,47 @@ class ProManager {
             </span>
         `;
     }
+
+    initModal(app) {
+        this.app = app;
+        const modal = document.getElementById('pro-modal');
+        const openBtn = document.getElementById('btn-open-pro-modal');
+        const closeBtn = document.getElementById('btn-close-pro');
+        const activateBtn = document.getElementById('btn-activate-pro');
+
+        if (openBtn) {
+            openBtn.addEventListener('click', () => {
+                if (this.app && this.app.menuModal) this.app.menuModal.classList.add('hidden');
+                if (modal) modal.classList.remove('hidden');
+            });
+        }
+
+        const closeModal = () => {
+            if (modal) modal.classList.add('hidden');
+        };
+
+        if (closeBtn) closeBtn.addEventListener('click', closeModal);
+        if (modal) {
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) closeModal();
+            });
+        }
+
+        if (activateBtn) {
+            activateBtn.addEventListener('click', () => {
+                const input = document.getElementById('input-pro-code');
+                const code = input ? input.value : '';
+                if (this.activateCode(code)) {
+                    alert('Proサポーター機能が有効になりました！限定スキンとポスター出力をご利用いただけます。');
+                    closeModal();
+                    if (this.app) {
+                        this.app.renderTeamBadge();
+                        this.app.updateStatsDisplay();
+                    }
+                } else {
+                    alert('無効なコードです。正しいアクティベーションコードを入力してください。');
+                }
+            });
+        }
+    }
 }

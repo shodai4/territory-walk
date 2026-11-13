@@ -4,6 +4,15 @@
  */
 
 class StatsManager {
+    static parseFormattedName(raw) {
+        if (!raw) return { name: '名もなき歩行者', title: '' };
+        const match = String(raw).match(/^\[(.*?)\]\s*(.*)$/);
+        if (match) {
+            return { title: match[1], name: match[2] || '名もなき歩行者' };
+        }
+        return { title: '', name: String(raw) };
+    }
+
     constructor(supabaseManager, appInstance) {
         this.supabaseManager = supabaseManager;
         this.app = appInstance;

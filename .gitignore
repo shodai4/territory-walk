@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# iOS Native Build & Xcode Outputs
+ios/App/Pods/
+ios/App/Podfile.lock
+ios/App/build/
+ios/App/App.xcarchive
+*.xcworkspace
+*.xcuserdatad
+DerivedData/
+
+# Operating System & Editor Files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
