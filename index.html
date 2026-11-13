@@ -76,6 +76,15 @@
     <!-- 地図コンテナ（全画面表示） -->
     <main id="map" class="flex-1 w-full h-full z-0"></main>
 
+    <!-- 左上：地図検索（遠隔地の塗り状況を見る）フローティングボタン -->
+    <button id="btn-open-search" aria-label="地図検索" title="地名・駅名を検索して塗り状況を見る" class="fixed top-[78px] left-3 z-[1000] bg-black/85 hover:bg-zinc-900 active:bg-zinc-800 backdrop-blur-md border border-zinc-700/90 hover:border-zinc-500 text-zinc-200 px-3 py-1.5 rounded-full text-xs font-mono font-bold flex items-center gap-1.5 shadow-2xl transition-all active:scale-95">
+        <svg class="w-3.5 h-3.5 text-sky-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <span>地図検索</span>
+    </button>
+
     <!-- 右下：独立した大型円形フローティング現在地（リセンター）ボタン -->
     <button id="btn-recenter" aria-label="現在地に戻る" title="現在地に戻る" class="fixed bottom-6 right-6 z-[1000] w-14 h-14 bg-black/90 hover:bg-zinc-900 active:bg-zinc-800 text-white border border-zinc-700/90 hover:border-zinc-500 rounded-full shadow-2xl flex items-center justify-center transition-all transform active:scale-95">
         <svg class="w-7 h-7 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -185,7 +194,16 @@
                 <span>ランキング・マイ戦績</span>
             </button>
 
-            <!-- 2. 統合アコーディオン: テーマ・マップ設定 -->
+            <!-- 2. 地図検索 (遠隔地の塗り状況を見る) -->
+            <button id="btn-open-search-from-menu" class="w-full py-2.5 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 border border-zinc-700 text-sky-400 font-mono text-xs font-bold rounded-xl shadow transition-all active:scale-95 flex items-center justify-center gap-1.5 shrink-0">
+                <svg class="w-4 h-4 text-sky-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+                <span>地図検索 (遠隔地の塗り状況を見る)</span>
+            </button>
+
+            <!-- 3. 統合アコーディオン: テーマ・マップ設定 -->
             <details class="group bg-zinc-950/80 border border-zinc-800 rounded-xl shrink-0">
                 <summary class="flex items-center justify-between p-2.5 cursor-pointer text-xs font-bold text-white select-none list-none">
                     <span class="flex items-center gap-2">
@@ -757,18 +775,83 @@
         </div>
     </div>
 
+    <!-- 地図検索モーダル（遠隔地塗り状況ビューア） -->
+    <div id="search-modal" class="fixed inset-0 z-[2000] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 overflow-x-hidden box-border hidden">
+        <div class="bg-zinc-900 border border-zinc-700/90 rounded-2xl max-w-[calc(100vw-2rem)] sm:max-w-md w-full p-4 pb-5 shadow-2xl flex flex-col gap-3 text-zinc-200 box-border overflow-x-hidden max-h-[85vh] overflow-y-auto">
+            <!-- モーダルヘッダー -->
+            <div class="flex items-center justify-between border-b border-zinc-800 pb-2.5 shrink-0">
+                <div class="flex items-center gap-2">
+                    <svg class="w-4 h-4 text-sky-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                    <h2 class="font-bold text-sm tracking-wider text-white">地図検索 / 塗り状況ビューア</h2>
+                </div>
+                <button id="btn-close-search-modal" class="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-all active:scale-95">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+
+            <!-- 検索フォーム -->
+            <div class="flex items-center gap-2 shrink-0">
+                <div class="relative flex-1">
+                    <input type="text" id="search-input" placeholder="駅名・地名・施設名を入力（例: 渋谷駅、梅田）" class="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2.5 pl-9 pr-8 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-sky-400 font-mono">
+                    <svg class="w-4 h-4 text-zinc-500 absolute left-3 top-3 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                    <button id="btn-clear-search" class="hidden absolute right-2.5 top-2.5 text-zinc-500 hover:text-white p-0.5 rounded-full transition-all">
+                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+                <button id="btn-exec-search" class="px-4 py-2.5 bg-sky-500 hover:bg-sky-400 active:bg-sky-600 text-black font-bold font-mono text-xs rounded-xl shadow transition-all active:scale-95 shrink-0 flex items-center justify-center">
+                    <span>検索</span>
+                </button>
+            </div>
+
+            <!-- クイックジャンプ（人気エリア） -->
+            <div class="shrink-0 space-y-1.5 pt-1">
+                <div class="text-[10px] text-zinc-400 font-mono flex items-center justify-between">
+                    <span>人気エリア (ワンタップで移動):</span>
+                    <span class="text-zinc-500 text-[9px]">即時ジャンプ</span>
+                </div>
+                <div id="search-quick-presets" class="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                    <!-- JSで動的生成 -->
+                </div>
+            </div>
+
+            <!-- 検索結果リストコンテナ -->
+            <div class="space-y-1.5 pt-2 border-t border-zinc-800/80">
+                <div class="text-[10px] text-zinc-400 font-mono">検索結果:</div>
+                <div id="search-results-list" class="min-h-[140px] max-h-[220px] overflow-y-auto space-y-1 pr-1">
+                    <div class="text-center py-6 text-zinc-500 font-mono text-xs">
+                        <div>地名や駅名を入力して検索</div>
+                        <div class="text-[10px] text-zinc-600 mt-1">上の人気エリアからワンタップで移動することもできます</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- フッター注記 -->
+            <div class="pt-2 border-t border-zinc-800 text-[10px] text-zinc-400 font-mono flex items-start gap-1.5 shrink-0">
+                <svg class="w-3.5 h-3.5 text-zinc-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                <span>遠隔地を閲覧中も、右下の現在地ボタンを押すといつでもGPS現在地へ戻ります。</span>
+            </div>
+        </div>
+    </div>
+
     <!-- Leaflet JS CDN -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <!-- Supabase JS v2 CDN -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <!-- Feature Modules -->
-    <script src="poster.js?v=20261113v12"></script>
-    <script src="pro.js?v=20261113v12"></script>
-    <script src="coins.js?v=20261113v12"></script>
-    <script src="stats.js?v=20261113v12"></script>
-    <script src="supabase.js?v=20261113v12"></script>
-    <script src="grid.js?v=20261113v12"></script>
+    <script src="poster.js?v=20261113v13"></script>
+    <script src="pro.js?v=20261113v13"></script>
+    <script src="search.js?v=20261113v13"></script>
+    <script src="coins.js?v=20261113v13"></script>
+    <script src="stats.js?v=20261113v13"></script>
+    <script src="supabase.js?v=20261113v13"></script>
+    <script src="grid.js?v=20261113v13"></script>
     <!-- Main Application Logic -->
-    <script src="app.js?v=20261113v12"></script>
+    <script src="app.js?v=20261113v13"></script>
 </body>
 </html>

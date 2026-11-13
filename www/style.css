@@ -405,17 +405,33 @@ button, a, input, select, .btn-action {
 }
 
 /* iOS Modal Safe Area Padding & Scroll Isolation */
-#rules-modal, #menu-modal, #shop-modal, #stats-modal, #pro-modal, #weekly-result-modal, #reward-ad-modal {
+#rules-modal, #menu-modal, #shop-modal, #stats-modal, #pro-modal, #weekly-result-modal, #reward-ad-modal, #search-modal {
     padding-top: max(0.75rem, env(safe-area-inset-top));
     padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
     padding-left: max(0.75rem, env(safe-area-inset-left));
     padding-right: max(0.75rem, env(safe-area-inset-right));
 }
 
-#rules-modal > div, #menu-modal > div, #shop-modal > div, #stats-modal > div, #pro-modal > div, #weekly-result-modal > div, #reward-ad-modal > div {
+#rules-modal > div, #menu-modal > div, #shop-modal > div, #stats-modal > div, #pro-modal > div, #weekly-result-modal > div, #reward-ad-modal > div, #search-modal > div {
     max-height: calc(100vh - max(1.5rem, env(safe-area-inset-top)) - max(2.5rem, env(safe-area-inset-bottom))) !important;
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
 }
+
+/* Dark Map Popup Styling */
+.leaflet-popup.dark-popup .leaflet-popup-content-wrapper {
+    background-color: rgba(24, 24, 27, 0.95) !important;
+    color: #ffffff !important;
+    border: 1px solid #3f3f46 !important;
+    border-radius: 0.75rem !important;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.8) !important;
+    padding: 0 !important;
+}
+
+.leaflet-popup.dark-popup .leaflet-popup-tip {
+    background-color: rgba(24, 24, 27, 0.95) !important;
+    border: 1px solid #3f3f46 !important;
+}
+
 
 

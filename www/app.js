@@ -39,6 +39,7 @@ class TerritoryWalkApp {
         this.supabaseManager = new SupabaseManager();
         this.statsManager = new StatsManager(this.supabaseManager, this);
         this.coinManager = new CoinManager(this, this.supabaseManager);
+        this.searchManager = new SearchManager(this);
 
         this.initTeam();
         this.initDOM();
@@ -1312,11 +1313,41 @@ class TerritoryWalkApp {
         }
     }
 
+    jumpToLocation(lat, lng, displayName) {
+        if (!this.map) return;
+
+        // 1. スムーズに目標地点へカメラ移動 (ズームレベル 16: 100mマスが最適表示される)
+        this.map.flyTo([lat, lng], 16, {
+            animate: true,
+            duration: 1.2
+        });
+
+        // 2. 検索ピンマーカーを設置
+        if (this.searchManager) {
+            this.searchManager.setSearchMarker(lat, lng, displayName);
+        }
+
+        // 3. 移動先エリアのタイルの即時フェッチ＆グリッド更新
+        if (this.gridManager) {
+            setTimeout(() => {
+                this.gridManager.updateGrids();
+                this.gridManager.fetchAndSyncTiles();
+            }, 300);
+        }
+
+        // 4. トースト通知
+        this.showToast(`${displayName} の塗り状況を表示中 (右下で現在地へ復帰)`);
+    }
+
     initEvents() {
         if (this.btnRecenter) {
             this.btnRecenter.addEventListener('click', () => {
                 if (this.map && this.virtualPos) {
                     this.map.setView(this.virtualPos, CONFIG.DEFAULT_ZOOM, { animate: true });
+                    if (this.searchManager) {
+                        this.searchManager.clearSearchMarker();
+                    }
+                    this.showToast('現在地に戻りました');
                 }
             });
         }

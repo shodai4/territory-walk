@@ -17,6 +17,7 @@ const ASSETS_TO_COPY = [
     'grid.js',
     'poster.js',
     'pro.js',
+    'search.js',
     'stats.js',
     'supabase.js'
 ];
