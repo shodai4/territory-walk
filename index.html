@@ -49,35 +49,62 @@
         <!-- 2行目（サブヘッダー・全幅対戦バー & 点滅GPSランプ） -->
         <div class="flex items-center gap-2.5 w-full">
             <!-- 左端：GPSステータスランプ（文字なし、点滅ドットのみ） -->
-            <div id="gps-status-indicator" class="flex items-center justify-center p-1 rounded-full bg-zinc-900/90 border border-zinc-800 shrink-0" title="GPS Status">
+            <div id="gps-status-indicator" class="flex items-center justify-center p-1.5 rounded-full bg-zinc-900/90 border border-zinc-800 shrink-0" title="GPS Status">
                 <span id="gps-dot" class="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse"></span>
             </div>
 
-            <!-- 残り幅全体：Black vs White 対戦パーセンテージバー -->
-            <div class="flex-1 flex items-center gap-2 bg-zinc-950/80 border border-zinc-800/80 px-2.5 py-1 rounded-xl">
+            <!-- 残り幅全体：Black vs White 対戦パーセンテージバー（高さを2倍のh-7に拡大・圧倒的迫力） -->
+            <div class="flex-1 flex items-center gap-2 bg-zinc-950/90 border border-zinc-700/80 px-2 py-1 rounded-xl shadow-inner">
                 <div class="flex items-center gap-1.5 shrink-0">
-                    <span class="w-2.5 h-2.5 rounded-full bg-black shadow-sm border border-zinc-500"></span>
-                    <span class="text-[10px] text-zinc-400 font-mono hidden xs:inline">Black</span>
-                    <span id="score-black" class="text-white font-mono font-bold text-xs">50%</span>
+                    <span class="w-3 h-3 rounded-full bg-black shadow-sm border border-zinc-500"></span>
+                    <span class="text-[11px] text-zinc-300 font-mono hidden xs:inline font-bold">Black</span>
+                    <span id="score-black" class="text-white font-mono font-bold text-xs sm:text-sm">50%</span>
                 </div>
-                <div class="flex-1 h-3.5 bg-zinc-950 rounded-full overflow-hidden flex border border-zinc-600 shadow-inner">
-                    <div id="bar-black" class="bg-black border-r-2 border-zinc-500 transition-all duration-500" style="width: 50%;"></div>
-                    <div id="bar-white" class="bg-white transition-all duration-500" style="width: 50%;"></div>
+                <div class="flex-1 h-7 bg-zinc-950 rounded-lg overflow-hidden flex border border-zinc-600 shadow-inner relative">
+                    <div id="bar-black" class="bg-black border-r-2 border-zinc-500 transition-all duration-500 flex items-center justify-start pl-2" style="width: 50%;"></div>
+                    <div id="bar-white" class="bg-white transition-all duration-500 flex items-center justify-end pr-2" style="width: 50%;"></div>
                 </div>
                 <div class="flex items-center gap-1.5 shrink-0">
-                    <span id="score-white" class="text-zinc-400 font-mono font-bold text-xs">50%</span>
-                    <span class="text-[10px] text-zinc-400 font-mono hidden xs:inline">White</span>
-                    <span class="w-2.5 h-2.5 rounded-full bg-white border border-zinc-300 shadow-sm"></span>
+                    <span id="score-white" class="text-zinc-300 font-mono font-bold text-xs sm:text-sm">50%</span>
+                    <span class="text-[11px] text-zinc-300 font-mono hidden xs:inline font-bold">White</span>
+                    <span class="w-3 h-3 rounded-full bg-white border border-zinc-300 shadow-sm"></span>
                 </div>
             </div>
         </div>
     </header>
 
+    <!-- ヘッダー直下：インライン地図検索バー（スライド展開・検索窓のみの極限ミニマル構成） -->
+    <div id="inline-search-container" class="hidden absolute top-[86px] left-0 right-0 z-[1100] px-3 py-2 bg-black/95 backdrop-blur-md border-b border-zinc-800 shadow-2xl transition-all">
+        <div class="flex items-center gap-2 max-w-lg mx-auto">
+            <div class="flex-1 relative flex items-center">
+                <svg class="w-4 h-4 text-sky-400 absolute left-3 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+                <input id="input-inline-search" type="text" placeholder="地名・駅名を入力（例: 渋谷、梅田、東大阪）" class="w-full bg-zinc-900 border border-zinc-700/80 focus:border-sky-400 rounded-xl pl-9 pr-8 py-2 text-white font-mono text-xs placeholder:text-zinc-500 focus:outline-none">
+                <button id="btn-clear-inline-search" class="hidden absolute right-2.5 text-zinc-500 hover:text-white p-1">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <button id="btn-submit-inline-search" class="px-3.5 py-2 bg-sky-500 hover:bg-sky-400 active:bg-sky-600 text-black font-mono text-xs font-bold rounded-xl transition-all active:scale-95 shrink-0">
+                検索
+            </button>
+            <button id="btn-close-inline-search" class="p-2 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-zinc-300 rounded-xl border border-zinc-700 transition-all active:scale-95 shrink-0" title="閉じる">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+        </div>
+
+        <!-- 検索結果ドロップダウン（検索候補がある時のみ表示） -->
+        <div id="inline-search-results" class="hidden max-w-lg mx-auto mt-2 max-h-48 overflow-y-auto space-y-1 bg-zinc-950/95 border border-zinc-800 rounded-xl p-1.5 text-xs font-mono">
+            <!-- JSで動的描画 -->
+        </div>
+    </div>
+
     <!-- 地図コンテナ（全画面表示） -->
     <main id="map" class="flex-1 w-full h-full z-0"></main>
 
     <!-- 左上：地図検索（遠隔地の塗り状況を見る）フローティングボタン -->
-    <button id="btn-open-search" aria-label="地図検索" title="地名・駅名を検索して塗り状況を見る" class="fixed top-[78px] left-3 z-[1000] bg-black/85 hover:bg-zinc-900 active:bg-zinc-800 backdrop-blur-md border border-zinc-700/90 hover:border-zinc-500 text-zinc-200 px-3 py-1.5 rounded-full text-xs font-mono font-bold flex items-center gap-1.5 shadow-2xl transition-all active:scale-95">
+    <button id="btn-open-search" aria-label="地図検索" title="地名・駅名を検索して塗り状況を見る" class="fixed top-[92px] left-3 z-[1000] bg-black/85 hover:bg-zinc-900 active:bg-zinc-800 backdrop-blur-md border border-zinc-700/90 hover:border-zinc-500 text-zinc-200 px-3 py-1.5 rounded-full text-xs font-mono font-bold flex items-center gap-1.5 shadow-2xl transition-all active:scale-95">
         <svg class="w-3.5 h-3.5 text-sky-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="11" cy="11" r="8"></circle>
             <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
@@ -85,8 +112,33 @@
         <span>地図検索</span>
     </button>
 
-    <!-- 右下：独立した大型円形フローティング現在地（リセンター）ボタン -->
-    <button id="btn-recenter" aria-label="現在地に戻る" title="現在地に戻る" class="fixed bottom-6 right-6 z-[1000] w-14 h-14 bg-black/90 hover:bg-zinc-900 active:bg-zinc-800 text-white border border-zinc-700/90 hover:border-zinc-500 rounded-full shadow-2xl flex items-center justify-center transition-all transform active:scale-95">
+    <!-- 右下：独立した大型円形フローティング現在地（リセンター）ボタン（最下部バナー広告と干渉しない位置配置） -->
+    <button id="btn-recenter" aria-label="現在地に戻る" title="現在地に戻る" class="fixed bottom-[72px] right-4 z-[1000] w-13 h-13 bg-black/90 hover:bg-zinc-900 active:bg-zinc-800 text-white border border-zinc-700/90 hover:border-zinc-500 rounded-full shadow-2xl flex items-center justify-center transition-all transform active:scale-95">
+        <svg class="w-6 h-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="7"></circle>
+            <circle cx="12" cy="12" r="2.5" fill="currentColor"></circle>
+            <line x1="12" y1="2" x2="12" y2="5"></line>
+            <line x1="12" y1="19" x2="12" y2="22"></line>
+            <line x1="2" y1="12" x2="5" y2="12"></line>
+            <line x1="19" y1="12" x2="22" y2="12"></line>
+        </svg>
+    </button>
+
+    <!-- 画面最下部：常時バナー広告（AdMob Banner / Webプレースホルダー） -->
+    <div id="banner-ad-container" class="fixed bottom-0 left-0 right-0 z-[1000] bg-black/95 border-t border-zinc-800/90 flex items-center justify-center py-1.5 px-3 select-none pb-[calc(0.375rem+env(safe-area-inset-bottom))] transition-all">
+        <div class="w-full max-w-sm h-[50px] bg-zinc-950 border border-zinc-800 rounded-lg flex items-center justify-between px-3 text-xs font-mono shadow-xl">
+            <div class="flex items-center gap-2 overflow-hidden">
+                <span class="px-1.5 py-0.5 rounded bg-zinc-800 text-[9px] text-zinc-400 font-bold shrink-0">AD</span>
+                <div class="text-left overflow-hidden">
+                    <div class="text-zinc-200 font-bold text-[11px] truncate">TERRITORY WALK SPONSOR</div>
+                    <div class="text-zinc-500 text-[9px] truncate">街を歩いてオセロ陣地を白黒開拓</div>
+                </div>
+            </div>
+            <button id="btn-ad-free-prompt" class="px-2 py-1 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 text-[10px] rounded font-bold shrink-0 ml-2 whitespace-nowrap active:scale-95 transition-all">
+                広告を消す
+            </button>
+        </div>
+    </div>
         <svg class="w-7 h-7 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="7"></circle>
             <circle cx="12" cy="12" r="2.5" fill="currentColor"></circle>
@@ -122,6 +174,14 @@
         <!-- デバッグ用スキン切替ボタン（Default ⇄ Neon ⇄ Gold ⇄ Crimson ⇄ Sakura ⇄ Pixel） -->
         <button id="btn-cycle-skin" class="w-full mt-1 py-1 px-2 bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-700 border border-zinc-700 text-[10px] font-mono text-amber-400 rounded-lg flex items-center justify-center gap-1.5 shadow transition-all active:scale-95">
             <span id="cycle-skin-text">SKIN: 標準</span>
+        </button>
+
+        <!-- デバッグ用プレビューボタン（結果発表 ＆ チームリセット） -->
+        <button id="btn-debug-preview-result" class="w-full mt-1 py-1 px-2 bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-700 border border-zinc-700 text-[10px] font-mono text-sky-400 rounded-lg flex items-center justify-center gap-1 shadow transition-all active:scale-95">
+            <span>[DEBUG] 結果発表画面をプレビュー</span>
+        </button>
+        <button id="btn-debug-preview-team" class="w-full mt-1 py-1 px-2 bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-700 border border-zinc-700 text-[10px] font-mono text-emerald-400 rounded-lg flex items-center justify-center gap-1 shadow transition-all active:scale-95">
+            <span>[DEBUG] チームリセット画面をプレビュー</span>
         </button>
     </div>
 
@@ -277,6 +337,16 @@
                         <button id="btn-toggle-debug" class="px-3 py-1.5 rounded-lg border text-xs font-mono font-bold flex items-center gap-1.5 transition-all active:scale-95 bg-zinc-900 border-zinc-700 text-zinc-400">
                             <span id="debug-toggle-dot" class="w-2 h-2 rounded-full bg-zinc-600"></span>
                             <span id="debug-toggle-text">DEBUG: OFF</span>
+                        </button>
+                    </div>
+
+                    <!-- デバッグプレビューショートカットボタン -->
+                    <div class="pt-2 border-t border-zinc-900 grid grid-cols-2 gap-1.5">
+                        <button id="btn-menu-debug-preview-result" onclick="document.getElementById('btn-debug-preview-result')?.click()" class="py-1.5 px-2 bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-700 border border-zinc-800 text-[10px] font-mono text-sky-400 rounded-lg text-center transition-all active:scale-95">
+                            結果発表プレビュー
+                        </button>
+                        <button id="btn-menu-debug-preview-team" onclick="document.getElementById('btn-debug-preview-team')?.click()" class="py-1.5 px-2 bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-700 border border-zinc-800 text-[10px] font-mono text-emerald-400 rounded-lg text-center transition-all active:scale-95">
+                            チームリセットプレビュー
                         </button>
                     </div>
                 </div>
@@ -664,14 +734,14 @@
                         </div>
                     </div>
 
-                    <!-- 歩行獲得ボーナスカード (劣勢カムバック2倍対応) -->
-                    <div class="bg-zinc-950/80 border border-zinc-800 p-3 rounded-xl space-y-1.5">
+                    <!-- 歩行獲得ボーナスカード (劣勢カムバック2倍 & 段階的ステップアップ対応) -->
+                    <div class="bg-zinc-950/80 border border-zinc-800 p-3 rounded-xl space-y-2">
                         <div class="flex items-center justify-between">
                             <div class="font-bold text-xs text-white">歩行・陣取りボーナス</div>
-                            <span class="text-[10px] text-amber-400 font-mono">劣勢時2倍！</span>
+                            <span class="text-[10px] text-amber-400 font-mono font-bold">劣勢2倍 ＆ 段階アップ</span>
                         </div>
-                        <div class="text-[11px] text-zinc-400">街を歩いて陣地を開拓・奪還すると自動でコインが貯まります。</div>
-                        <div class="grid grid-cols-2 gap-2 pt-1 font-mono text-xs">
+                        <div class="text-[11px] text-zinc-400 break-keep">街を歩いて陣地を開拓・奪還すると自動でコインが貯まります。歩くほど獲得レートが段階的にアップ！</div>
+                        <div class="grid grid-cols-2 gap-2 pt-0.5 font-mono text-xs">
                             <div class="bg-zinc-900/80 border border-zinc-800 p-2 rounded-lg">
                                 <div class="text-zinc-500 text-[10px]">自陣開拓</div>
                                 <div class="font-bold text-white mt-0.5">+1 COIN / マス</div>
@@ -684,6 +754,28 @@
                         <div class="bg-amber-950/30 border border-amber-500/40 p-2 rounded-lg font-mono text-[10px] text-amber-300 flex items-center justify-between">
                             <span>劣勢チーム時 (陣地40%以下):</span>
                             <span class="font-bold text-amber-400">+4 COIN (2倍逆転ボーナス)</span>
+                        </div>
+
+                        <!-- 段階的ステップアップ表 -->
+                        <div class="bg-zinc-900/60 border border-zinc-800/80 p-2 rounded-lg font-mono text-[10px] space-y-1">
+                            <div class="text-zinc-400 font-bold flex items-center justify-between">
+                                <span>本日の歩行ステップアップ加算</span>
+                                <span class="text-amber-400">歩くほどザクザク増量！</span>
+                            </div>
+                            <div class="grid grid-cols-3 gap-1 text-center pt-0.5">
+                                <div class="bg-zinc-950 p-1.5 rounded border border-zinc-800">
+                                    <div class="text-zinc-500 text-[9px]">10〜29マス</div>
+                                    <div class="text-sky-400 font-bold mt-0.5">+1C 加算</div>
+                                </div>
+                                <div class="bg-zinc-950 p-1.5 rounded border border-zinc-800">
+                                    <div class="text-zinc-500 text-[9px]">30〜49マス</div>
+                                    <div class="text-amber-400 font-bold mt-0.5">+2C 加算</div>
+                                </div>
+                                <div class="bg-zinc-950 p-1.5 rounded border border-amber-500/40">
+                                    <div class="text-amber-400 text-[9px]">50マス以上</div>
+                                    <div class="text-emerald-400 font-bold mt-0.5">+3C 加算</div>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -784,67 +876,31 @@
         </div>
     </div>
 
-    <!-- 地図検索モーダル（遠隔地塗り状況ビューア） -->
-    <div id="search-modal" class="fixed inset-0 z-[2000] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 overflow-x-hidden box-border hidden">
-        <div class="bg-zinc-900 border border-zinc-700/90 rounded-2xl max-w-[calc(100vw-2rem)] sm:max-w-md w-full p-4 pb-5 shadow-2xl flex flex-col gap-3 text-zinc-200 box-border overflow-x-hidden max-h-[85vh] overflow-y-auto">
-            <!-- モーダルヘッダー -->
-            <div class="flex items-center justify-between border-b border-zinc-800 pb-2.5 shrink-0">
+    <!-- チームリセット・配属プレビューモーダル（デバッグ＆シーズン更新時） -->
+    <div id="team-reset-modal" class="fixed inset-0 z-[2200] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 hidden">
+        <div class="bg-zinc-900 border border-zinc-700/90 rounded-2xl max-w-sm w-full p-5 shadow-2xl flex flex-col gap-3 text-zinc-200">
+            <div class="flex items-center justify-between border-b border-zinc-800 pb-2.5">
                 <div class="flex items-center gap-2">
-                    <svg class="w-4 h-4 text-sky-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="11" cy="11" r="8"></circle>
-                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                    </svg>
-                    <h2 class="font-bold text-sm tracking-wider text-white">地図検索 / 塗り状況ビューア</h2>
+                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span class="font-bold text-xs font-mono text-emerald-400 tracking-wider">SEASON RESET & TEAM ASSIGNMENT</span>
                 </div>
-                <button id="btn-close-search-modal" class="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-all active:scale-95">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                </button>
+                <span class="text-[10px] text-zinc-500 font-mono">PREVIEW</span>
             </div>
 
-            <!-- 検索フォーム -->
-            <div class="flex items-center gap-2 shrink-0">
-                <div class="relative flex-1">
-                    <input type="text" id="search-input" placeholder="駅名・地名・施設名を入力（例: 渋谷駅、梅田）" class="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2.5 pl-9 pr-8 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-sky-400 font-mono">
-                    <svg class="w-4 h-4 text-zinc-500 absolute left-3 top-3 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="11" cy="11" r="8"></circle>
-                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                    </svg>
-                    <button id="btn-clear-search" class="hidden absolute right-2.5 top-2.5 text-zinc-500 hover:text-white p-0.5 rounded-full transition-all">
-                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"></path></svg>
-                    </button>
+            <div class="py-2 text-center space-y-2">
+                <div class="text-zinc-400 text-xs font-mono">新シーズン開幕！あなたの配属チーム</div>
+                <div class="p-3 rounded-xl bg-zinc-950 border border-zinc-800 flex items-center justify-center gap-2">
+                    <span class="w-3.5 h-3.5 rounded-full bg-white shadow"></span>
+                    <span id="reset-preview-team-name" class="font-bold text-white font-mono text-sm">White (白) 陣営</span>
                 </div>
-                <button id="btn-exec-search" class="px-4 py-2.5 bg-sky-500 hover:bg-sky-400 active:bg-sky-600 text-black font-bold font-mono text-xs rounded-xl shadow transition-all active:scale-95 shrink-0 flex items-center justify-center">
-                    <span>検索</span>
-                </button>
-            </div>
-
-            <!-- クイックジャンプ（人気エリア） -->
-            <div class="shrink-0 space-y-1.5 pt-1">
-                <div class="text-[10px] text-zinc-400 font-mono flex items-center justify-between">
-                    <span>人気エリア (ワンタップで移動):</span>
-                    <span class="text-zinc-500 text-[9px]">即時ジャンプ</span>
-                </div>
-                <div id="search-quick-presets" class="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-                    <!-- JSで動的生成 -->
+                <div class="text-[11px] text-zinc-400 leading-relaxed px-1">
+                    全マスの支配権が初期化されました。オートバランサーにより所属チームが決定しました。街を歩いて新たな陣地を開拓しましょう！
                 </div>
             </div>
 
-            <!-- 検索結果リストコンテナ -->
-            <div class="space-y-1.5 pt-2 border-t border-zinc-800/80">
-                <div class="text-[10px] text-zinc-400 font-mono">検索結果:</div>
-                <div id="search-results-list" class="min-h-[140px] max-h-[220px] overflow-y-auto space-y-1 pr-1">
-                    <div class="text-center py-6 text-zinc-500 font-mono text-xs">
-                        <div>地名や駅名を入力して検索</div>
-                        <div class="text-[10px] text-zinc-600 mt-1">上の人気エリアからワンタップで移動することもできます</div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- フッター注記 -->
-            <div class="pt-2 border-t border-zinc-800 text-[10px] text-zinc-400 font-mono flex items-start gap-1.5 shrink-0">
-                <svg class="w-3.5 h-3.5 text-zinc-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-                <span>遠隔地を閲覧中も、右下の現在地ボタンを押すといつでもGPS現在地へ戻ります。</span>
-            </div>
+            <button id="btn-close-team-reset-modal" class="w-full py-2.5 bg-zinc-100 hover:bg-white active:bg-zinc-300 text-black font-bold font-mono text-xs rounded-xl shadow transition-all active:scale-95">
+                新シーズンを開始する
+            </button>
         </div>
     </div>
 
@@ -853,16 +909,16 @@
     <!-- Supabase JS v2 CDN -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <!-- Feature Modules -->
-    <script src="poster.js?v=20261113v14"></script>
-    <script src="pro.js?v=20261113v14"></script>
-    <script src="search.js?v=20261113v14"></script>
-    <script src="coins.js?v=20261113v14"></script>
-    <script src="admob.js?v=20261113v14"></script>
-    <script src="iap.js?v=20261113v14"></script>
-    <script src="stats.js?v=20261113v14"></script>
-    <script src="supabase.js?v=20261113v14"></script>
-    <script src="grid.js?v=20261113v14"></script>
+    <script src="poster.js?v=20261113v15"></script>
+    <script src="pro.js?v=20261113v15"></script>
+    <script src="search.js?v=20261113v15"></script>
+    <script src="coins.js?v=20261113v15"></script>
+    <script src="admob.js?v=20261113v15"></script>
+    <script src="iap.js?v=20261113v15"></script>
+    <script src="stats.js?v=20261113v15"></script>
+    <script src="supabase.js?v=20261113v15"></script>
+    <script src="grid.js?v=20261113v15"></script>
     <!-- Main Application Logic -->
-    <script src="app.js?v=20261113v14"></script>
+    <script src="app.js?v=20261113v15"></script>
 </body>
 </html>

@@ -51,12 +51,20 @@ class CoinManager {
             'poster_permanent': { id: 'poster_permanent', name: 'ポスター書き出し無制限パス', cost: 800, desc: 'いつでも何度でもポスター保存が可能に' }
         };
 
-        // 4. In-App Purchase Coin Packs Catalog
+        // 4. In-App Purchase Coin Packs Catalog (Dramatically Increased Rates & Value)
         this.PACKS = {
-            'beginner': { id: 'beginner', name: 'ビギナーパック', yen: 120, coins: 120, bonus: '', desc: 'テーマや称号を手軽にアンロック' },
-            'standard': { id: 'standard', name: 'スタンダードパック', yen: 300, coins: 350, bonus: '+16%増量', desc: '人気スキンや限定称号をしっかり解放' },
-            'premium': { id: 'premium', name: 'プレミアムパック', yen: 600, coins: 750, bonus: '+25%増量 (人気)', desc: 'ゴールドスキンや無制限パスに最適' },
-            'ultimate': { id: 'ultimate', name: 'アルティメットパック', yen: 1200, coins: 1600, bonus: '+33%増量 (最高効率)', desc: '全コンテンツを一気に揃える豪華セット' }
+            'beginner': { id: 'beginner', name: 'ビギナーパック', yen: 120, coins: 300, bonus: '+150%増量', desc: 'テーマや称号を手軽にアンロック' },
+            'standard': { id: 'standard', name: 'スタンダードパック', yen: 300, coins: 900, bonus: '+157%増量', desc: '人気スキンや限定称号をしっかり解放' },
+            'premium': { id: 'premium', name: 'プレミアムパック', yen: 600, coins: 2200, bonus: '+193%増量 (1番人気)', desc: 'ゴールドスキンや無制限パスに最適' },
+            'ultimate': { id: 'ultimate', name: 'アルティメットパック', yen: 1200, coins: 5000, bonus: '+212%増量 (最大お得)', desc: '全コンテンツを一気に揃える超特大セット' }
+        };
+
+        // 5. Ad-Free Permanent Pass
+        this.AD_FREE_PERK = {
+            id: 'ad_free',
+            name: '広告完全非表示パス (Ad-Free Pro)',
+            yen: 480,
+            desc: '画面下部バナー広告を完全消去 & 動画リワードを待ち時間なし即時受け取り可能'
         };
 
         // Global callback for external AdSense / AdMob Rewarded Video completion
@@ -322,8 +330,113 @@ class CoinManager {
         }
     }
 
-    // --- Tile Walking Hook with Underdog Comeback Double Coins ---
+    // --- Ad-Free Management ---
+    isAdFree() {
+        if (this.app && this.app.proManager && this.app.proManager.isPro()) return true;
+        return localStorage.getItem('tw_is_ad_free') === 'true';
+    }
+
+    setAdFree(enabled = true) {
+        localStorage.setItem('tw_is_ad_free', enabled ? 'true' : 'false');
+        document.body.setAttribute('data-ad-free', enabled ? 'true' : 'false');
+        const banner = document.getElementById('banner-ad-container');
+        if (banner) {
+            if (enabled) {
+                banner.classList.add('hidden');
+            } else {
+                banner.classList.remove('hidden');
+            }
+        }
+        if (this.app && this.app.adMobManager) {
+            this.app.adMobManager.updateAdFreeState(enabled);
+        }
+    }
+
+    purchaseAdFreePass() {
+        if (this.app && this.app.iapManager && this.app.iapManager.isNative) {
+            this.app.iapManager.purchasePack('ad-free');
+            return;
+        }
+
+        this.setAdFree(true);
+        if (this.app && this.app.showToast) {
+            this.app.showToast('【購入完了】広告完全非表示パス', '下部バナー広告を消去し動画スキップを適用しました');
+        }
+        this.renderShopPanels();
+    }
+
+    // --- Step-Up Walking Bonus System ---
+    getStepUpBonusInfo() {
+        const todayStr = new Date().toISOString().split('T')[0];
+        const lastDate = localStorage.getItem('tw_stepup_date');
+        let todayCount = parseInt(localStorage.getItem('tw_today_claimed_count') || '0', 10);
+
+        if (lastDate !== todayStr) {
+            todayCount = 0;
+            localStorage.setItem('tw_stepup_date', todayStr);
+            localStorage.setItem('tw_today_claimed_count', '0');
+        }
+
+        // Tier definition:
+        // 0-9: Step 1 (Normal) +0C
+        // 10-29: Step 2 (Boost) +1C
+        // 30-49: Step 3 (Master) +2C
+        // 50+: Step 4 (Legend) +3C
+        let tier = 1;
+        let bonusCoins = 0;
+        let tierName = '通常ステップ';
+        let nextTarget = 10;
+
+        if (todayCount >= 50) {
+            tier = 4;
+            bonusCoins = 3;
+            tierName = '歩行レジェンド (+3C)';
+            nextTarget = null;
+        } else if (todayCount >= 30) {
+            tier = 3;
+            bonusCoins = 2;
+            tierName = '散歩マスター (+2C)';
+            nextTarget = 50;
+        } else if (todayCount >= 10) {
+            tier = 2;
+            bonusCoins = 1;
+            tierName = '歩行ブースト (+1C)';
+            nextTarget = 30;
+        }
+
+        return { todayCount, tier, bonusCoins, tierName, nextTarget };
+    }
+
+    incrementTodayClaimCount() {
+        const todayStr = new Date().toISOString().split('T')[0];
+        const lastDate = localStorage.getItem('tw_stepup_date');
+        let todayCount = parseInt(localStorage.getItem('tw_today_claimed_count') || '0', 10);
+
+        if (lastDate !== todayStr) {
+            todayCount = 0;
+            localStorage.setItem('tw_stepup_date', todayStr);
+        }
+
+        const prevTier = this.getStepUpBonusInfo().tier;
+        todayCount += 1;
+        localStorage.setItem('tw_today_claimed_count', todayCount.toString());
+
+        const newInfo = this.getStepUpBonusInfo();
+        if (newInfo.tier > prevTier && this.app && this.app.showToast) {
+            this.app.showToast(
+                `ステップアップ達成！${newInfo.tierName}`,
+                `本日の開拓 ${todayCount}マス突破！獲得コインが永久加算！`
+            );
+        }
+
+        return newInfo;
+    }
+
+    // --- Tile Walking Hook with Underdog Comeback & Step-Up Bonus ---
     onTileClaimed(isReclaimed) {
+        const stepInfo = this.incrementTodayClaimCount();
+        const stepBonus = stepInfo.bonusCoins; // +0, +1, +2, +3
+
         let base = isReclaimed ? 2 : 1;
         let isComeback = false;
 
@@ -333,13 +446,22 @@ class CoinManager {
             isComeback = true;
         }
 
-        this.coins += base;
+        const totalEarned = base + stepBonus;
+        this.coins += totalEarned;
         localStorage.setItem(this.STORAGE_KEY_COINS, this.coins.toString());
         this.updateCoinUI();
         this.syncCoinsToSupabase();
 
-        if (isComeback && this.app && this.app.showToast) {
-            this.app.showToast('劣勢逆転ボーナス発動！獲得コイン2倍 (+4 COIN)');
+        if (this.app && this.app.showToast) {
+            if (isComeback) {
+                const sub = stepBonus > 0 ? `劣勢2倍 (+4C) ＋ 歩行ブースト (+${stepBonus}C)` : '獲得コイン2倍 (+4 COIN)';
+                this.app.showToast('劣勢逆転ボーナス発動！', sub);
+            } else if (stepBonus > 0) {
+                this.app.showToast(
+                    `マス開拓ボーナス (+${totalEarned} COIN)`,
+                    `${stepInfo.tierName} 適用中 (本日: ${stepInfo.todayCount}マス)`
+                );
+            }
         }
     }
 
@@ -476,6 +598,19 @@ class CoinManager {
             });
         }
 
+        // Bottom banner ad-free prompt button
+        const btnAdFreePrompt = document.getElementById('btn-ad-free-prompt');
+        if (btnAdFreePrompt) {
+            btnAdFreePrompt.addEventListener('click', () => {
+                this.openShopModal('packs');
+            });
+        }
+
+        // Apply saved ad-free state to UI
+        if (this.isAdFree()) {
+            this.setAdFree(true);
+        }
+
         this.initShopModal();
         this.initRewardAdModal();
     }
@@ -516,11 +651,21 @@ class CoinManager {
         const btnWatchAd = document.getElementById('btn-watch-reward-ad');
         if (btnWatchAd) {
             btnWatchAd.addEventListener('click', () => {
+                if (this.isAdFree()) {
+                    this.addCoins(50, '動画リワード (Ad-Free スキップ)');
+                    this.updateCoinUI();
+                    if (this.app && this.app.showToast) {
+                        this.app.showToast('【Ad-Free特典】動画スキップ！', '+50 COIN を即時獲得しました');
+                    }
+                    return;
+                }
                 if (this.app && this.app.adMobManager && this.app.adMobManager.isNative) {
                     this.app.adMobManager.showRewardVideo(() => {
                         this.addCoins(50, 'AdMob動画リワード');
                         this.updateCoinUI();
-                        this.app.showToast('動画リワード獲得！ +50 COIN');
+                        if (this.app && this.app.showToast) {
+                            this.app.showToast('動画リワード獲得！', '+50 COIN を獲得しました');
+                        }
                     });
                 } else {
                     this.startRewardAdSimulation();
@@ -652,7 +797,32 @@ class CoinManager {
         const container = document.getElementById('container-shop-packs');
         if (!container) return;
 
-        container.innerHTML = Object.values(this.PACKS).map(pack => {
+        const isAdFree = this.isAdFree();
+        const adFreeCard = `
+            <div class="bg-gradient-to-br from-zinc-950 to-zinc-900 border ${isAdFree ? 'border-emerald-500/80' : 'border-amber-500/80 ring-1 ring-amber-500/50'} p-3 rounded-xl flex items-center justify-between gap-2">
+                <div>
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                        <span class="font-bold text-xs text-white">広告完全非表示パス (Ad-Free Pro)</span>
+                        <span class="px-1.5 py-0.5 rounded ${isAdFree ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'} text-[9px] font-mono font-bold">${isAdFree ? '有効化済み' : '買い切りパス'}</span>
+                    </div>
+                    <div class="text-[10px] text-zinc-400 leading-tight mt-0.5 break-keep">画面下部バナー広告を完全消去 ＆ 動画リワード待ち時間なし即時受取</div>
+                    <div class="text-amber-400 font-mono text-xs font-bold mt-1">永久Ad-Free特典</div>
+                </div>
+                <div class="shrink-0">
+                    ${isAdFree ? `
+                        <button disabled class="px-3 py-1.5 rounded bg-zinc-800 text-zinc-500 text-xs font-bold font-mono cursor-not-allowed">
+                            適用中
+                        </button>
+                    ` : `
+                        <button id="btn-buy-ad-free" class="px-3 py-1.5 rounded bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-black text-xs font-bold font-mono transition-all active:scale-95 shadow">
+                            ¥480
+                        </button>
+                    `}
+                </div>
+            </div>
+        `;
+
+        const packsCards = Object.values(this.PACKS).map(pack => {
             return `
                 <div class="bg-zinc-950/80 border ${pack.id === 'premium' ? 'border-amber-500/80 ring-1 ring-amber-500/50' : 'border-zinc-800'} p-3 rounded-xl flex items-center justify-between gap-2">
                     <div>
@@ -671,6 +841,15 @@ class CoinManager {
                 </div>
             `;
         }).join('');
+
+        container.innerHTML = adFreeCard + packsCards;
+
+        const buyAdFreeBtn = container.querySelector('#btn-buy-ad-free');
+        if (buyAdFreeBtn) {
+            buyAdFreeBtn.addEventListener('click', () => {
+                this.purchaseAdFreePass();
+            });
+        }
 
         container.querySelectorAll('.btn-buy-pack').forEach(btn => {
             btn.addEventListener('click', (e) => {

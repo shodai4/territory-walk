@@ -12,28 +12,34 @@ class IAPManager {
         // App Store Connect Product IDs
         this.products = {
             'pack-120': {
-                id: 'com.shodai.territorywalk.coins120',
-                coins: 120,
+                id: 'com.shodai.territorywalk.coins300',
+                coins: 300,
                 price: '¥120',
                 title: 'ビギナーパック'
             },
             'pack-300': {
-                id: 'com.shodai.territorywalk.coins350',
-                coins: 350,
+                id: 'com.shodai.territorywalk.coins900',
+                coins: 900,
                 price: '¥300',
                 title: 'スタンダードパック'
             },
             'pack-600': {
-                id: 'com.shodai.territorywalk.coins750',
-                coins: 750,
+                id: 'com.shodai.territorywalk.coins2200',
+                coins: 2200,
                 price: '¥600',
                 title: 'プレミアムパック'
             },
             'pack-1200': {
-                id: 'com.shodai.territorywalk.coins1600',
-                coins: 1600,
+                id: 'com.shodai.territorywalk.coins5000',
+                coins: 5000,
                 price: '¥1,200',
                 title: 'アルティメットパック'
+            },
+            'ad-free': {
+                id: 'com.shodai.territorywalk.adfree',
+                coins: 0,
+                price: '¥480',
+                title: '広告完全非表示パス (Ad-Free Pro)'
             }
         };
 
@@ -89,9 +95,21 @@ class IAPManager {
     }
 
     onPurchaseComplete(item) {
+        if (item.id.includes('adfree') || item.id.includes('ad-free')) {
+            if (this.app && this.app.coinManager) {
+                this.app.coinManager.setAdFree(true);
+            }
+            if (this.app) {
+                this.app.showToast('購入完了！広告完全非表示パス', '下部バナー広告を消去し動画スキップを適用しました');
+            }
+            return;
+        }
+
         if (this.app && this.app.coinManager) {
             this.app.coinManager.addCoins(item.coins, `IAP購入: ${item.title} (${item.price})`);
-            this.app.showToast(`購入完了！ +${item.coins} COIN を獲得しました (${item.title})`);
+            if (this.app) {
+                this.app.showToast(`購入完了！ +${item.coins.toLocaleString()} COIN`, `${item.title} (${item.price}) を獲得しました`);
+            }
         }
     }
 
@@ -104,17 +122,20 @@ class IAPManager {
         }
 
         setTimeout(() => {
-            // Re-sync Pro status and unlocked themes/titles from localStorage / Supabase
+            // Re-sync Pro status and unlocked themes/titles/ad-free from localStorage / Supabase
             if (this.app && this.app.proManager) {
                 this.app.proManager.checkProStatus();
             }
             if (this.app && this.app.coinManager) {
                 this.app.coinManager.updateCoinDisplay();
+                if (localStorage.getItem('tw_is_ad_free') === 'true') {
+                    this.app.coinManager.setAdFree(true);
+                }
             }
 
             console.log('[IAP] Restore purchases verified.');
             if (this.app) {
-                this.app.showToast('購入の復元が完了しました (所持アイテムを同期しました)');
+                this.app.showToast('購入の復元が完了しました', '所持アイテム・Ad-Free状態を同期しました');
             }
         }, 1000);
     }

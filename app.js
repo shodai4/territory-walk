@@ -81,21 +81,26 @@ class TerritoryWalkApp {
         }, 8000);
     }
 
-    showToast(message) {
+    showToast(message, subtitle = null) {
         let toast = document.getElementById('app-toast');
         if (!toast) {
             toast = document.createElement('div');
             toast.id = 'app-toast';
-            toast.className = 'fixed top-14 left-1/2 -translate-x-1/2 z-[3000] bg-zinc-900/95 border border-amber-500/80 text-amber-300 text-xs font-mono px-4 py-2 rounded-xl shadow-2xl backdrop-blur transition-all duration-300 pointer-events-none opacity-0';
+            toast.className = 'fixed top-[92px] left-1/2 -translate-x-1/2 z-[3000] bg-zinc-950/95 border border-amber-500/80 text-amber-300 text-xs font-mono px-4 py-2.5 rounded-xl shadow-2xl backdrop-blur-md transition-all duration-300 pointer-events-none opacity-0 text-center flex flex-col items-center max-w-[92vw]';
             document.body.appendChild(toast);
         }
-        toast.textContent = message;
+        if (subtitle) {
+            toast.innerHTML = `<div class="font-bold text-xs text-white leading-tight break-keep whitespace-nowrap">${message}</div><div class="text-[11px] text-amber-400 mt-0.5 leading-tight break-keep whitespace-nowrap">${subtitle}</div>`;
+        } else {
+            toast.innerHTML = `<div class="font-bold text-xs text-amber-300 leading-tight break-keep whitespace-nowrap">${message}</div>`;
+        }
         toast.classList.remove('opacity-0');
         toast.classList.add('opacity-100');
-        setTimeout(() => {
+        if (this.toastTimeout) clearTimeout(this.toastTimeout);
+        this.toastTimeout = setTimeout(() => {
             toast.classList.remove('opacity-100');
             toast.classList.add('opacity-0');
-        }, 3000);
+        }, 3200);
     }
 
     async initTeam() {
@@ -1354,8 +1359,47 @@ class TerritoryWalkApp {
             });
         }
 
+        // Debug Preview Buttons (Safe UI Preview without modifying persistent production state)
+        const btnDebugResult = document.getElementById('btn-debug-preview-result');
+        if (btnDebugResult) {
+            btnDebugResult.addEventListener('click', () => {
+                if (this.menuModal) this.menuModal.classList.add('hidden');
+                this.showWeeklyResultModal(true);
+            });
+        }
+
+        const btnDebugTeam = document.getElementById('btn-debug-preview-team');
+        if (btnDebugTeam) {
+            btnDebugTeam.addEventListener('click', () => {
+                if (this.menuModal) this.menuModal.classList.add('hidden');
+                this.showTeamResetPreviewModal();
+            });
+        }
+
+        const btnCloseTeamResetModal = document.getElementById('btn-close-team-reset-modal');
+        if (btnCloseTeamResetModal) {
+            btnCloseTeamResetModal.addEventListener('click', () => {
+                const modal = document.getElementById('team-reset-modal');
+                if (modal) modal.classList.add('hidden');
+            });
+        }
+
         window.addEventListener('resize', () => this.resetViewportScroll());
         window.addEventListener('orientationchange', () => this.resetViewportScroll());
+    }
+
+    showTeamResetPreviewModal() {
+        const modal = document.getElementById('team-reset-modal');
+        if (!modal) return;
+
+        const nextTeam = this.currentTeam === 'black' ? 'White (白)' : 'Black (黒)';
+        const teamBadge = document.getElementById('reset-preview-team-name');
+        if (teamBadge) {
+            teamBadge.textContent = nextTeam;
+            teamBadge.className = this.currentTeam === 'black' ? 'font-bold text-white font-mono text-sm' : 'font-bold text-zinc-300 font-mono text-sm';
+        }
+
+        modal.classList.remove('hidden');
     }
 
     initResetCountdown() {

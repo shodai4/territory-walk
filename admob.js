@@ -10,6 +10,7 @@ class AdMobManager {
         this.admob = null;
         this.isAdLoaded = false;
         this.testRewardAdId = 'ca-app-pub-3940256099942544/1712485313'; // Google Official Test Reward Ad ID for iOS
+        this.testBannerAdId = 'ca-app-pub-3940256099942544/2934735716'; // Google Official Test Banner Ad ID for iOS
 
         this.init();
     }
@@ -99,6 +100,34 @@ class AdMobManager {
             this.app.coinManager.showRewardAdModal(onSuccess);
         } else {
             if (typeof onSuccess === 'function') onSuccess();
+        }
+    }
+
+    /**
+     * Show or Hide AdMob Bottom Banner depending on Ad-Free status
+     */
+    async updateAdFreeState(isAdFree) {
+        if (isAdFree) {
+            if (this.isNative && this.admob) {
+                try {
+                    await this.admob.hideBanner();
+                } catch (e) {
+                    console.warn('[AdMob] Failed to hide banner:', e);
+                }
+            }
+        } else {
+            if (this.isNative && this.admob) {
+                try {
+                    await this.admob.showBanner({
+                        adId: this.testBannerAdId,
+                        adSize: 'BANNER',
+                        position: 'BOTTOM_CENTER',
+                        margin: 0
+                    });
+                } catch (e) {
+                    console.warn('[AdMob] Failed to show native banner:', e);
+                }
+            }
         }
     }
 }

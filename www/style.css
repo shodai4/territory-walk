@@ -47,9 +47,15 @@ header {
     padding-right: max(0.75rem, env(safe-area-inset-right)) !important;
 }
 
+/* Recenter button position adjusted above bottom banner ad, drops down when Ad-Free */
 #btn-recenter {
+    bottom: calc(4.75rem + env(safe-area-inset-bottom)) !important;
+    right: calc(1rem + env(safe-area-inset-right)) !important;
+    transition: bottom 0.3s ease;
+}
+
+body[data-ad-free="true"] #btn-recenter {
     bottom: calc(1.5rem + env(safe-area-inset-bottom)) !important;
-    right: calc(1.5rem + env(safe-area-inset-right)) !important;
 }
 
 #dpad-container {
