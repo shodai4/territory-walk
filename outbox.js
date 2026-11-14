@@ -65,6 +65,14 @@ class TileSyncQueue {
         return TileSyncQueue.read().length;
     }
 
+    /** キューを空にする（デバッグの全陣地リセット用）。戻り値は消した件数。 */
+    clearAll() {
+        const cleared = this.count();
+        TileSyncQueue.clear();
+        this.notify();
+        return cleared;
+    }
+
     currentWeekId() {
         return (this.app && this.app.supabaseManager)
             ? this.app.supabaseManager.getCurrentWeekId()

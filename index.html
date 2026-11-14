@@ -185,6 +185,9 @@
         </div>
         <button id="dpad-down" class="w-10 h-10 bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-700 border border-zinc-700 text-white rounded-lg flex items-center justify-center font-bold text-sm shadow transition-all active:scale-95">▼</button>
 
+        <!-- 1歩ごとの結果（塗れたマス・送信待ち件数） -->
+        <div id="dpad-status" class="mt-1 w-full max-w-[136px] text-center text-[9px] font-mono text-amber-300/90 leading-tight break-all">仮想散歩 OFF</div>
+
         <!-- デバッグ用チーム切替ボタン（Black ⇄ White） -->
         <button id="btn-swap-team" class="w-full mt-1.5 py-1 px-2 bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-700 border border-zinc-700 text-[10px] font-mono text-zinc-300 rounded-lg flex items-center justify-center gap-1.5 shadow transition-all active:scale-95">
             <span id="swap-team-icon" class="w-2 h-2 rounded-full bg-white"></span>
@@ -383,6 +386,15 @@
                         <button id="btn-debug-reset-purchases" class="w-full py-2 px-2 bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-700 border border-zinc-800 text-[10px] font-mono text-fuchsia-400 rounded-lg text-center transition-all active:scale-95 flex items-center justify-center gap-1.5">
                             <span>購入アイテムをリセット (初期状態に戻す)</span>
                         </button>
+                    </div>
+
+                    <!-- デバッグ陣地リセット（全白紙化） -->
+                    <div class="pt-2 border-t border-zinc-900/80 space-y-1.5">
+                        <div class="text-[10px] text-zinc-400 font-mono">陣地リセット検証:</div>
+                        <button id="btn-debug-reset-territories" class="w-full py-2 px-2 bg-rose-950/60 hover:bg-rose-900/60 active:bg-rose-900 border border-rose-800/80 text-[10px] font-mono text-rose-300 rounded-lg text-center transition-all active:scale-95">
+                            全陣地を白紙リセット
+                        </button>
+                        <p class="text-[9px] text-zinc-500 leading-tight">地図・保存データ・未送信キューを空にし、当週のサーバー記録も削除します（確認ダイアログあり）</p>
                     </div>
                 </div>
             </details>
@@ -982,11 +994,12 @@
     <script src="admob.js?v=20261114v26"></script>
     <script src="iap.js?v=20261114v26"></script>
     <script src="stats.js?v=20261114v26"></script>
-    <script src="supabase.js?v=20261114v28"></script>
-    <script src="grid.js?v=20261114v28"></script>
-    <script src="outbox.js?v=20261114v26"></script>
+    <script src="supabase.js?v=20261114v35"></script>
+    <script src="grid.js?v=20261114v35"></script>
+    <script src="outbox.js?v=20261114v35"></script>
     <!-- Main Application Logic -->
     <script src="permission.js?v=20261114v34"></script>
-    <script src="app.js?v=20261114v34"></script>
+    <script src="debug-tools.js?v=20261114v35"></script>
+    <script src="app.js?v=20261114v35"></script>
 </body>
 </html>

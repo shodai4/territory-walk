@@ -142,6 +142,44 @@ class SupabaseManager {
     }
 
     /**
+     * 指定したマス（当週）をSupabaseから削除する（デバッグの全陣地リセット用）。
+     * 削除できた行数を返す。RLS等で拒否された場合は success:false と error を返す。
+     */
+    async deleteTiles(tileIds, weekId = this.getCurrentWeekId()) {
+        if (!this.client) {
+            return { success: false, mode: 'offline', deleted: 0 };
+        }
+        const ids = Array.from(new Set((Array.isArray(tileIds) ? tileIds : []).filter(Boolean)));
+        if (ids.length === 0) {
+            return { success: true, deleted: 0 };
+        }
+
+        const CHUNK_SIZE = 100;
+        let deleted = 0;
+        try {
+            for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
+                const chunk = ids.slice(i, i + CHUNK_SIZE);
+                const { data, error } = await this.client
+                    .from('territory_tiles')
+                    .delete()
+                    .eq('week_id', weekId)
+                    .in('tile_id', chunk)
+                    .select('tile_id');
+
+                if (error) {
+                    console.error('[Supabase] Delete tiles error:', error);
+                    return { success: false, error: error, deleted: deleted };
+                }
+                deleted += Array.isArray(data) ? data.length : 0;
+            }
+            return { success: true, deleted: deleted };
+        } catch (err) {
+            console.error('[Supabase] Exception in deleteTiles:', err);
+            return { success: false, error: err, deleted: deleted };
+        }
+    }
+
+    /**
      * Fetch all tiles within bounds and current week from Supabase
      */
     async fetchTilesInBounds(minLat, maxLat, minLng, maxLng, weekId = this.getCurrentWeekId()) {

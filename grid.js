@@ -220,6 +220,23 @@ class GridManager {
     }
 
     /**
+     * 全陣地を白紙に戻す（デバッグ専用）
+     * キャッシュ・描画・保存データ（localStorage）をまとめてクリアする。
+     */
+    clearAllTiles() {
+        const cleared = this.claimedTilesCache.size;
+        this.claimedTilesCache.clear();
+        for (const rectangle of this.renderedMeshes.values()) {
+            try {
+                rectangle.setStyle(this.getTileStyle(null));
+            } catch (e) { /* 描画済みレイヤーの後始末失敗は無視 */ }
+        }
+        this.saveTilesToStorage();
+        console.log(`[Debug] Cleared ${cleared} local tiles -> blank board.`);
+        return cleared;
+    }
+
+    /**
      * Render tiles in view.
      * Render claimed tiles across all zoom levels like Nazca lines.
      */

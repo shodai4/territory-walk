@@ -31,6 +31,8 @@ class TerritoryWalkApp {
         this.watchId = null;
         this.currentMeshId = null;
         this.virtualPos = [...CONFIG.DEFAULT_CENTER];
+        // 実GPSの最新座標（デバッグの仮想散歩を終えたときに戻す先）
+        this.lastRealPosition = null;
         this.isMapVisible = true;
         this.isDebugMode = false;
         this.debugEnabled = CONFIG.ENABLE_DEBUG_TOOLS !== false;
@@ -138,7 +140,14 @@ class TerritoryWalkApp {
         const weekId = this.supabaseManager ? this.supabaseManager.getCurrentWeekId() : '';
         this.syncQueue.enqueue({ meshId, latIdx, lngIdx, team, weekId });
         if (!this.syncQueue.isOffline()) {
-            this.syncQueue.flush('tile-claim').catch(() => {});
+            // 送信中に積まれた分（D-Padの連打等）は次回リトライで確実に送る
+            Promise.resolve(this.syncQueue.flush('tile-claim'))
+                .then((res) => {
+                    if (res && res.skipped && typeof this.syncQueue.scheduleRetry === 'function') {
+                        this.syncQueue.scheduleRetry();
+                    }
+                })
+                .catch(() => {});
         }
     }
 
@@ -1315,10 +1324,41 @@ class TerritoryWalkApp {
         if (dpad && !enabled) dpad.classList.add('hidden');
     }
 
+    /** デバッグの仮想散歩中か（マスタースイッチON かつ DEBUG: ON） */
+    isVirtualWalkActive() {
+        return !!(this.debugEnabled && this.isDebugMode);
+    }
+
     toggleDebugMode() {
         if (!this.debugEnabled) return;
         this.isDebugMode = !this.isDebugMode;
         this.updateDebugModeUI();
+
+        if (this.isDebugMode) {
+            this.updateDpadStatus(`仮想散歩 ON / ${this.currentTeam === 'white' ? 'WHITE' : 'BLACK'}`);
+        } else {
+            this.updateDpadStatus('仮想散歩 OFF');
+            this.restoreRealPosition();
+        }
+    }
+
+    /** 仮想散歩を終えたとき、実GPSの最新位置（あれば）にマーカーを戻す */
+    restoreRealPosition() {
+        if (!this.lastRealPosition) return;
+        this.virtualPos = [...this.lastRealPosition];
+        this.currentMeshId = null;
+        this.lastProcessedLat = null;
+        this.lastProcessedLng = null;
+        this.updatePlayerMarker(this.virtualPos);
+        if (this.map) this.map.setView(this.virtualPos, this.map.getZoom(), { animate: true });
+        this.updateGPSStatus('GPS: 測位中', 'bg-emerald-400', 'text-emerald-400');
+    }
+
+    /** D-Pad 下部の状態表示（塗れたマス・送信待ち件数） */
+    updateDpadStatus(text) {
+        this.dpadStatusText = text;
+        const el = document.getElementById('dpad-status');
+        if (el) el.textContent = text;
     }
 
     updateDebugModeUI() {
@@ -1579,6 +1619,17 @@ class TerritoryWalkApp {
         const rawLng = position.coords.longitude;
         const latitude = parseFloat(rawLat.toFixed(5));
         const longitude = parseFloat(rawLng.toFixed(5));
+        // 実GPSの最新座標は常に保持（デバッグ終了時にここへ戻す）
+        this.lastRealPosition = [latitude, longitude];
+
+        // デバッグの仮想散歩中は、実GPSで仮想座標・マーカー・塗りを上書きしない。
+        // ここで return しないと D-Pad の1歩が数秒で実際の位置に戻ってしまい、
+        // 連続で塗り進められない（これがD-Pad塗りが効かない原因）。
+        if (this.isVirtualWalkActive()) {
+            this.updateGPSStatus('GPS: 仮想散歩中', 'bg-amber-400', 'text-amber-400');
+            return;
+        }
+
         this.virtualPos = [latitude, longitude];
 
         this.updateGPSStatus('GPS: 測位中', 'bg-emerald-400', 'text-emerald-400');
@@ -1683,10 +1734,15 @@ class TerritoryWalkApp {
     }
 
     async processMeshAndClaim(lat, lng) {
-        if (!this.gridManager) return;
+        if (!this.gridManager) return { changed: false, meshId: null };
 
         const { meshId, latIdx, lngIdx } = this.gridManager.getMeshIdFromLatLng(lat, lng);
         const cachedTeam = this.gridManager.claimedTilesCache.get(meshId);
+
+        if (this.currentMeshId === meshId && cachedTeam === this.currentTeam) {
+            // すでに現在地かつ自陣：塗り直しも送信もしない
+            return { changed: false, meshId, latIdx, lngIdx, team: this.currentTeam, isReclaimed: false };
+        }
 
         if (this.currentMeshId !== meshId || cachedTeam !== this.currentTeam) {
             const isReclaimed = cachedTeam && cachedTeam !== this.currentTeam;
@@ -1729,7 +1785,11 @@ class TerritoryWalkApp {
             if (this.supabaseManager) {
                 this.enqueueTileSync(meshId, latIdx, lngIdx, this.currentTeam);
             }
+
+            return { changed: true, meshId, latIdx, lngIdx, team: this.currentTeam, isReclaimed: !!isReclaimed };
         }
+
+        return { changed: false, meshId, latIdx, lngIdx, team: cachedTeam || null, isReclaimed: false };
     }
 
     playClaimSound() {
@@ -1812,15 +1872,46 @@ class TerritoryWalkApp {
         const stepLat = 0.0009; // 1 mesh north/south
         const stepLng = this.gridManager ? this.gridManager.LNG_GRID : 0.00109868; // 1 mesh east/west
 
-        const moveVirtual = (dLat, dLng) => {
-            this.virtualPos[0] += dLat;
-            this.virtualPos[1] += dLng;
+        const moveVirtual = async (dLat, dLng) => {
+            // デバッグ無効（ENABLE_DEBUG_TOOLS=false）または D-PAD: OFF なら何もしない
+            if (!this.isVirtualWalkActive()) return;
+
+            const next = (typeof DebugTools !== 'undefined')
+                ? DebugTools.stepPosition(this.virtualPos, dLat, dLng)
+                : [this.virtualPos[0] + dLat, this.virtualPos[1] + dLng];
+            this.virtualPos = next;
 
             this.updatePlayerMarker(this.virtualPos);
             if (this.map) {
                 this.map.panTo(this.virtualPos, { animate: true, duration: 0.2 });
             }
-            this.processMeshAndClaim(this.virtualPos[0], this.virtualPos[1]);
+
+            // 通常歩行と同じ塗り・戦績・コイン・Outbox 同期のパイプラインを通す
+            this.lastProcessedLat = this.virtualPos[0];
+            this.lastProcessedLng = this.virtualPos[1];
+            let result = null;
+            try {
+                result = await this.processMeshAndClaim(this.virtualPos[0], this.virtualPos[1]);
+            } catch (e) {
+                console.warn('[Debug D-Pad] Claim failed:', e);
+            }
+            this.reportVirtualStep(result);
+        };
+
+        // 1歩の結果を D-Pad 下に表示（塗れたのか・送信待ちが何件かを目で確認できる）
+        this.reportVirtualStep = (result) => {
+            const teamLabel = this.currentTeam === 'white' ? 'WHITE' : 'BLACK';
+            const pending = this.syncQueue ? this.syncQueue.count() : 0;
+            if (!result || !result.meshId) {
+                this.updateDpadStatus('塗り対象なし');
+                return;
+            }
+            const short = String(result.meshId).replace('tile_', '');
+            if (result.changed) {
+                this.updateDpadStatus(`${teamLabel} ${short} 獲得 / 送信待ち ${pending}`);
+            } else {
+                this.updateDpadStatus(`${short} は既に${teamLabel} / 送信待ち ${pending}`);
+            }
         };
 
         const bindButton = (id, dLat, dLng) => {
@@ -2008,8 +2099,67 @@ class TerritoryWalkApp {
             });
         }
 
+        // Debug: 全陣地を白紙リセット（ローカル＋当週サーバー）
+        const btnDebugResetTerritories = document.getElementById('btn-debug-reset-territories');
+        if (btnDebugResetTerritories) {
+            btnDebugResetTerritories.addEventListener('click', (e) => {
+                e.preventDefault();
+                if (!this.debugEnabled) return;
+                this.resetAllTerritories();
+            });
+        }
+
         window.addEventListener('resize', () => this.resetViewportScroll());
         window.addEventListener('orientationchange', () => this.resetViewportScroll());
+    }
+
+    /**
+     * デバッグ：全陣地を白紙リセット（確認ダイアログ → ローカル全消し → 当週サーバー削除）
+     * ENABLE_DEBUG_TOOLS=false では早期リターンで一切実行しない。
+     */
+    async resetAllTerritories() {
+        if (!this.debugEnabled) return;
+        if (typeof DebugTools === 'undefined') {
+            this.showToast('デバッグツールが読み込まれていません');
+            return;
+        }
+
+        let res;
+        try {
+            res = await DebugTools.resetTerritories(this, {
+                confirmFn: (message) => window.confirm(message)
+            });
+        } catch (e) {
+            console.warn('[Debug] Reset failed:', e);
+            this.showToast('白紙リセットに失敗しました');
+            return;
+        }
+
+        if (res.canceled) {
+            this.showToast('【デバッグ】白紙リセットをキャンセルしました');
+            return;
+        }
+        if (!res.ok) {
+            this.showToast('【デバッグ】白紙リセットは無効化されています');
+            return;
+        }
+
+        if (this.gridManager) this.gridManager.updateGrids();
+        this.updateScoreUI();
+        this.updateDpadStatus('全陣地を白紙化しました');
+
+        let detail = 'ローカルの地図・保存データ・未送信キューを空にしました';
+        if (res.serverDeleted > 0) {
+            detail = `ローカル ${res.localCleared} マス＋サーバー ${res.serverDeleted} 件を削除`;
+        } else if (res.serverError) {
+            detail = `ローカル ${res.localCleared} マスを削除（サーバー削除は失敗）`;
+        } else if (res.serverSkipped) {
+            detail = `ローカル ${res.localCleared} マスを削除（サーバーはオフラインで未削除）`;
+        } else if (res.localCleared > 0) {
+            detail = `ローカル ${res.localCleared} マスを削除`;
+        }
+        this.showToast('【デバッグ】全陣地を白紙リセット', detail);
+        console.log('[Debug] Territory reset result:', res);
     }
 
     showTeamResetPreviewModal() {
