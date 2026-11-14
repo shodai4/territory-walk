@@ -77,10 +77,10 @@ class CoinManager {
 
         // 3. Special Perks Catalog (Rebalanced Price Hierarchy)
         this.PERKS = {
-            'poster_ticket': { id: 'poster_ticket', name: '週間ポスター書き出し (1回分)', cost: 500, desc: '今週の陣地をA4ポスターで保存' },
-            'pin_neon': { id: 'pin_neon', name: '現在地ピン: シアン光彩パルス', cost: 5000, desc: '現在地ピンにネオン光彩' },
+            'poster_ticket': { id: 'poster_ticket', name: '週間ポスター (1回分)', cost: 500, desc: '今週の陣地をA4ポスターで保存' },
+            'pin_neon': { id: 'pin_neon', name: '現在地ピン: シアン光彩', cost: 5000, desc: '現在地ピンにネオン光彩' },
             'pin_gold': { id: 'pin_gold', name: '現在地ピン: 黄金オーラ', cost: 15000, desc: '現在地ピンが黄金に輝く' },
-            'poster_permanent': { id: 'poster_permanent', name: 'ポスター書き出し無制限パス', cost: 30000, desc: 'ポスター保存がいつでも無制限' }
+            'poster_permanent': { id: 'poster_permanent', name: 'ポスター無制限パス', cost: 30000, desc: 'ポスター保存がいつでも無制限' }
         };
 
         // 4. In-App Purchase Coin Packs Catalog (5,000 Yen = 50,000 COIN Standard)
