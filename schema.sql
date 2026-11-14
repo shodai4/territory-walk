@@ -41,9 +41,11 @@ WITH CHECK (true);
 -- ==========================================================
 
 -- 1. User Profile & Lifetime Stats Table (territory_users)
+--    nickname の既定値は空文字。表示名が未設定のユーザーは、アプリ側が
+--    初期値としてユーザーID（user_id）を表示する（DBに代用名は入れない）。
 CREATE TABLE IF NOT EXISTS territory_users (
     user_id TEXT PRIMARY KEY,
-    nickname TEXT NOT NULL DEFAULT '名もなき歩行者',
+    nickname TEXT NOT NULL DEFAULT '',
     team TEXT NOT NULL CHECK (team IN ('white', 'black')),
     lifetime_tiles INTEGER NOT NULL DEFAULT 0,
     lifetime_reclaimed INTEGER NOT NULL DEFAULT 0,
@@ -57,6 +59,8 @@ CREATE TABLE IF NOT EXISTS territory_users (
 ALTER TABLE territory_users ADD COLUMN IF NOT EXISTS coins INTEGER NOT NULL DEFAULT 100;
 ALTER TABLE territory_users ADD COLUMN IF NOT EXISTS referral_code TEXT;
 ALTER TABLE territory_users ADD COLUMN IF NOT EXISTS referred_by TEXT;
+-- 表示名の既定値（旧固定名）を空文字へ戻す。未設定ユーザーはアプリがユーザーIDで表示する。
+ALTER TABLE territory_users ALTER COLUMN nickname SET DEFAULT '';
 CREATE INDEX IF NOT EXISTS idx_territory_users_referral_code ON territory_users (referral_code);
 
 -- 2. Weekly Rankings Table (territory_weekly_rankings)

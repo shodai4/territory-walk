@@ -11,14 +11,33 @@ const LEGACY_TITLE_RENAMES = {
     '\u6771\u5927\u962a\u306e\u8987\u8005': 'エリアウォーカー'
 };
 
+// 初期リリース時に表示名の既定値として保存されていた旧固定名。
+// 現在の既定値はユーザーIDのため、この値が保存されている端末は「未設定」として扱い、
+// 読み込み時にキーを掃除してユーザーID表示へ移行する。
+// 画面文言として復活しないよう Unicode エスケープで保持する（称号の旧名と同じ扱い）。
+const LEGACY_DEFAULT_NICKNAME = '\u540d\u3082\u306a\u304d\u6b69\u884c\u8005';
+
 class StatsManager {
-    static parseFormattedName(raw) {
-        if (!raw) return { name: '名もなき歩行者', title: '' };
+    /**
+     * "[称号] 表示名" 形式を分解する。
+     * 表示名が空、または初期リリースの固定名だけの場合は fallbackName を返す。
+     * ランキング行では fallbackName に user_id を渡すことで、未設定の相手も
+     * そのユーザーIDで表示される（固定の代用名は使わない）。
+     */
+    static parseFormattedName(raw, fallbackName = '') {
+        const fallback = String(fallbackName == null ? '' : fallbackName).trim();
+        const normalize = (value) => {
+            const name = String(value == null ? '' : value).trim();
+            if (!name || name === LEGACY_DEFAULT_NICKNAME) return fallback;
+            return name;
+        };
+
+        if (!raw) return { name: fallback, title: '' };
         const match = String(raw).match(/^\[(.*?)\]\s*(.*)$/);
         if (match) {
-            return { title: StatsManager.migrateTitleName(match[1]), name: match[2] || '名もなき歩行者' };
+            return { title: StatsManager.migrateTitleName(match[1]), name: normalize(match[2]) };
         }
-        return { title: '', name: String(raw) };
+        return { title: '', name: normalize(raw) };
     }
 
     /**
@@ -40,7 +59,10 @@ class StatsManager {
 
         this.userId = this.getOrCreateUserId();
         this.referralCode = this.getOrCreateReferralCode();
-        this.nickname = localStorage.getItem('tw_nickname') || '名もなき歩行者';
+        // 表示名の初期値はユーザーID（自動生成）。
+        // ユーザーが自分で設定した場合だけ、そのニックネームを優先する。
+        // this.userId の確定後に評価する必要があるため、この順序を崩さないこと。
+        this.nickname = this.getSavedNickname() || this.userId;
         this.unlockedTitles = this.loadUnlockedTitles();
         this.activeTitle = StatsManager.migrateTitleName(localStorage.getItem('tw_active_title') || '');
         if (this.activeTitle && localStorage.getItem('tw_active_title') !== this.activeTitle) {
@@ -186,6 +208,27 @@ class StatsManager {
         this.syncUserProfileImmediate();
     }
 
+    /**
+     * 端末に保存されている「ユーザーが自分で設定した表示名」。
+     * 未設定なら空文字を返す（呼び出し側がユーザーIDへフォールバックする）。
+     * 初期リリースの固定名が残っている端末は、ここで未設定へ戻す。
+     */
+    getSavedNickname() {
+        const raw = localStorage.getItem('tw_nickname');
+        if (!raw) return '';
+        const saved = String(raw).trim();
+        if (!saved || saved === LEGACY_DEFAULT_NICKNAME) {
+            localStorage.removeItem('tw_nickname');
+            return '';
+        }
+        return saved;
+    }
+
+    /** ユーザーが自分で表示名を設定済みか（未設定＝ユーザーIDで表示中） */
+    hasCustomNickname() {
+        return this.getSavedNickname() !== '';
+    }
+
     getFormattedDisplayName() {
         if (this.activeTitle) {
             return `[${this.activeTitle}] ${this.nickname}`;
@@ -274,9 +317,16 @@ class StatsManager {
     }
 
     async setNickname(name) {
+        // 空文字・文字列以外は従来どおり何もしない（入力ミスで表示名が消えない）。
         if (!name || typeof name !== 'string') return;
-        this.nickname = name.trim().substring(0, 20) || '名もなき歩行者';
-        localStorage.setItem('tw_nickname', this.nickname);
+        const trimmed = name.trim().substring(0, 20);
+        // 空白だけの保存は初期値（ユーザーID）へ戻す。
+        this.nickname = trimmed || this.userId;
+        if (trimmed) {
+            localStorage.setItem('tw_nickname', this.nickname);
+        } else {
+            localStorage.removeItem('tw_nickname');
+        }
         await this.syncUserProfileImmediate();
     }
 

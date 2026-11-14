@@ -218,6 +218,33 @@ App Store Connectでアプリ情報を登録する際、以下の内容をその
   - 同時に AdMob の広告リクエストも `isTesting: false`（本番広告）へ自動で切り替わります（`admob.js` は触らなくてOK）。
   - `false` の状態での起動・全画面・デバッグ操作の無効化は `tests/debug-off.test.js` が毎回検証しています（`npm test`）。
 
+### 提出直前：Supabase本番データの全リセット（1回だけ）
+
+実機検証で塗った陣地・戦績・コインがサーバー（Supabase）に溜まっています。この状態で審査に出すと、
+ランキングに検証用の記録が残ったままになるため、提出の直前に一度だけ全消しします。
+
+- **実行するタイミング**：`CONFIG.ENABLE_DEBUG_TOOLS` を `false` にしたビルドを TestFlight で最終確認したあと、
+  App Store Connect で「審査へ提出」を押す**直前**。TestFlight検証中の実行は禁止（テスターの検証データが消える）。
+- **実行するもの**：`docs/sql/pre-release-reset.sql` を Supabase ダッシュボード → SQL Editor に全文貼り付けて Run。
+  - STEP 0：実行前の件数を控える（この時点では何も消えない）
+  - STEP 1：`TRUNCATE TABLE ... RESTART IDENTITY CASCADE` で3テーブルを全件削除（1トランザクション）
+    - `territory_tiles`（陣地）
+    - `territory_users`（プロフィール・生涯戦績・コイン・招待コード）
+    - `territory_weekly_rankings`（週間ランキング）
+  - STEP 2：3テーブルとも `rows = 0` になったことを確認
+  - 消えるのは行データだけで、テーブル定義・インデックス・RLSポリシー・権限は残る（何度実行しても同じ結果）。
+- **リセット後の端末側**：端末の localStorage には `tw_user_id` / `tw_user_stats` / `tw_nickname` /
+  `pending_tile_queue` が残っている。そのまま起動すると自分のプロフィール行が再作成され、未送信の陣地が
+  再アップロードされてリセットが一部やり直しになる。
+  → テスター端末（自分の実機を含む）からアプリを一度**削除**し、TestFlight の最新ビルドを入れ直す。
+- **消えるもの**：陣地、生涯マス数・戦績、コイン残高（DB側）、招待コード、週間ランキング。
+  サンドボックス購入の検証データも消える（Apple側の購入履歴は消えない）。
+- **表示名の初期値**：自分で表示名を設定していないユーザーは、自動生成されたユーザーID（`tw_user_id`）で表示される
+  （`stats.js` の `nickname` 初期値。`tests/initial-nickname.test.js` が毎回検証）。
+- **本番公開後は実行しない**：実ユーザーのデータも同じ方法で消えるため。公開後の個別削除は `user_id` を指定した
+  `DELETE` で行う。
+- 実行日時・STEP 0 の件数・STEP 2 の結果はリリース記録に残す。
+
 ### 最低対応OS（iOS 15.0）
 - `scripts/configure-ios.js` が、CIで生成される `Podfile` の `platform :ios` と
   `project.pbxproj` の `IPHONEOS_DEPLOYMENT_TARGET`（Debug / Release）を **15.0** に揃えます。
@@ -244,6 +271,8 @@ App Store Connectでアプリ情報を登録する際、以下の内容をその
 
 - [ ] `app.js` の `CONFIG.ENABLE_DEBUG_TOOLS` を `false` に切り替えてプッシュ（CIが新しいビルドをTestFlightへ上げます）
 - [ ] TestFlight で最終ビルドを実機確認（位置情報「常に許可」、画面消灯歩行、ショップ、購入の復元、広告表示）
+- [ ] **提出直前**：Supabase本番データを全リセット（`docs/sql/pre-release-reset.sql` をSQL Editorで実行。TestFlight検証が完全に終わってから）
+- [ ] リセット後、テスター端末（自分の実機含む）からアプリを削除→最新ビルドを入れ直す（端末側データの再アップロード防止）
 - [ ] App Store Connect → 申請バージョンに **App内課金 5商品を紐付け**（現在「提出準備中」のままだとサンドボックスでも商品が取得できません）
 - [ ] 「Appのプライバシー」を申告（**トラッキング「はい」**、デバイスID・広告データ・製品のインタラクション。`docs/app-store-metadata.md` の5節）
 - [ ] 年齢制限を全項目「いいえ」＝4+ で確定

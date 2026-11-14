@@ -892,7 +892,15 @@ class TerritoryWalkApp {
         if (!this.statsManager) return;
         const stats = this.statsManager.stats;
         const nickInput = document.getElementById('input-nickname');
-        if (nickInput) nickInput.value = this.statsManager.nickname;
+        if (nickInput) {
+            // 入力欄には「ユーザーが自分で設定した名前」だけを出す。
+            // 未設定のときは空欄にし、実際の表示（ユーザーID）はプレースホルダーで示す。
+            const savedName = typeof this.statsManager.getSavedNickname === 'function'
+                ? this.statsManager.getSavedNickname()
+                : '';
+            nickInput.value = savedName;
+            nickInput.placeholder = '未設定時はユーザーIDで表示';
+        }
 
         const titleSelect = document.getElementById('select-active-title');
         if (titleSelect && this.statsManager.unlockedTitles) {
@@ -959,10 +967,10 @@ class TerritoryWalkApp {
         }
     }
 
-    parseNicknameAndTitle(raw) {
+    parseNicknameAndTitle(raw, fallbackName = '') {
         return typeof StatsManager !== 'undefined' && typeof StatsManager.parseFormattedName === 'function'
-            ? StatsManager.parseFormattedName(raw)
-            : { title: '', name: String(raw || '名もなき歩行者') };
+            ? StatsManager.parseFormattedName(raw, fallbackName)
+            : { title: '', name: String(raw || fallbackName || '') };
     }
 
     async loadWeeklyRankings() {
@@ -1021,7 +1029,7 @@ class TerritoryWalkApp {
 
         listEl.innerHTML = data.map((item, idx) => {
             const isMe = item.user_id === this.statsManager.userId || item.nickname === this.statsManager.nickname;
-            const parsed = this.parseNicknameAndTitle(item.nickname);
+            const parsed = this.parseNicknameAndTitle(item.nickname, item.user_id);
             return `
             <li class="flex items-center justify-between py-2 px-2.5 rounded-lg border-b border-zinc-800/80 ${isMe ? 'bg-amber-500/10 border-amber-500/30' : 'hover:bg-zinc-800/40'} text-xs">
                 <div class="flex items-center gap-2 min-w-0 pr-2">
@@ -1049,7 +1057,7 @@ class TerritoryWalkApp {
             } else {
                 listEl.innerHTML = data.map((item, idx) => {
                     const isMe = item.user_id === this.statsManager.userId || item.nickname === this.statsManager.nickname;
-                    const parsed = this.parseNicknameAndTitle(item.nickname);
+                    const parsed = this.parseNicknameAndTitle(item.nickname, item.user_id);
                     return `
                     <li class="flex items-center justify-between py-2 px-2.5 rounded-lg border-b border-zinc-800/80 ${isMe ? 'bg-amber-500/10 border-amber-500/30' : 'hover:bg-zinc-800/40'} text-xs">
                         <div class="flex items-center gap-2 min-w-0 pr-2">
@@ -1073,7 +1081,7 @@ class TerritoryWalkApp {
             } else {
                 reclaimListEl.innerHTML = reclaimData.map((item, idx) => {
                     const isMe = item.user_id === this.statsManager.userId || item.nickname === this.statsManager.nickname;
-                    const parsed = this.parseNicknameAndTitle(item.nickname);
+                    const parsed = this.parseNicknameAndTitle(item.nickname, item.user_id);
                     return `
                     <li class="flex items-center justify-between py-2 px-2.5 rounded-lg border-b border-zinc-800/80 ${isMe ? 'bg-amber-500/10 border-amber-500/30' : 'hover:bg-zinc-800/40'} text-xs">
                         <div class="flex items-center gap-2 min-w-0 pr-2">
