@@ -229,6 +229,31 @@ App Store Connectでアプリ情報を登録する際、以下の内容をその
 - 公開窓口は `support.html` / `privacy.html` に記載済み：`shodai121ueda+territorywalk@gmail.com`（Gmailのプラスアドレス。同じ受信箱に届き、振り分け可能）と GitHub Issues。
 - App Review Information の連絡先は従来どおり `shodai121ueda@gmail.com`（Appleとのやり取り用。公開ページには出しません）。
 
+### 本番広告（ENABLE_DEBUG_TOOLS=false）にする前の注意
+- `false` にすると `isTesting: false` になり、**自分の実機にも本番広告が配信されます**。
+  自分の広告をタップすると Google の「無効トラフィック」と判定され、AdMob アカウント停止のリスクがあります。
+- 自分の端末で最終確認する場合は、AdMob の「テストデバイス」に端末を登録し、
+  `admob.js` の `ADMOB_TESTING_DEVICES` にそのハッシュを追加してください（デバイス単位でテスト広告になります）。
+- テスト中（`true`）は Google 公式のテスト広告が出るため、収益も無効トラフィックも発生しません。
 
-App Store Connect上でメタデータ入力とビルド選択（自動アップロードされた最新ビルドを選択）が完了したら、右上の **「審査へ提出」** ボタンをポチッと押すだけです！
-通常24時間〜48時間以内にAppleのレビューチームから承認通知が届き、App Storeで世界中に配信されます。
+---
+
+## 5. 提出までの残タスク（人間の作業チェックリスト）
+
+コード側は完了済み。以下は App Store Connect / AdMob / Apple Developer の画面での作業です。
+
+- [ ] `app.js` の `CONFIG.ENABLE_DEBUG_TOOLS` を `false` に切り替えてプッシュ（CIが新しいビルドをTestFlightへ上げます）
+- [ ] TestFlight で最終ビルドを実機確認（位置情報「常に許可」、画面消灯歩行、ショップ、購入の復元、広告表示）
+- [ ] App Store Connect → 申請バージョンに **App内課金 5商品を紐付け**（現在「提出準備中」のままだとサンドボックスでも商品が取得できません）
+- [ ] 「Appのプライバシー」を申告（**トラッキング「はい」**、デバイスID・広告データ・製品のインタラクション。`docs/app-store-metadata.md` の5節）
+- [ ] 年齢制限を全項目「いいえ」＝4+ で確定
+- [ ] スクリーンショット4枚（`resources/screenshots/`）・説明文・キーワード・サポートURL・プライバシーポリシーURLを登録
+- [ ] 審査メモを `docs/app-store-metadata.md` の7節の文面に差し替え（デバッグモード前提の旧文面は使わない）
+- [ ] AdMob: お支払いプロファイル・税務情報の完了、PIN（住所確認）の受領
+- [ ] `app-ads.txt` をドメインルートに公開（`shodai4.github.io` リポジトリ作成、または `shodai4.com` 取得後にカスタムドメイン設定）
+- [ ] CIジョブサマリーの「iOS Deployment Target: iOS 14.0+」を `iOS 15.0+` に修正
+      （`.github/workflows/ios-build.yml` は workflows 権限が必要なため手元で1行）
+- [ ] App Store Connect へビルドを選択し「審査へ提出」
+- [ ] （既知）Apple Developer の重複決済 `W1480216400` の有無確認
+
+最後の「審査へ提出」を押すと、通常24時間〜48時間でAppleのレビュー結果が届きます。
