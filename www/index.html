@@ -777,52 +777,39 @@
                 <div id="panel-shop-earn" class="space-y-2.5 w-full min-w-0 box-border">
                     <!-- リワード動画カード -->
                     <div class="bg-gradient-to-br from-zinc-950 to-zinc-900 border border-amber-500/50 p-3 rounded-xl flex flex-col gap-2 w-full min-w-0 box-border">
-                        <div class="flex items-start justify-between gap-2 min-w-0">
-                            <div class="min-w-0 flex-1">
-                                <div class="font-bold text-xs text-amber-400 flex items-center gap-1.5 truncate">
-                                    <span>動画リワード広告（テスト視聴）</span>
-                                </div>
-                                <div class="text-[11px] text-zinc-300 mt-1 break-words">5秒のスポンサー動画を視聴して、すぐにコインを獲得できます。</div>
-                            </div>
+                        <div class="flex items-center justify-between gap-2 min-w-0">
+                            <div class="font-bold text-xs text-amber-400 truncate">動画リワード</div>
                             <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 text-[10px] font-mono font-bold shrink-0">+500 COIN</span>
                         </div>
                         <button id="btn-watch-reward-ad" class="w-full py-2 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-black font-bold font-mono text-xs rounded-lg shadow transition-all active:scale-95 flex items-center justify-center gap-1.5 mt-1 box-border">
                             <svg class="w-3.5 h-3.5 text-black shrink-0" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-                            <span class="truncate">動画を視聴して +500 COIN を獲得</span>
+                            <span class="truncate">動画を見る</span>
                         </button>
                     </div>
 
                     <!-- 1日1回 Xシェアボーナスカード -->
                     <div class="bg-gradient-to-br from-zinc-950 to-zinc-900 border border-zinc-800 p-3 rounded-xl flex flex-col gap-2 w-full min-w-0 box-border">
-                        <div class="flex items-start justify-between gap-2 min-w-0">
-                            <div class="min-w-0 flex-1">
-                                <div class="font-bold text-xs text-white flex items-center gap-1.5 truncate">
-                                    <span>1日1回 Xシェアボーナス</span>
-                                </div>
-                                <div class="shop-desc text-[11px] text-zinc-400 mt-1">本日の戦況や招待コードをXへシェアしてコイン獲得。</div>
-                            </div>
+                        <div class="flex items-center justify-between gap-2 min-w-0">
+                            <div class="font-bold text-xs text-white truncate">1日1回 Xシェア</div>
                             <span class="px-2 py-0.5 rounded bg-zinc-800 text-amber-400 text-[10px] font-mono font-bold shrink-0">+300 COIN</span>
                         </div>
                         <button id="btn-x-share-shop" class="w-full py-2 bg-zinc-100 hover:bg-white text-black font-bold font-mono text-xs rounded-lg shadow transition-all active:scale-95 flex items-center justify-center gap-1.5 mt-1 box-border">
                             <svg class="w-3.5 h-3.5 text-black shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
-                            <span class="truncate">Xで戦績をシェアして +300 COIN 獲得</span>
+                            <span class="truncate">Xでシェア</span>
                         </button>
                     </div>
 
                     <!-- 友達招待カード -->
                     <div class="bg-zinc-950/80 border border-zinc-800 p-3 rounded-xl space-y-2 w-full min-w-0 box-border">
-                        <div class="flex items-start justify-between gap-2 min-w-0">
-                            <div class="min-w-0 flex-1">
-                                <div class="font-bold text-xs text-white truncate">友達招待ボーナス</div>
-                                <div class="shop-desc text-[11px] text-zinc-400 mt-0.5">招待した側・された側の双方に +1,000 COIN！</div>
-                            </div>
+                        <div class="flex items-center justify-between gap-2 min-w-0">
+                            <div class="font-bold text-xs text-white truncate">友達招待</div>
                             <span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-[10px] font-mono font-bold shrink-0">双方 +1,000 COIN</span>
                         </div>
 
                         <!-- 自分の招待コード -->
                         <div class="bg-zinc-900 border border-zinc-800 p-2.5 rounded-lg flex items-center justify-between gap-2 min-w-0 box-border">
                             <div class="font-mono text-xs min-w-0 flex-1">
-                                <span class="text-zinc-500 text-[10px] block truncate">あなたの招待コード</span>
+                                <span class="text-zinc-500 text-[10px] block truncate">招待コード</span>
                                 <span id="display-my-referral-code" class="font-bold text-amber-400 tracking-wider truncate block">TW-WALK</span>
                             </div>
                             <div class="flex items-center gap-1.5 shrink-0">
@@ -839,7 +826,7 @@
                         <!-- 友達のコード入力欄 -->
                         <div id="friend-referral-input-container" class="pt-1 min-w-0 box-border">
                             <div class="flex items-center gap-1.5 min-w-0 box-border">
-                                <input id="input-friend-referral" type="text" maxlength="10" placeholder="友達の招待コードを入力" class="flex-1 min-w-0 bg-zinc-900 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-white font-mono text-xs focus:outline-none focus:border-amber-500 uppercase box-border">
+                                <input id="input-friend-referral" type="text" maxlength="10" placeholder="招待コードを入力" class="flex-1 min-w-0 bg-zinc-900 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-white font-mono text-xs focus:outline-none focus:border-amber-500 uppercase box-border">
                                 <button id="btn-apply-friend-referral" class="px-3 py-1.5 rounded-lg bg-zinc-100 hover:bg-white text-black font-bold font-mono text-xs transition-all active:scale-95 shrink-0">
                                     適用
                                 </button>
@@ -850,43 +837,39 @@
                     <!-- 歩行獲得ボーナスカード (劣勢カムバック2倍 & 段階的ステップアップ対応) -->
                     <div class="bg-zinc-950/80 border border-zinc-800 p-3 rounded-xl space-y-2 w-full min-w-0 box-border">
                         <div class="flex items-center justify-between gap-2 min-w-0">
-                            <div class="font-bold text-xs text-white truncate">歩行・陣取りボーナス</div>
-                            <span class="text-[10px] text-amber-400 font-mono font-bold shrink-0">劣勢2倍 ＆ 段階アップ</span>
+                            <div class="font-bold text-xs text-white truncate">歩行・陣取り</div>
+                            <span class="text-[10px] text-amber-400 font-mono font-bold shrink-0">劣勢2倍</span>
                         </div>
-                        <div class="shop-desc text-[11px] text-zinc-400">歩いて陣地を開拓・奪還するとコインが貯まります。歩くほどレートがアップ！</div>
                         <div class="grid grid-cols-2 gap-2 pt-0.5 font-mono text-xs">
                             <div class="bg-zinc-900/80 border border-zinc-800 p-2 rounded-lg min-w-0 box-border">
-                                <div class="text-zinc-500 text-[10px] truncate">自陣開拓</div>
-                                <div class="font-bold text-white mt-0.5 truncate">+10 COIN / マス</div>
+                                <div class="text-zinc-500 text-[10px] truncate">開拓</div>
+                                <div class="font-bold text-white mt-0.5 truncate">+10 / マス</div>
                             </div>
                             <div class="bg-zinc-900/80 border border-zinc-800 p-2 rounded-lg min-w-0 box-border">
-                                <div class="text-emerald-400 text-[10px] truncate">陣地奪還 (通常)</div>
-                                <div class="font-bold text-emerald-400 mt-0.5 truncate">+20 COIN / マス</div>
+                                <div class="text-emerald-400 text-[10px] truncate">奪還</div>
+                                <div class="font-bold text-emerald-400 mt-0.5 truncate">+20 / マス</div>
                             </div>
                         </div>
                         <div class="bg-amber-950/30 border border-amber-500/40 p-2 rounded-lg font-mono text-[10px] text-amber-300 flex items-center justify-between gap-2 min-w-0 box-border">
-                            <span class="truncate">劣勢時 (陣地40%以下):</span>
-                            <span class="font-bold text-amber-400 shrink-0">+40 COIN (2倍)</span>
+                            <span class="truncate">劣勢 (陣地40%以下)</span>
+                            <span class="font-bold text-amber-400 shrink-0">+40</span>
                         </div>
 
                         <!-- 段階的ステップアップ表 -->
                         <div class="bg-zinc-900/60 border border-zinc-800/80 p-2 rounded-lg font-mono text-[10px] space-y-1 w-full min-w-0 box-border">
-                            <div class="text-zinc-400 font-bold flex items-center justify-between gap-1 min-w-0">
-                                <span class="truncate">本日の歩行ステップアップ加算</span>
-                                <span class="text-amber-400 text-[9px] shrink-0">歩くほど増量！</span>
-                            </div>
+                            <div class="text-zinc-400 font-bold truncate">本日の開拓数で加算</div>
                             <div class="grid grid-cols-3 gap-1 text-center pt-0.5 min-w-0">
                                 <div class="bg-zinc-950 p-1.5 rounded border border-zinc-800 min-w-0 box-border">
                                     <div class="text-zinc-500 text-[9px] truncate">10〜29マス</div>
-                                    <div class="text-sky-400 font-bold mt-0.5 truncate">+10 COIN 加算</div>
+                                    <div class="text-sky-400 font-bold mt-0.5 truncate">+10</div>
                                 </div>
                                 <div class="bg-zinc-950 p-1.5 rounded border border-zinc-800 min-w-0 box-border">
                                     <div class="text-zinc-500 text-[9px] truncate">30〜49マス</div>
-                                    <div class="text-amber-400 font-bold mt-0.5 truncate">+20 COIN 加算</div>
+                                    <div class="text-amber-400 font-bold mt-0.5 truncate">+20</div>
                                 </div>
                                 <div class="bg-zinc-950 p-1.5 rounded border border-amber-500/40 min-w-0 box-border">
                                     <div class="text-amber-400 text-[9px] truncate">50マス以上</div>
-                                    <div class="text-emerald-400 font-bold mt-0.5 truncate">+30 COIN 加算</div>
+                                    <div class="text-emerald-400 font-bold mt-0.5 truncate">+30</div>
                                 </div>
                             </div>
                         </div>
@@ -895,10 +878,9 @@
                     <!-- デイリーログインボーナスカード -->
                     <div class="bg-zinc-950/80 border border-zinc-800 p-3 rounded-xl space-y-1.5 w-full min-w-0 box-border">
                         <div class="flex items-center justify-between gap-2 min-w-0">
-                            <div class="font-bold text-xs text-white truncate">デイリーログインボーナス</div>
+                            <div class="font-bold text-xs text-white truncate">デイリーログイン</div>
                             <span class="text-[10px] text-zinc-400 font-mono shrink-0">毎日自動付与</span>
                         </div>
-                        <div class="shop-desc text-[11px] text-zinc-400">毎日の初回アクセス時に連続ログイン日数に応じて付与。</div>
                         <div class="text-amber-400 font-mono text-xs font-bold pt-0.5">+200〜500 COIN / 日</div>
                     </div>
                 </div>
@@ -1033,7 +1015,7 @@
     <script src="poster.js?v=20261113v24"></script>
     <script src="pro.js?v=20261114v43"></script>
     <script src="search.js?v=20261113v24"></script>
-    <script src="coins.js?v=20261114v43"></script>
+    <script src="coins.js?v=20261115v44"></script>
     <script src="admob.js?v=20261114v43"></script>
     <script src="iap.js?v=20261114v26"></script>
     <script src="stats.js?v=20261114v26"></script>

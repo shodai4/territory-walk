@@ -1216,14 +1216,14 @@ class CoinManager {
                 btnXShare.className = 'w-full py-2 bg-zinc-100 hover:bg-white text-black font-bold font-mono text-xs rounded-lg shadow transition-all active:scale-95 flex items-center justify-center gap-1.5';
                 btnXShare.innerHTML = `
                     <svg class="w-3.5 h-3.5 text-black" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
-                    <span>Xで戦績をシェアして +300 COIN 獲得</span>
+                    <span>Xでシェア</span>
                 `;
             } else {
                 btnXShare.disabled = true;
                 btnXShare.className = 'w-full py-2 bg-zinc-800 text-zinc-500 font-bold font-mono text-xs rounded-lg cursor-not-allowed flex items-center justify-center gap-1.5';
                 btnXShare.innerHTML = `
                     <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                    <span>本日獲得済み (明日またシェアできます)</span>
+                    <span>本日獲得済み</span>
                 `;
             }
         }
@@ -1240,7 +1240,7 @@ class CoinManager {
             if (used) {
                 referralInputContainer.innerHTML = `
                     <div class="bg-zinc-900 border border-zinc-800 p-2.5 rounded-lg text-center font-mono text-xs text-zinc-400">
-                        <span class="text-emerald-400 font-bold">招待特典適用済み</span> [コード: ${used}]
+                        <span class="text-emerald-400 font-bold">適用済み</span> [コード: ${used}]
                     </div>
                 `;
             }
