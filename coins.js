@@ -1320,7 +1320,8 @@ class CoinManager {
                     actionButton = `<span class="px-2.5 py-1 rounded bg-zinc-800 text-amber-400 text-[10px] font-bold font-mono">解放済み</span>`;
                 } else {
                     const canAfford = this.coins >= perk.cost;
-                    actionButton = `<button class="btn-buy-perk px-2.5 py-1 rounded ${canAfford ? 'bg-amber-600 hover:bg-amber-500 text-white' : 'bg-zinc-800 text-zinc-500'} text-[10px] font-bold font-mono transition-all active:scale-95" data-perk="${perk.id}" ${canAfford ? '' : 'disabled'}>${perk.cost} COIN</button>`;
+                    const btnStyle = canAfford ? 'bg-amber-600 hover:bg-amber-500 text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700';
+                    actionButton = `<button class="btn-buy-perk px-2 py-1 rounded ${btnStyle} text-[10px] font-bold font-mono transition-all active:scale-95 whitespace-nowrap tabular-nums" data-perk="${perk.id}">${perk.cost.toLocaleString()} COIN</button>`;
                 }
             } else if (perk.id.startsWith('pin_')) {
                 const unlocked = this.isPerkUnlocked(perk.id);
@@ -1332,7 +1333,8 @@ class CoinManager {
                     actionButton = `<button class="btn-equip-pin px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-white text-[10px] font-bold font-mono transition-all active:scale-95" data-pin="${perk.id === 'pin_neon' ? 'neon' : 'gold'}">適用</button>`;
                 } else {
                     const canAfford = this.coins >= perk.cost;
-                    actionButton = `<button class="btn-buy-perk px-2.5 py-1 rounded ${canAfford ? 'bg-amber-600 hover:bg-amber-500 text-white' : 'bg-zinc-800 text-zinc-500'} text-[10px] font-bold font-mono transition-all active:scale-95" data-perk="${perk.id}" ${canAfford ? '' : 'disabled'}>${perk.cost} COIN</button>`;
+                    const btnStyle = canAfford ? 'bg-amber-600 hover:bg-amber-500 text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700';
+                    actionButton = `<button class="btn-buy-perk px-2 py-1 rounded ${btnStyle} text-[10px] font-bold font-mono transition-all active:scale-95 whitespace-nowrap tabular-nums" data-perk="${perk.id}">${perk.cost.toLocaleString()} COIN</button>`;
                 }
             }
 
@@ -1340,7 +1342,7 @@ class CoinManager {
                 <div class="bg-zinc-950/80 border border-zinc-800 p-2.5 rounded-xl flex items-center justify-between gap-2">
                     <div>
                         <div class="font-bold text-xs text-white">${perk.name}</div>
-                        <div class="text-[10px] text-zinc-400 leading-tight mt-0.5">${perk.desc}</div>
+                        <div class="shop-desc text-[10px] text-zinc-400 leading-tight mt-0.5">${perk.desc}</div>
                     </div>
                     <div class="shrink-0">
                         ${actionButton}
