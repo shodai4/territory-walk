@@ -45,6 +45,11 @@ class TerritoryWalkApp {
         this.backgroundClaimCount = 0;
         this.isAppInBackground = false;
 
+        // 起動ゲート（初回はルール説明の「ゲームをはじめる」まで位置情報・ATTを待機）
+        this.startupGate = null;
+        this.servicesStarted = false;
+        this.servicesStartedBy = null;
+
         // Initialize managers
         this.proManager = new ProManager();
         this.posterGenerator = new PosterGenerator(this);
@@ -52,7 +57,7 @@ class TerritoryWalkApp {
         this.statsManager = new StatsManager(this.supabaseManager, this);
         this.coinManager = new CoinManager(this, this.supabaseManager);
         this.searchManager = new SearchManager(this);
-        this.adMobManager = new AdMobManager(this);
+        this.adMobManager = new AdMobManager(this, { deferInit: true });
         this.iapManager = new IAPManager(this);
 
         // オフライン陣地の一時保存キュー（送信失敗分もここに退避される）
@@ -72,7 +77,8 @@ class TerritoryWalkApp {
         this.initWeeklyResultModal();
         this.initProModal();
         this.initExportButton();
-        this.initGeolocation();
+        // 初回起動はルール説明の「ゲームをはじめる」まで位置情報・ATTの許可要求を待たせる
+        this.initStartupGate();
         this.initLifecycleListeners();
         this.applyDebugToolsVisibility();
         this.initDPad();
@@ -167,6 +173,7 @@ class TerritoryWalkApp {
             'stats-modal',
             'weekly-result-modal',
             'team-reset-modal',
+            'team-decision-modal',
             'pro-modal',
             'reward-ad-modal'
         ];
@@ -187,6 +194,7 @@ class TerritoryWalkApp {
             'stats-modal',
             'weekly-result-modal',
             'team-reset-modal',
+            'team-decision-modal',
             'pro-modal',
             'reward-ad-modal'
         ];
@@ -397,6 +405,12 @@ class TerritoryWalkApp {
         this.menuModal = document.getElementById('menu-modal');
         this.btnOpenRules = document.getElementById('btn-open-rules');
         this.btnCloseRules = document.getElementById('btn-close-rules');
+        this.teamDecisionModal = document.getElementById('team-decision-modal');
+        this.teamDecisionBadge = document.getElementById('team-decision-badge');
+        this.teamDecisionSymbol = document.getElementById('team-decision-symbol');
+        this.teamDecisionName = document.getElementById('team-decision-name');
+        this.teamDecisionDescription = document.getElementById('team-decision-description');
+        this.btnStartGame = document.getElementById('btn-start-game');
         this.btnMenu = document.getElementById('btn-menu');
         this.btnCloseMenu = document.getElementById('btn-close-menu');
         this.btnModalCloseIcon = document.getElementById('btn-modal-close-icon');
@@ -416,6 +430,7 @@ class TerritoryWalkApp {
         this.swapTeamText = document.getElementById('swap-team-text');
 
         this.initRulesModal();
+        this.initTeamDecisionModal();
         this.initMenuModal();
     }
 
@@ -1409,20 +1424,128 @@ class TerritoryWalkApp {
         }
 
         if (this.btnCloseRules) {
-            this.btnCloseRules.addEventListener('click', () => {
-                if (this.rulesModal) {
-                    this.rulesModal.classList.add('hidden');
-                    localStorage.setItem('territory_rules_seen_v1', 'true');
-                    this.resetViewportScroll();
-                }
-            });
+            this.btnCloseRules.addEventListener('click', () => this.dismissRulesModal());
         }
-        this.setupSwipeUpToClose('rules-modal', () => {
-            if (this.rulesModal) {
-                this.rulesModal.classList.add('hidden');
-                localStorage.setItem('territory_rules_seen_v1', 'true');
-            }
+        this.setupSwipeUpToClose('rules-modal', () => this.dismissRulesModal());
+    }
+
+    /**
+     * ルール説明モーダルを閉じる（初回の「ゲームをはじめる」もここ）。
+     * 初回起動はここでチーム決定画面へ進み、そこで「ゲーム開始」を押すまで
+     * 位置情報と AdMob/ATT の許可要求は出さない。
+     */
+    dismissRulesModal() {
+        const needsTeamDecision = this.startupGate ? this.startupGate.needsTeamDecision() : false;
+
+        if (this.rulesModal) {
+            this.rulesModal.classList.add('hidden');
+            this.resetViewportScroll();
+        }
+
+        if (needsTeamDecision) {
+            this.showTeamDecisionModal();
+            return;
+        }
+
+        if (this.startupGate) return;
+
+        // startup-gate.js が読まれていない場合のフォールバック（従来の即時開始）
+        try {
+            localStorage.setItem('territory_rules_seen_v1', 'true');
+        } catch (e) { /* ignore */ }
+        this.startDeferredServices('rules-dismissed');
+    }
+
+    /** チーム決定画面のボタン配線（初回起動の許可要求より前に使う） */
+    initTeamDecisionModal() {
+        if (this.btnStartGame) {
+            this.btnStartGame.addEventListener('click', () => this.confirmTeamDecision());
+        }
+    }
+
+    /** 決定した陣営（Black / White）を描き込んでチーム決定画面を開く */
+    showTeamDecisionModal() {
+        const isWhite = this.currentTeam === 'white';
+
+        if (this.teamDecisionBadge) {
+            this.teamDecisionBadge.className = isWhite
+                ? 'w-28 h-28 rounded-full flex items-center justify-center border-4 border-white bg-white shadow-2xl transition-all'
+                : 'w-28 h-28 rounded-full flex items-center justify-center border-4 border-zinc-500 bg-black shadow-2xl transition-all';
+        }
+        if (this.teamDecisionSymbol) {
+            this.teamDecisionSymbol.textContent = isWhite ? 'WHITE' : 'BLACK';
+            this.teamDecisionSymbol.className = isWhite
+                ? 'font-mono font-bold text-2xl tracking-wider text-black'
+                : 'font-mono font-bold text-2xl tracking-wider text-white';
+        }
+        if (this.teamDecisionName) {
+            this.teamDecisionName.textContent = isWhite ? 'WHITE（白）陣営' : 'BLACK（黒）陣営';
+        }
+        if (this.teamDecisionDescription) {
+            this.teamDecisionDescription.textContent = isWhite
+                ? 'オートバランサーにより、あなたは白陣営に配属されました。街を歩いた場所が白の陣地になります。'
+                : 'オートバランサーにより、あなたは黒陣営に配属されました。街を歩いた場所が黒の陣地になります。';
+        }
+        if (this.teamDecisionModal) {
+            this.teamDecisionModal.classList.remove('hidden');
+            this.resetViewportScroll();
+        }
+    }
+
+    /**
+     * チーム決定画面の「ゲーム開始」。既読を確定し、位置情報と AdMob/ATT を開始する。
+     */
+    confirmTeamDecision() {
+        if (this.teamDecisionModal) {
+            this.teamDecisionModal.classList.add('hidden');
+            this.resetViewportScroll();
+        }
+
+        if (this.startupGate) {
+            this.startupGate.confirmTeamSelection(this.currentTeam);
+            return;
+        }
+
+        try {
+            localStorage.setItem('territory_rules_seen_v1', 'true');
+        } catch (e) { /* ignore */ }
+        this.startDeferredServices('team-decision');
+    }
+
+    /**
+     * 起動ゲート。初回起動はルール説明 → チーム決定画面を経て開始し、
+     * 2回目以降の起動はこれまでどおり起動直後に開始する。
+     */
+    initStartupGate() {
+        if (typeof StartupGate === 'undefined') {
+            // モジュール未読込でも機能を止めない（従来どおり即時開始）
+            this.startDeferredServices('fallback');
+            return;
+        }
+
+        this.startupGate = new StartupGate({
+            onStart: (trigger) => this.startDeferredServices(trigger)
         });
+
+        // true なら2回目以降の起動で、ここで開始済み。初回はルール説明を閉じるまで待機。
+        this.startupGate.begin();
+    }
+
+    /**
+     * 位置情報の取得と AdMob（ATT 許可要求を含む）の初期化を開始する。
+     * 初回起動ではチーム決定画面の「ゲーム開始」で1回だけ、2回目以降は起動直後に一度だけ走る。
+     */
+    startDeferredServices(trigger = 'manual') {
+        if (this.servicesStarted) return false;
+        this.servicesStarted = true;
+        this.servicesStartedBy = trigger;
+
+        this.initGeolocation();
+
+        if (this.adMobManager && typeof this.adMobManager.init === 'function') {
+            this.adMobManager.init();
+        }
+        return true;
     }
 
     initMenuModal() {

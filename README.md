@@ -44,6 +44,7 @@
 ├── stats.js                # 戦績集計、Supabase同期バッファ、称号アンロック、ランキング
 ├── supabase.js             # Supabase接続、週番号（ISO week）計算、REST/Realtime通信
 ├── outbox.js               # オフライン陣地の一時保存キュー（pending_tile_queue）と一括再送
+├── startup-gate.js         # 初回起動ゲート（ルール説明→チーム決定の後で位置情報・ATT許可要求を開始）
 ├── poster.js               # HTML5 Canvas による週間アートポスターPNG書き出し
 ├── pro.js                  # Proサポーター管理・アクティベーション
 ├── schema.sql              # Supabaseテーブル定義・RLSポリシー・リアルタイム設定SQL

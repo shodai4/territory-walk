@@ -16,6 +16,7 @@ const ASSETS_TO_COPY = [
     'support.html',
     'style.css',
     'permission.js',
+    'startup-gate.js',
     'debug-tools.js',
     'app.js',
     'admob.js',

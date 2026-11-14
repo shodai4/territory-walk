@@ -4,18 +4,23 @@
  */
 
 class AdMobManager {
-    constructor(appInstance) {
+    constructor(appInstance, options = {}) {
         this.app = appInstance;
         this.isNative = typeof window.Capacitor !== 'undefined'
             && typeof window.Capacitor.isNativePlatform === 'function'
             && window.Capacitor.isNativePlatform();
         this.admob = null;
         this.isAdLoaded = false;
+        this.initStarted = false;
         this.testRewardAdId = 'ca-app-pub-3940256099942544/1712485313'; // Google Official Test Reward Ad ID for iOS
         this.testBannerAdId = 'ca-app-pub-3940256099942544/2934735716'; // Google Official Test Banner Ad ID for iOS
 
         this.applyPlatformVisibility();
-        this.init();
+
+        // 初回起動ゲート（startup-gate.js）が「ゲームをはじめる」まで待たせる場合、
+        // 呼び出し側は deferInit: true で生成し、後から init() を呼ぶ。
+        // （initialize は ATT の許可要求を含むため、ルール説明より先に出さない）
+        if (!options.deferInit) this.init();
     }
 
     /**
@@ -46,6 +51,10 @@ class AdMobManager {
     }
 
     async init() {
+        // 初回起動ゲートから後追いで呼ばれるため、二重初期化（ATTの二重要求）を防ぐ
+        if (this.initStarted) return;
+        this.initStarted = true;
+
         if (!this.isNative) {
             console.log('[AdMob] Running in Web mode. Using simulation fallback.');
             return;

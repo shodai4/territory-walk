@@ -45,11 +45,19 @@ html, body {
     visibility: hidden !important;
 }
 
-/* Safe Area Inset Support for iOS Notch & Dynamic Island & Home Bar */
+/* ==========================================================================
+   Safe Area Inset Support for iOS Notch & Dynamic Island & Home Bar
+
+   ios.contentInset = "never"（capacitor.config.json）では WKWebView が画面全高を
+   そのままページに渡す（ネイティブ側の余白は 0）。セーフエリアの余白はこの CSS だけで
+   作るので、ここに env(safe-area-inset-*) を足すとその分がちょうど1回ぶんになる。
+   ※ネイティブ contentInset と CSS の両方で余白を作ると Dynamic Island 下が二重余白になる。
+   ※Web ブラウザでは env(safe-area-inset-*) は 0px なので、従来の余白と一致する。
+   ========================================================================== */
 header {
-    padding-top: max(0.5rem, env(safe-area-inset-top)) !important;
-    padding-left: max(0.75rem, env(safe-area-inset-left)) !important;
-    padding-right: max(0.75rem, env(safe-area-inset-right)) !important;
+    padding-top: calc(env(safe-area-inset-top, 0px) + 0.5rem) !important;
+    padding-left: calc(env(safe-area-inset-left, 0px) + 0.75rem) !important;
+    padding-right: calc(env(safe-area-inset-right, 0px) + 0.75rem) !important;
 }
 
 /* Right-bottom map controls (Zoom In, Zoom Out, Recenter) above bottom banner ad, drops down when Ad-Free */
@@ -79,6 +87,11 @@ body[data-native-banner="true"] #dpad-container {
 
 body[data-native-banner="true"] #app-footer-note {
     bottom: calc(var(--admob-banner-height, 56px) + 0.5rem + env(safe-area-inset-bottom)) !important;
+}
+
+/* クレジット表記：ホームインジケータ（下セーフエリア）に重ならない位置に持ち上げる */
+#app-footer-note {
+    bottom: calc(0.5rem + env(safe-area-inset-bottom)) !important;
 }
 
 /* ネイティブ実行時はWeb用ダミー広告枠を常に非表示（AdMobとの二重表示防止） */
@@ -444,14 +457,14 @@ button, a, input, select, .btn-action {
 }
 
 /* iOS Modal Safe Area Padding & Scroll Isolation */
-#rules-modal, #menu-modal, #shop-modal, #stats-modal, #pro-modal, #weekly-result-modal, #reward-ad-modal, #search-modal {
+#rules-modal, #menu-modal, #shop-modal, #stats-modal, #pro-modal, #weekly-result-modal, #reward-ad-modal, #search-modal, #team-reset-modal, #team-decision-modal {
     padding-top: max(0.75rem, env(safe-area-inset-top));
     padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
     padding-left: max(0.75rem, env(safe-area-inset-left));
     padding-right: max(0.75rem, env(safe-area-inset-right));
 }
 
-#rules-modal > div, #menu-modal > div, #shop-modal > div, #stats-modal > div, #pro-modal > div, #weekly-result-modal > div, #reward-ad-modal > div, #search-modal > div {
+#rules-modal > div, #menu-modal > div, #shop-modal > div, #stats-modal > div, #pro-modal > div, #weekly-result-modal > div, #reward-ad-modal > div, #search-modal > div, #team-reset-modal > div, #team-decision-modal > div {
     max-height: calc(100vh - max(1.5rem, env(safe-area-inset-top)) - max(2.5rem, env(safe-area-inset-bottom))) !important;
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
