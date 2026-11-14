@@ -67,7 +67,17 @@ jobs:
         run: |
           cd ios/App
           pod --version
+          # @capacitor-community/admob@6.2.0 pins Google-Mobile-Ads-SDK 11.3.0, whose Swift
+          # sources use the pre-3.0 messaging symbols (UMPConsentStatus, UMPRequestParameters...).
+          # CocoaPods can otherwise resolve GoogleUserMessagingPlatform 3.x, where those symbols
+          # are renamed, and the plugin then fails to compile. Pin the messaging platform to 2.x.
+          printf '%s\n' "import pathlib" "p = pathlib.Path('Podfile')" "s = p.read_text()" "if 'GoogleUserMessagingPlatform' not in s:" "    p.write_text(s.replace('  capacitor_pods\n', \"  capacitor_pods\n  pod 'GoogleUserMessagingPlatform', '~> 2.1'\n\", 1))" > /tmp/pin_ump.py
+          python3 /tmp/pin_ump.py
+          echo "=== Podfile target block ==="
+          grep -A4 "^target 'App' do" Podfile || true
           pod install
+          echo "=== Resolved Google pod versions ==="
+          grep -E "Google-Mobile-Ads-SDK|GoogleUserMessagingPlatform" Podfile.lock | head -10 || true
 
       - name: "Compile & Verify iOS Build (Clean Build)"
         run: |
