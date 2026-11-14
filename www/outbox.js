@@ -242,7 +242,7 @@ class TileSyncQueue {
 
         if (flushed > 0) {
             console.log(`[Outbox] Flushed ${flushed} tiles (${reason}). Remaining: ${remaining.length}`);
-            this.afterFlush(flushed, remaining.length);
+            this.afterFlush(flushed, remaining.length, reason);
         } else if (remaining.length > 0) {
             this.scheduleRetry();
         }
@@ -251,7 +251,7 @@ class TileSyncQueue {
     }
 
     /** フラッシュ後の整合性同期（戦績・コイン）と控えめな通知。 */
-    afterFlush(flushedCount, remainingCount) {
+    afterFlush(flushedCount, remainingCount, reason = 'manual') {
         if (!this.app) return;
 
         try {
@@ -272,10 +272,14 @@ class TileSyncQueue {
 
         try {
             if (this.app.showToast) {
-                this.app.showToast(
-                    `オフライン分 ${flushedCount} マスを同期しました`,
-                    remainingCount > 0 ? `残り ${remainingCount} マスは次回再送します` : ''
-                );
+                // 1マス獲得ごとの送信（D-Padの連打・通常歩行）では毎回通知しない。
+                // 未送信分のまとめて再送（起動時・オンライン復帰・リトライ）だけを知らせる。
+                if (reason !== 'tile-claim') {
+                    this.app.showToast(
+                        `オフライン分 ${flushedCount} マスを同期しました`,
+                        remainingCount > 0 ? `残り ${remainingCount} マスは次回再送します` : ''
+                    );
+                }
             }
         } catch (e) { /* ignore */ }
 
@@ -299,4 +303,8 @@ class TileSyncQueue {
             } catch (e) { /* ignore */ }
         }
     }
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { TileSyncQueue, TW_OUTBOX_KEY };
 }

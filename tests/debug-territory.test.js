@@ -275,6 +275,19 @@ test('リセット: localStorageのキー名がOutboxのキューと一致して
     assert.match(grid, /localStorage\.getItem\('territory_claimed_tiles'\)/);
 });
 
+test('D-Pad: 1マスごとの送信ではトーストを出さず、まとめて再送のときだけ知らせる', () => {
+    const { TileSyncQueue } = require(path.join(ROOT, 'outbox.js'));
+    const toasts = [];
+    const queue = new TileSyncQueue({ showToast: (a, b) => toasts.push([a, b]) });
+
+    queue.afterFlush(1, 0, 'tile-claim');
+    assert.equal(toasts.length, 0, 'D-Padの連打・通常歩行では毎回通知しない');
+
+    queue.afterFlush(3, 0, 'startup');
+    assert.equal(toasts.length, 1, '起動時のまとめて再送は知らせる');
+    assert.match(toasts[0][0], /3 マスを同期/);
+});
+
 /* ------------------------------------------------------------------ *
  * 4. 配線の回帰チェック（app.js / index.html / build.js / www）
  * ------------------------------------------------------------------ */
