@@ -3,19 +3,39 @@
  * In-App Purchase (StoreKit) integration for iOS via cordova-plugin-purchase
  * (CdvPurchase v13+) running on Capacitor, with a Web simulator fallback.
  *
- * Purchase flow (native):
- *   order -> approved -> verify (App Store receipt validation)
- *           -> verified -> grant content (idempotent per transaction)
- *           -> finish -> finished
+ * Purchase flow (native, validation server NOT configured - the default):
+ *   order -> approved -> grant (idempotent per transactionId) -> finish -> finished
+ *
+ * Purchase flow (native, when store.validator is set):
+ *   order -> approved -> verify -> verified -> grant -> finish -> finished
+ *
+ * Why content is granted on `approved` and not on `verified`:
+ *   In CdvPurchase v13 the `.verified()` callback only carries the purchases of
+ *   `receipt.collection`, and that collection is filled by the receipt
+ *   validation *server*. With no `store.validator` configured the plugin still
+ *   runs a "backward compatibility" pass (store.js: runOnReceipt) that reports
+ *   the receipt as verified with `{ id, latest_receipt: true }` and *no*
+ *   `collection`, so every consumable looked like "nothing was purchased":
+ *   the old code saw an empty collection, granted nothing, and then finished
+ *   the receipt - the transaction was consumed by StoreKit and the coins were
+ *   lost for good. Granting from the `approved` Transaction (which always lists
+ *   `products`, `quantity` and `transactionId`) removes that dependency.
+ *   Unfinished transactions are re-reported as `approved` at every launch, so a
+ *   grant that failed once is retried instead of being dropped.
  *
  * Safety rules:
- * - On native platforms, content is granted ONLY from a verified receipt.
- *   There is no fallback that grants coins without a completed StoreKit
- *   transaction. If the purchase plugin is missing or the store is not
+ * - On native platforms, content is granted ONLY from a transaction StoreKit
+ *   reported as approved (or from a validated receipt when a validator is
+ *   configured). There is no fallback that grants coins without a completed
+ *   StoreKit transaction. If the purchase plugin is missing or the store is not
  *   ready, the purchase is aborted with an error message.
- * - Each transaction is granted at most once: processed transaction IDs
- *   are persisted in localStorage, so an app restart between "grant" and
- *   "finish" cannot double-credit consumable coin packs.
+ * - Each transaction is granted at most once: processed transaction IDs are
+ *   persisted in localStorage, so an app restart between "grant" and "finish"
+ *   cannot double-credit consumable coin packs. A *new* purchase always has a
+ *   new transactionId, so buying the same pack again still works.
+ * - A transaction is only finished after its content was granted (or was
+ *   already granted earlier). If granting throws, the transaction stays
+ *   unfinished so StoreKit re-delivers it.
  * - Consumable coin packs cannot be re-delivered on restore (Apple policy).
  *   The Ad-Free entitlement they carry is therefore state-based: it is
  *   persisted locally (tw_is_ad_free / tw_ad_free_source) and, on restore,
@@ -89,10 +109,12 @@ class IAPManager {
         this.AD_FREE_MIN_YEN = 500;
 
         this.PROCESSED_KEY = 'tw_iap_processed_tx_v1';
+        this.PENDING_TIMEOUT_MS = 90000; // 承認待ちなどでUIが固まらないための保険
         this.store = null;          // CdvPurchase.store (native only)
         this.storeReady = false;    // store.initialize() completed
         this.initStarted = false;
         this.pendingProductId = null; // product id with an order in flight
+        this.pendingWatchdog = null;
         this.priceByProductId = {};   // product id -> localized price string
 
         this.init();
@@ -172,22 +194,10 @@ class IAPManager {
 
             store.when()
                 .productUpdated(product => this.onProductUpdated(product))
-                .approved(transaction => {
-                    console.log('[IAP] Transaction approved, verifying receipt...');
-                    transaction.verify();
-                })
-                .verified(receipt => {
-                    try {
-                        this.handleVerifiedReceipt(receipt);
-                    } catch (err) {
-                        console.error('[IAP] Failed to grant verified purchase:', err);
-                    }
-                    receipt.finish();
-                })
-                .finished(() => {
-                    this.pendingProductId = null;
-                    this.refreshShopUI();
-                });
+                .approved(transaction => this.onApprovedTransaction(transaction))
+                .verified(receipt => this.onVerifiedReceipt(receipt))
+                .unverified(failure => this.onUnverifiedReceipt(failure))
+                .finished(transaction => this.onTransactionFinished(transaction));
 
             store.error(err => this.onStoreError(err));
 
@@ -237,11 +247,11 @@ class IAPManager {
         const CdvPurchase = window.CdvPurchase;
         if (CdvPurchase && err.code === CdvPurchase.ErrorCode.PAYMENT_CANCELLED) {
             console.log('[IAP] Purchase cancelled by user.');
-            this.pendingProductId = null;
+            this.releasePendingLock();
             return;
         }
         console.error('[IAP] Store error:', err.code, err.message);
-        this.pendingProductId = null;
+        this.releasePendingLock();
         this.toast('ストアでエラーが発生しました', '時間をおいてもう一度お試しください');
     }
 
@@ -324,10 +334,11 @@ class IAPManager {
         }
 
         this.pendingProductId = item.id;
+        this.armPendingWatchdog();
         try {
             await this.store.order(offer);
         } catch (err) {
-            this.pendingProductId = null;
+            this.releasePendingLock();
             if (CdvPurchase && err && err.code === CdvPurchase.ErrorCode.PAYMENT_CANCELLED) {
                 console.log('[IAP] Order cancelled by user.');
                 return;
@@ -335,56 +346,288 @@ class IAPManager {
             console.error('[IAP] Order failed:', err);
             this.toast('購入処理に失敗しました', 'App Store の設定をご確認ください');
         }
-        // Completion is handled by the approved -> verified -> finished
-        // event chain registered in initStore().
+        // Completion is handled by the approved -> grant -> finish event
+        // chain registered in initStore().
     }
 
     // ---------------------------------------------------------------
-    // Verified receipt handling (the only place content is granted)
+    // Approved transaction handling (the place content is granted)
     // ---------------------------------------------------------------
 
-    handleVerifiedReceipt(receipt) {
+    /**
+     * StoreKit が「支払いが承認された」と伝えるイベント。
+     * 未完了のトランザクションは起動のたびに再送されるので、
+     * ここで付与と finish を完結させるのが本筋。
+     */
+    onApprovedTransaction(transaction) {
+        if (!transaction) return;
+
+        if (transaction.isPending) {
+            // Ask to Buy などで保留中。承認されたら再度 approved が来る。
+            console.log('[IAP] Transaction is pending approval.');
+            this.releasePendingLock();
+            this.toast('購入の承認待ちです', '承認されるとコインが付与されます');
+            return;
+        }
+
+        // 検証サーバーを設定している場合だけ、検証済みレシートからの付与に任せる。
+        if (this.store && this.store.validator) {
+            console.log('[IAP] Transaction approved, verifying receipt...');
+            try {
+                const pending = transaction.verify();
+                if (pending && typeof pending.catch === 'function') {
+                    pending.catch(err => {
+                        console.error('[IAP] verify() failed:', err);
+                        this.releasePendingLock();
+                    });
+                }
+            } catch (err) {
+                console.error('[IAP] verify() failed:', err);
+                this.releasePendingLock();
+            }
+            return;
+        }
+
+        // 検証サーバー無し: StoreKit が返したトランザクション自体を正として付与する。
+        return this.deliverAndFinish(transaction);
+    }
+
+    /**
+     * 付与に成功した（または付与済みだった）トランザクションだけ finish する。
+     * 付与できなかった場合は finish しないので、次回起動時に再送されて再試行される。
+     */
+    async deliverAndFinish(transaction) {
+        let delivered = false;
+        try {
+            delivered = this.deliverTransaction(transaction);
+        } catch (err) {
+            console.error('[IAP] Failed to grant approved transaction:', err);
+            delivered = false;
+        }
+
+        if (!delivered) {
+            console.warn('[IAP] Nothing was delivered; keeping the transaction unfinished so the store re-delivers it.');
+            this.releasePendingLock();
+            this.toast('購入の反映に失敗しました', '次回起動時にもう一度自動で反映します');
+            return;
+        }
+
+        try {
+            await transaction.finish();
+        } catch (err) {
+            console.error('[IAP] Failed to finish transaction:', err);
+        }
+        this.releasePendingLock();
+        this.refreshShopUI();
+    }
+
+    /**
+     * トランザクションに含まれる商品を付与する（同じトランザクションでは1回だけ）。
+     * @returns {boolean} すべての商品を「付与済み or 今回付与」にできたら true
+     */
+    deliverTransaction(transaction) {
+        if (!transaction) return false;
+
+        const products = Array.isArray(transaction.products) ? transaction.products : [];
+        if (products.length === 0) {
+            console.warn('[IAP] Approved transaction has no products.');
+            return false;
+        }
+
+        const quantity = this.resolveQuantity(transaction);
+        let delivered = false;
+
+        for (const purchased of products) {
+            const productId = purchased && (purchased.id || purchased.productId);
+            if (!productId) continue;
+
+            const item = this.findProductById(productId);
+            if (!item) {
+                console.warn('[IAP] Unknown product in transaction:', productId);
+                continue;
+            }
+
+            if (item.type === 'non-consumable') {
+                // 権利は状態ベースなので、何度適用しても結果は同じ。
+                this.applyAdFree('ad-free-pass');
+                delivered = true;
+                continue;
+            }
+
+            const txKey = this.buildTransactionKey(productId, transaction);
+            if (txKey && this.isProcessed(txKey)) {
+                console.log('[IAP] Transaction already granted, skipping:', txKey);
+                delivered = true; // 付与済みなので finish してよい
+                continue;
+            }
+
+            // StoreKit 2 は「finish 済み」のトランザクションを isAcknowledged: true
+            // で再送してくる。二重付与しないよう記録だけして終わる。
+            if (transaction.isAcknowledged === true) {
+                console.log('[IAP] Transaction already acknowledged by the store, recording only:', productId);
+                if (txKey) this.markProcessed(txKey);
+                delivered = true;
+                continue;
+            }
+
+            // finish より先に記録する（付与直後のクラッシュでも二重付与しない）
+            if (txKey) this.markProcessed(txKey);
+            let granted = false;
+            try {
+                granted = this.grantItem(item, quantity);
+            } catch (err) {
+                // 付与できなかったので記録を取り消す（次回起動時の再送で再挑戦できる）
+                if (txKey) this.unmarkProcessed(txKey);
+                throw err;
+            }
+            if (!granted) {
+                // コインマネージャがまだ用意できていない等。finish せず再送に委ねる。
+                if (txKey) this.unmarkProcessed(txKey);
+                return false;
+            }
+            delivered = true;
+        }
+
+        return delivered;
+    }
+
+    resolveQuantity(transaction) {
+        const q = parseInt(transaction && transaction.quantity, 10);
+        return Number.isFinite(q) && q > 0 ? q : 1;
+    }
+
+    findProductById(productId) {
+        if (!productId) return null;
+        return Object.values(this.products).find(p => p.id === productId) || null;
+    }
+
+    /**
+     * 同じ購入を二度付与しないためのキー。
+     * 購入のたびに StoreKit は新しい transactionId を発行するので、
+     * 同じパックの買い直しは別キーになり、きちんと付与される。
+     */
+    buildTransactionKey(productId, source) {
+        const id = productId || 'unknown';
+        if (!source) return null;
+        const txId = source.transactionId || source.purchaseId;
+        if (txId) return `${id}:${txId}`;
+        const when = source.purchaseDate;
+        if (when instanceof Date && !isNaN(when.getTime())) return `${id}:${when.getTime()}`;
+        if (typeof when === 'number' && isFinite(when)) return `${id}:${when}`;
+        const time = source.purchaseTime;
+        if (typeof time === 'number' && isFinite(time)) return `${id}:${time}`;
+        return null;
+    }
+
+    // ---------------------------------------------------------------
+    // Verified receipt handling (only used with a validation server)
+    // ---------------------------------------------------------------
+
+    onVerifiedReceipt(receipt) {
+        try {
+            this.grantFromVerifiedReceipt(receipt);
+        } catch (err) {
+            console.error('[IAP] Failed to grant verified purchase:', err);
+        }
+
+        // 検証サーバーを設定しているときだけ、検証済みレシートをまとめて finish する。
+        // 未設定時は collection が空で付与は approved 側で完了しているため、
+        // ここで finish すると付与前のトランザクションまで閉じてしまう危険がある。
+        if (this.store && this.store.validator) {
+            try {
+                const pending = receipt.finish();
+                if (pending && typeof pending.catch === 'function') pending.catch(() => {});
+            } catch (err) {
+                console.error('[IAP] Failed to finish verified receipt:', err);
+            }
+        }
+        this.releasePendingLock();
+        this.refreshShopUI();
+    }
+
+    grantFromVerifiedReceipt(receipt) {
         const purchases = (receipt && receipt.collection) || [];
         if (purchases.length === 0) {
-            // Some verified events carry no collection (e.g. app receipt
-            // refresh). Fall back to an entitlement sync only.
+            // 検証サーバー未設定時のフォールバック検証は collection を返さない。
+            // 付与は approved 側で完了しているので、ここでは権利の同期だけ行う。
             this.syncEntitlements();
             return;
         }
 
         for (const purchase of purchases) {
             const productId = purchase.id || purchase.productId;
-            const item = Object.values(this.products).find(p => p.id === productId);
+            const item = this.findProductById(productId);
             if (!item) continue;
 
             if (item.type === 'non-consumable') {
                 // Entitlements are state-based; applying them is idempotent.
-                this.applyAdFree();
+                this.applyAdFree('ad-free-pass');
                 continue;
             }
 
-            // Consumables: grant once per transaction.
-            const txKey = this.transactionKey(purchase, receipt);
+            const txKey = this.buildTransactionKey(productId, purchase);
             if (txKey && this.isProcessed(txKey)) {
                 console.log('[IAP] Transaction already granted, skipping:', txKey);
                 continue;
             }
-            const quantity = parseInt(purchase.quantity, 10) || 1;
+            const quantity = this.resolveQuantity(purchase);
             // Mark BEFORE granting/finishing so a crash cannot re-grant.
             if (txKey) this.markProcessed(txKey);
-            this.grantItem(item, quantity);
+            let granted = false;
+            try {
+                granted = this.grantItem(item, quantity);
+            } catch (err) {
+                if (txKey) this.unmarkProcessed(txKey);
+                throw err;
+            }
+            if (!granted && txKey) this.unmarkProcessed(txKey);
         }
     }
 
-    transactionKey(purchase, receipt) {
-        const txId = purchase.transactionId
-            || (purchase.id && (purchase.purchaseTime || purchase.expiryDate))
-            || (receipt && receipt.transactionId)
-            || null;
-        if (!txId) return null;
-        const productId = purchase.id || purchase.productId || 'unknown';
-        return `${productId}:${txId}`;
+    onUnverifiedReceipt(failure) {
+        const payload = (failure && failure.payload) || {};
+        console.error('[IAP] Receipt validation failed:', payload.code, payload.message);
+        // 検証に失敗したトランザクションは finish しない（StoreKit が再送する）。
+        this.releasePendingLock();
+        this.toast('購入の確認に失敗しました', '通信状態のよい場所でもう一度お試しください');
     }
+
+    onTransactionFinished() {
+        this.releasePendingLock();
+        this.refreshShopUI();
+    }
+
+    // ---------------------------------------------------------------
+    // Pending-purchase lock (guards against double taps / stuck UI)
+    // ---------------------------------------------------------------
+
+    armPendingWatchdog() {
+        this.clearPendingWatchdog();
+        this.pendingWatchdog = setTimeout(() => {
+            this.pendingWatchdog = null;
+            if (this.pendingProductId) {
+                console.warn('[IAP] Pending purchase timed out; unlocking the shop UI.');
+                this.pendingProductId = null;
+                this.refreshShopUI();
+            }
+        }, this.PENDING_TIMEOUT_MS);
+    }
+
+    clearPendingWatchdog() {
+        if (this.pendingWatchdog !== null) {
+            try { clearTimeout(this.pendingWatchdog); } catch (e) { /* ignore */ }
+            this.pendingWatchdog = null;
+        }
+    }
+
+    releasePendingLock() {
+        this.pendingProductId = null;
+        this.clearPendingWatchdog();
+    }
+
+    // ---------------------------------------------------------------
+    // Processed-transaction registry
+    // ---------------------------------------------------------------
 
     loadProcessed() {
         try {
@@ -400,6 +643,17 @@ class IAPManager {
         return this.loadProcessed().includes(txKey);
     }
 
+    unmarkProcessed(txKey) {
+        if (!txKey) return;
+        const arr = this.loadProcessed();
+        const index = arr.indexOf(txKey);
+        if (index < 0) return;
+        arr.splice(index, 1);
+        try {
+            localStorage.setItem(this.PROCESSED_KEY, JSON.stringify(arr));
+        } catch (e) { /* ignore */ }
+    }
+
     markProcessed(txKey) {
         const arr = this.loadProcessed();
         if (!arr.includes(txKey)) {
@@ -413,13 +667,22 @@ class IAPManager {
         }
     }
 
+    /**
+     * 購入した商品を実際に付与する。
+     * @returns {boolean} 付与できたら true。コインマネージャが未準備なら false
+     *          （false のときはトランザクションを finish せず、StoreKit の再送に委ねる）。
+     */
     grantItem(item, quantity = 1) {
-        if (!this.app || !this.app.coinManager) return;
+        if (!item) return false;
+        if (!this.app || !this.app.coinManager) {
+            console.warn('[IAP] CoinManager is not ready; the grant is postponed.');
+            return false;
+        }
 
         if (item.type === 'non-consumable') {
             this.applyAdFree();
             this.toast('購入完了！広告完全非表示パス', '下部バナー広告を消去し動画スキップを適用しました');
-            return;
+            return true;
         }
 
         const packKey = Object.keys(this.products).find(k => this.products[k] === item);
@@ -434,6 +697,7 @@ class IAPManager {
                 : `${item.title} (${this.getDisplayPrice(packKey) || item.fallbackPrice}) を獲得しました`
         );
         this.refreshShopUI();
+        return true;
     }
 
     /**

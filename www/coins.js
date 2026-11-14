@@ -1287,7 +1287,7 @@ class CoinManager {
                         <span class="font-bold text-xs text-white">広告完全非表示パス (Ad-Free Pro)</span>
                         <span class="px-1.5 py-0.5 rounded ${isAdFree ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'} text-[9px] font-mono font-bold">${adFreeBadge}</span>
                     </div>
-                    <div class="shop-desc text-[10px] text-zinc-400 leading-tight mt-0.5">画面下部バナー広告を完全消去 ＆ 動画リワード待ち受け不要</div>
+                    <div class="shop-desc text-[10px] text-zinc-400 leading-tight mt-0.5">画面下部バナー広告を完全消去 ＆<br>動画リワード待ち受け不要</div>
                     <div class="text-[9px] text-emerald-400/80 leading-tight mt-0.5">スタンダードパック（¥500）以上の購入でも自動付帯</div>
                     <div class="text-amber-400 font-mono text-xs font-bold mt-1">永久Ad-Free特典</div>
                 </div>
