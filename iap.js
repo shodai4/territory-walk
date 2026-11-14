@@ -707,12 +707,22 @@ class IAPManager {
         const unlocksAdFree = this.packUnlocksAdFree(item);
         this.app.coinManager.addCoins(total, `IAP購入: ${item.title}`);
         if (unlocksAdFree) this.applyAdFree(`pack:${packKey}`);
-        this.toast(
-            `購入完了！ +${total.toLocaleString()} COIN`,
-            unlocksAdFree
-                ? `${item.title} を獲得。広告完全非表示（Ad-Free）も解放しました`
-                : `${item.title} (${this.getDisplayPrice(packKey) || item.fallbackPrice}) を獲得しました`
-        );
+
+        // 375px幅でも語の途中で折り返さないよう、意味の切れ目で行を分ける。
+        //   1行目: 「〇〇パック (¥金額) を獲得！」
+        //   2行目: 「広告完全非表示（Ad-Free）も解放しました」
+        // 以前は1文で流していたため「スタンダードパック」の後で折れ、
+        // 2行目が「を獲得。広告…」と単語の途中から始まっていた。
+        const priceLabel = this.getDisplayPrice(packKey) || item.fallbackPrice || '';
+        const packLabel = priceLabel ? `${item.title} (${priceLabel})` : item.title;
+        if (unlocksAdFree) {
+            this.toast(
+                `${packLabel} を獲得！`,
+                '広告完全非表示（Ad-Free）も解放しました'
+            );
+        } else {
+            this.toast(`${packLabel} を獲得しました`);
+        }
         this.refreshShopUI();
         return true;
     }

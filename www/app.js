@@ -296,10 +296,13 @@ class TerritoryWalkApp {
         toast.style.opacity = '1';
         toast.style.transform = 'translateY(0)';
 
+        // 文言は innerHTML ではなく textContent で入れる（商品名などに HTML が
+        // 混ざってもタグとして解釈させない）。`\n` は pre-line で改行として描画する。
         if (subtitle) {
-            toast.innerHTML = `<div class="font-bold text-xs text-white leading-tight break-keep">${message}</div><div class="text-[11px] text-amber-400 mt-0.5 leading-tight break-keep">${subtitle}</div>`;
+            toast.appendChild(this.createToastLine(message, 'font-bold text-xs text-white leading-tight break-keep max-w-full'));
+            toast.appendChild(this.createToastLine(subtitle, 'text-[11px] text-amber-400 mt-0.5 leading-tight break-keep max-w-full'));
         } else {
-            toast.innerHTML = `<div class="font-bold text-xs text-amber-300 leading-tight break-keep">${message}</div>`;
+            toast.appendChild(this.createToastLine(message, 'font-bold text-xs text-amber-300 leading-tight break-keep max-w-full'));
         }
 
         container.appendChild(toast);
@@ -314,6 +317,20 @@ class TerritoryWalkApp {
                 }
             }, 350);
         }, 3500);
+    }
+
+    /**
+     * トーストの1行分を組み立てる。
+     * 文字列は必ず textContent で入れる（XSS 安全）。`\n` は white-space:
+     * pre-line で改行として描画されるので、呼び出し側が改行位置を決められる。
+     * break-keep（word-break: keep-all）で日本語を語の途中で折らない。
+     */
+    createToastLine(text, className) {
+        const line = document.createElement('div');
+        line.className = className;
+        line.style.whiteSpace = 'pre-line';
+        line.textContent = text == null ? '' : String(text);
+        return line;
     }
 
     /**
