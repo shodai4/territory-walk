@@ -18,6 +18,9 @@ const CONFIG = {
 };
 
 // 画面消灯・ロック中も測位を続けるネイティブプラグイン（Capacitor 6 互換）
+// 陣地マーキング（自動塗り）の ON/OFF を保存するキー。
+// 停止中にアプリを終了→再起動したときに、一瞬でも塗ってしまわないよう起動前に読む。
+const MARKING_PAUSE_STORAGE_KEY = 'tw_marking_paused';
 const BACKGROUND_GEOLOCATION_PLUGIN_NAME = 'BackgroundGeolocation';
 const BACKGROUND_GEOLOCATION_OPTIONS = {
     // backgroundMessage を定義すると、画面消灯・バックグラウンド中も位置更新が届く
@@ -51,6 +54,13 @@ class TerritoryWalkApp {
         this.isMapVisible = true;
         this.isDebugMode = false;
         this.debugEnabled = CONFIG.ENABLE_DEBUG_TOOLS !== false;
+
+        // 陣地マーキング（自動塗り）の ON/OFF。既定は ON（= false）。
+        // 起動ゲート通過（startDeferredServices）より前に復元しておき、
+        // 停止中なら位置情報ウォッチャーを最初から張らない。
+        this.markingPaused = this.readMarkingPausePreference();
+        // 測位ウォッチャーを開始済みか（停止→再開で二重起動しないためのフラグ）
+        this.geolocationStarted = false;
 
         // Background location & iOS optimization state
         // ネイティブのバックグラウンド位置情報（watcher は常に1本だけ）
@@ -286,10 +296,13 @@ class TerritoryWalkApp {
         toast.style.opacity = '1';
         toast.style.transform = 'translateY(0)';
 
+        // 文言は innerHTML ではなく textContent で入れる（商品名などに HTML が
+        // 混ざってもタグとして解釈させない）。`\n` は pre-line で改行として描画する。
         if (subtitle) {
-            toast.innerHTML = `<div class="font-bold text-xs text-white leading-tight break-keep">${message}</div><div class="text-[11px] text-amber-400 mt-0.5 leading-tight break-keep">${subtitle}</div>`;
+            toast.appendChild(this.createToastLine(message, 'font-bold text-xs text-white leading-tight break-keep max-w-full'));
+            toast.appendChild(this.createToastLine(subtitle, 'text-[11px] text-amber-400 mt-0.5 leading-tight break-keep max-w-full'));
         } else {
-            toast.innerHTML = `<div class="font-bold text-xs text-amber-300 leading-tight break-keep">${message}</div>`;
+            toast.appendChild(this.createToastLine(message, 'font-bold text-xs text-amber-300 leading-tight break-keep max-w-full'));
         }
 
         container.appendChild(toast);
@@ -304,6 +317,20 @@ class TerritoryWalkApp {
                 }
             }, 350);
         }, 3500);
+    }
+
+    /**
+     * トーストの1行分を組み立てる。
+     * 文字列は必ず textContent で入れる（XSS 安全）。`\n` は white-space:
+     * pre-line で改行として描画されるので、呼び出し側が改行位置を決められる。
+     * break-keep（word-break: keep-all）で日本語を語の途中で折らない。
+     */
+    createToastLine(text, className) {
+        const line = document.createElement('div');
+        line.className = className;
+        line.style.whiteSpace = 'pre-line';
+        line.textContent = text == null ? '' : String(text);
+        return line;
     }
 
     /**
@@ -325,6 +352,14 @@ class TerritoryWalkApp {
                 const bannerRect = banner.getBoundingClientRect();
                 if (bannerRect && bannerRect.height > 0) {
                     top = Math.max(top, Math.round(bannerRect.bottom + 10));
+                }
+            }
+            // マーキング一時停止バーも同じく考慮する（バーの直下に出す）
+            const markingBanner = document.getElementById('marking-paused-banner');
+            if (markingBanner && !markingBanner.classList.contains('hidden')) {
+                const markingRect = markingBanner.getBoundingClientRect();
+                if (markingRect && markingRect.height > 0) {
+                    top = Math.max(top, Math.round(markingRect.bottom + 10));
                 }
             }
         } catch (e) { /* fallback */ }
@@ -442,6 +477,10 @@ class TerritoryWalkApp {
         this.dpadContainer = document.getElementById('dpad-container');
 
         this.btnRecenter = document.getElementById('btn-recenter');
+        this.btnMarkingToggle = document.getElementById('btn-marking-toggle');
+        this.markingPausedBanner = document.getElementById('marking-paused-banner');
+        this.btnMarkingResume = document.getElementById('btn-marking-resume');
+        this.markingToggleLabel = document.getElementById('marking-toggle-label');
         this.btnSwapTeam = document.getElementById('btn-swap-team');
         this.swapTeamIcon = document.getElementById('swap-team-icon');
         this.swapTeamText = document.getElementById('swap-team-text');
@@ -449,6 +488,8 @@ class TerritoryWalkApp {
         this.initRulesModal();
         this.initTeamDecisionModal();
         this.initMenuModal();
+        // マーキング ON/OFF トグル（前回状態の復元 → UI反映 → 操作の配線）
+        this.initMarkingToggle();
     }
 
     renderTeamBadge() {
@@ -1581,7 +1622,14 @@ class TerritoryWalkApp {
         this.servicesStarted = true;
         this.servicesStartedBy = trigger;
 
-        this.initGeolocation();
+        // マーキング停止中に起動した場合は測位を始めない（起動直後の一瞬塗り防止）。
+        // 再開操作（setMarkingPaused(false)）で初めて startLocationTracking() が走る。
+        if (this.markingPaused === true) {
+            this.updateGPSStatus('GPS: マーキング停止中', 'bg-sky-400', 'text-sky-300');
+            this.renderMarkingPauseUI();
+        } else {
+            this.startLocationTracking();
+        }
 
         if (this.adMobManager && typeof this.adMobManager.init === 'function') {
             this.adMobManager.init();
@@ -1628,10 +1676,21 @@ class TerritoryWalkApp {
     }
 
     initGeolocation() {
+        // マーキング停止中は位置情報ウォッチャーを張らない（二重ガード）
+        if (this.markingPaused === true) {
+            this.updateGPSStatus('GPS: マーキング停止中', 'bg-sky-400', 'text-sky-300');
+            return false;
+        }
+
         // 位置情報拒否時の常設案内バナー（×で一時非表示／許可されたら自動で消える）
-        if (typeof LocationPermissionBanner !== 'undefined') {
+        // 停止→再開で initGeolocation が再度呼ばれても、バナーと「再確認」の配線は1つだけにする
+        if (typeof LocationPermissionBanner !== 'undefined' && !this.locationBanner) {
             this.locationBanner = new LocationPermissionBanner(document, {
-                onChange: () => this.repositionToastContainer(),
+                onChange: () => {
+                    // 拒否バナーとマーキング停止バーが重ならないよう上下を積み直す
+                    this.layoutTopNotices();
+                    this.repositionToastContainer();
+                },
                 retryHandler: () => this.recheckLocationPermission()
             });
         }
@@ -1655,6 +1714,7 @@ class TerritoryWalkApp {
      * @returns {boolean} 測位を開始できたか
      */
     startWebGeolocation() {
+        if (this.markingPaused === true) return false;
         if (this.watchId != null) return true;
         if (typeof navigator === 'undefined' || !('geolocation' in navigator)) {
             this.updateGPSStatus('GPS: 非対応', 'bg-red-500', 'text-red-400');
@@ -1751,7 +1811,14 @@ class TerritoryWalkApp {
         // addWatcher は watcher ID を返す Promise（removeWatcher 用に保持する）
         if (watching && typeof watching.then === 'function') {
             watching
-                .then((watcherId) => { this.backgroundWatcherId = watcherId; })
+                .then((watcherId) => {
+                    this.backgroundWatcherId = watcherId;
+                    // 開始直後にマーキングを停止した場合、解決後に届いた watcher をここで止める
+                    // （停止指示が watcher ID 取得より先に来ると removeWatcher が空振りするため）
+                    if (this.markingPaused === true && this.backgroundWatcherStarted === false) {
+                        this.stopBackgroundGeolocation();
+                    }
+                })
                 .catch((error) => {
                     console.warn('BackgroundGeolocation watcher unavailable:', error);
                     this.backgroundWatcherStarted = false;
@@ -1781,6 +1848,223 @@ class TerritoryWalkApp {
         } catch (e) {
             return false;
         }
+    }
+
+    /* ================================================================== *
+     * 陣地マーキング（歩いた場所の自動塗り）ON / OFF
+     *   - ワンタップで一時停止／再開できる。停止中は「歩いても陣地は増えない」。
+     *   - 停止中は位置情報のウォッチャー自体を張らない・止めるので電池も減らない。
+     *   - 状態は localStorage に保存し、再起動直後の「一瞬塗り」も防ぐ。
+     *   - バックグラウンド位置情報の停止は startDeferredServices / initGeolocation /
+     *     processMeshAndClaim / handlePositionUpdate の4か所で二重にガードする。
+     * ================================================================== */
+
+    /** localStorage から前回の ON/OFF を読む（未設定・読めない時は ON） */
+    readMarkingPausePreference() {
+        try {
+            if (typeof localStorage === 'undefined' || !localStorage) return false;
+            const raw = localStorage.getItem(MARKING_PAUSE_STORAGE_KEY);
+            return raw === '1' || raw === 'true';
+        } catch (e) {
+            return false;
+        }
+    }
+
+    /** ON/OFF を localStorage に保存する（再起動時の引き継ぎ） */
+    saveMarkingPausePreference(paused) {
+        try {
+            if (typeof localStorage === 'undefined' || !localStorage) return false;
+            localStorage.setItem(MARKING_PAUSE_STORAGE_KEY, paused ? '1' : '0');
+            return true;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    /** マーキング停止中か */
+    isMarkingPaused() {
+        return this.markingPaused === true;
+    }
+
+    /** トグルボタン・一時停止バーの配線（initDOM から1回だけ） */
+    initMarkingToggle() {
+        if (this.markingToggleBound) return false;
+        this.markingToggleBound = true;
+
+        const doc = typeof document !== 'undefined' ? document : null;
+        const toggleBtn = this.btnMarkingToggle || (doc ? doc.getElementById('btn-marking-toggle') : null);
+        if (toggleBtn && typeof toggleBtn.addEventListener === 'function') {
+            toggleBtn.addEventListener('click', (event) => {
+                if (event && typeof event.preventDefault === 'function') event.preventDefault();
+                this.toggleMarkingPaused();
+            });
+        }
+        const resumeBtn = this.btnMarkingResume || (doc ? doc.getElementById('btn-marking-resume') : null);
+        if (resumeBtn && typeof resumeBtn.addEventListener === 'function') {
+            resumeBtn.addEventListener('click', (event) => {
+                if (event && typeof event.preventDefault === 'function') event.preventDefault();
+                // バッジタップでもワンタップ再開
+                this.setMarkingPaused(false, { source: 'banner' });
+            });
+        }
+
+        this.renderMarkingPauseUI();
+        return true;
+    }
+
+    /** 現在の状態を UI（トグルボタン・一時停止バー・GPS表示）に反映する */
+    renderMarkingPauseUI() {
+        const paused = this.isMarkingPaused();
+        const doc = typeof document !== 'undefined' ? document : null;
+
+        const btn = this.btnMarkingToggle || (doc ? doc.getElementById('btn-marking-toggle') : null);
+        if (btn) {
+            if (btn.dataset) btn.dataset.state = paused ? 'paused' : 'active';
+            if (typeof btn.setAttribute === 'function') {
+                btn.setAttribute('aria-pressed', paused ? 'false' : 'true');
+                btn.setAttribute('aria-label', paused
+                    ? 'マーキング停止中（タップで再開）'
+                    : 'マーキング ON（タップで一時停止）');
+            }
+            btn.title = paused ? 'マーキング: 停止中（タップで再開）' : 'マーキング: ON（タップで一時停止）';
+        }
+
+        const label = this.markingToggleLabel || (doc ? doc.getElementById('marking-toggle-label') : null);
+        if (label) label.textContent = paused ? '停止中' : 'ON';
+
+        const banner = this.markingPausedBanner || (doc ? doc.getElementById('marking-paused-banner') : null);
+        if (banner && banner.classList) {
+            if (paused) banner.classList.remove('hidden');
+            else banner.classList.add('hidden');
+        }
+
+        this.layoutTopNotices();
+        this.repositionToastContainer();
+
+        if (doc && doc.body && doc.body.dataset) {
+            doc.body.dataset.marking = paused ? 'paused' : 'active';
+        }
+        return paused;
+    }
+
+    /** 一時停止バーをヘッダー直下に置く（位置情報オフの警告バナーが出ていればその下） */
+    layoutTopNotices() {
+        if (typeof document === 'undefined') return null;
+        const pauseEl = document.getElementById('marking-paused-banner');
+        if (!pauseEl || !pauseEl.style) return null;
+        if (pauseEl.classList && pauseEl.classList.contains('hidden')) return null;
+
+        let top = 168;
+        try {
+            const header = document.querySelector('header');
+            if (header && typeof header.getBoundingClientRect === 'function') {
+                const rect = header.getBoundingClientRect();
+                if (rect && rect.height > 0) top = Math.round(rect.bottom + 8);
+            }
+            // 位置情報オフの警告バナーが先に出ているなら、その下に積んで重なりを防ぐ
+            const permission = document.getElementById('location-permission-banner');
+            if (permission && permission.classList && !permission.classList.contains('hidden')
+                && typeof permission.getBoundingClientRect === 'function') {
+                const rect = permission.getBoundingClientRect();
+                if (rect && rect.height > 0) top = Math.max(top, Math.round(rect.bottom + 8));
+            }
+        } catch (e) { /* fallback */ }
+
+        pauseEl.style.top = `${Math.max(top, 64)}px`;
+        return pauseEl.style.top;
+    }
+
+    /** ワンタップで ON / OFF を切り替える */
+    toggleMarkingPaused() {
+        return this.setMarkingPaused(!this.isMarkingPaused());
+    }
+
+    /**
+     * ON / OFF を確定する。
+     * @param {boolean} paused true で停止、false で再開
+     * @param {{ silent?: boolean, source?: string }} options
+     * @returns {boolean} 実際に状態が変わったか
+     */
+    setMarkingPaused(paused, options = {}) {
+        const next = !!paused;
+        const changed = next !== this.isMarkingPaused();
+
+        this.markingPaused = next;
+        this.saveMarkingPausePreference(next);
+
+        if (next) {
+            // 稼働中に停止した瞬間：watcher / フォアグラウンド測位を止めて電池消費も止める
+            this.stopLocationTracking();
+            this.updateGPSStatus('GPS: マーキング停止中', 'bg-sky-400', 'text-sky-300');
+        } else {
+            // 再開した瞬間：バッジを消してから測位を張り直す
+            // （OS権限が拒否中なら既存の位置情報バナー導線がそのまま働く）
+            this.renderMarkingPauseUI();
+            const started = this.startLocationTracking();
+            if (!started && this.geolocationStarted !== true) {
+                this.updateGPSStatus('GPS: マーキング待機', 'bg-amber-400', 'text-amber-400');
+            }
+        }
+
+        this.renderMarkingPauseUI();
+
+        if (changed && options.silent !== true) {
+            this.showToast(next ? 'マーキングを一時停止しました' : 'マーキングを再開しました');
+        }
+        return changed;
+    }
+
+    /**
+     * 測位（バックグラウンド watcher → Web watchPosition）を開始する。
+     * マーキング停止中・起動ゲート通過前は開始しない。
+     * @returns {boolean} 開始したか
+     */
+    startLocationTracking() {
+        if (this.isMarkingPaused()) return false;
+        if (this.geolocationStarted === true) return false;
+        // 初回のルール説明中（起動ゲート前）は許可要求も測位も始めない
+        if (this.servicesStarted !== true) return false;
+
+        this.geolocationStarted = true;
+        this.initGeolocation();
+        return true;
+    }
+
+    /**
+     * 測位を止める（バックグラウンド watcher・Web watchPosition・ネイティブ watchPosition）。
+     * @returns {boolean} 何かを止めたか
+     */
+    stopLocationTracking() {
+        let stopped = false;
+
+        if (this.backgroundWatcherStarted || this.backgroundWatcherId != null) {
+            stopped = this.stopBackgroundGeolocation() || stopped;
+        }
+
+        if (this.watchId != null) {
+            try {
+                if (typeof navigator !== 'undefined' && navigator.geolocation
+                    && typeof navigator.geolocation.clearWatch === 'function') {
+                    navigator.geolocation.clearWatch(this.watchId);
+                }
+            } catch (e) { /* ignore */ }
+            this.watchId = null;
+            stopped = true;
+        }
+
+        if (this.nativeWatchId != null) {
+            try {
+                const nativeGeo = typeof this.getNativeGeolocation === 'function' ? this.getNativeGeolocation() : null;
+                if (nativeGeo && typeof nativeGeo.clearWatch === 'function') {
+                    Promise.resolve(nativeGeo.clearWatch({ id: this.nativeWatchId })).catch(() => {});
+                }
+            } catch (e) { /* ignore */ }
+            this.nativeWatchId = null;
+            stopped = true;
+        }
+
+        this.geolocationStarted = false;
+        return stopped;
     }
 
     /**
@@ -1895,8 +2179,9 @@ class TerritoryWalkApp {
             if (this.syncQueue) this.syncQueue.notify();
         });
 
-        // 画面回転・リサイズ時はトースト位置を再調整（検索バーとの被り防止）
+        // 画面回転・リサイズ時はトースト位置を再調整（検索バー・各バナーとの被り防止）
         window.addEventListener('resize', () => {
+            this.layoutTopNotices();
             const container = document.getElementById('toast-container');
             if (container) this.positionToastContainer(container);
         });
@@ -1939,6 +2224,15 @@ class TerritoryWalkApp {
         // 連続で塗り進められない（これがD-Pad塗りが効かない原因）。
         if (this.isVirtualWalkActive()) {
             this.updateGPSStatus('GPS: 仮想散歩中', 'bg-amber-400', 'text-amber-400');
+            return;
+        }
+
+        // マーキング停止中：実GPS由来の塗りはここでも止める（processMeshAndClaim と二重ガード）。
+        // 停止直後に飛行中のコールバックが届いてもマスを塗らないが、マーカー位置だけは更新する。
+        if (this.isMarkingPaused()) {
+            this.virtualPos = [latitude, longitude];
+            this.updateGPSStatus('GPS: マーキング停止中', 'bg-sky-400', 'text-sky-300');
+            if (!this.isAppInBackground) this.updatePlayerMarker([latitude, longitude]);
             return;
         }
 
@@ -2045,8 +2339,16 @@ class TerritoryWalkApp {
         }
     }
 
-    async processMeshAndClaim(lat, lng) {
+    async processMeshAndClaim(lat, lng, options = {}) {
         if (!this.gridManager) return { changed: false, meshId: null };
+
+        // マーキング停止中の自動塗りをここで止める（二重ガード）。
+        // D-Pad の手動テスト（source: 'debug'）は停止中でも動かせるよう除外する。
+        const source = (options && options.source)
+            || (this.manualMarkingInProgress === true ? 'debug' : 'gps');
+        if (source !== 'debug' && this.isMarkingPaused()) {
+            return { changed: false, meshId: null, latIdx: null, lngIdx: null, blocked: true, reason: 'marking-paused' };
+        }
 
         const { meshId, latIdx, lngIdx } = this.gridManager.getMeshIdFromLatLng(lat, lng);
         const cachedTeam = this.gridManager.claimedTilesCache.get(meshId);
@@ -2202,10 +2504,15 @@ class TerritoryWalkApp {
             this.lastProcessedLat = this.virtualPos[0];
             this.lastProcessedLng = this.virtualPos[1];
             let result = null;
+            // D-Pad は「明示的な手動テスト操作」なので、マーキング停止中でも塗れるよう
+            // 自動GPS由来の塗りとは別扱いにする（source: 'debug'）
+            this.manualMarkingInProgress = true;
             try {
                 result = await this.processMeshAndClaim(this.virtualPos[0], this.virtualPos[1]);
             } catch (e) {
                 console.warn('[Debug D-Pad] Claim failed:', e);
+            } finally {
+                this.manualMarkingInProgress = false;
             }
             this.reportVirtualStep(result);
         };

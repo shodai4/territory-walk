@@ -621,3 +621,161 @@ test('Ad-Free 説明文: キャッシュバスターが更新されている', (
     assert.match(html, /iap\.js\?v=\d{8}v\d+/);
     assert.match(html, /coins\.js\?v=\d{8}v\d+/);
 });
+
+/* ------------------------------------------------------------------ *
+ * 10. 価格表示はすべて日本円（¥）固定（$ 表記の根絶）
+ *     実機で「ビギナーパック ($0.99) を獲得しました」と出た不具合の再発防止。
+ * ------------------------------------------------------------------ */
+test('価格: カタログは全パック日本円表記で、yen と fallbackPrice が一致する', () => {
+    const h = createHarness();
+    const expected = {
+        'pack-120': '¥120',
+        'pack-500': '¥500',
+        'pack-1500': '¥1,500',
+        'pack-5000': '¥5,000',
+        'ad-free': '¥480'
+    };
+
+    Object.keys(expected).forEach((packKey) => {
+        const item = h.iap.products[packKey];
+        assert.ok(item, `${packKey} がある`);
+        assert.equal(item.fallbackPrice, expected[packKey], `${packKey} のカタログ表記が円`);
+        assert.equal(h.iap.formatYen(item.yen), expected[packKey], `${packKey} の金額から円表記を作れる`);
+        assert.doesNotMatch(h.iap.formatYen(item.yen), /\$/, '円表記に $ を含めない');
+    });
+});
+
+test('価格: StoreKit が $0.99 を返しても表示価格・購入完了トーストは円のまま', () => {
+    const h = createHarness();
+
+    // サンドボックスが返す外貨価格（実機で起きたケース）
+    const product = h.makeProduct(PACK_120, {
+        getOffer: () => ({ id: 'default', productId: PACK_120, pricingPhases: [{ price: '$0.99' }] })
+    });
+    assert.equal(typeof h.callbacks.productUpdated, 'function', 'productUpdated が配線されている');
+    h.callbacks.productUpdated(product);
+
+    // 参照用には記録されるが、表示には一切使わない
+    assert.equal(h.iap.storePriceByProductId[PACK_120], '$0.99');
+    assert.equal(h.iap.getDisplayPrice('pack-120'), '¥120', 'パックの表示価格は円固定');
+    assert.equal(h.iap.getDisplayPriceForYen(120), '¥120', '円額からの表示価格も円固定');
+    assert.equal(h.iap.getDisplayPriceForYen(1500), '¥1,500', '3桁区切りも円表記');
+
+    // 購入完了トースト（実機で $ が出た箇所）
+    const tx = h.makeTransaction(PACK_120, { transactionId: 'tx-dollar-1' });
+    h.emitApproved(tx);
+
+    const granted = h.coins.toasts.find((t) => t.join(' ').indexOf('獲得しました') >= 0);
+    assert.ok(granted, '購入完了トーストが出る');
+    assert.match(granted[0], /ビギナーパック \(¥120\) を獲得しました/);
+    assert.doesNotMatch(JSON.stringify(h.coins.toasts), /\$0\.99/, '$ 表記をトーストに出さない');
+});
+
+test('価格: 未知の円額でも日本円表記にフォールバックする（null を返さない）', () => {
+    const h = createHarness();
+    assert.equal(h.iap.getDisplayPriceForYen(300), '¥300', 'カタログ外の円額も円表記');
+    assert.equal(h.iap.getDisplayPrice('unknown-pack'), null, '未知のパックキーは null');
+});
+
+test('ソース点検: iap.js / coins.js / app.js / index.html に $ 価格表記が残っていない', () => {
+    ['iap.js', 'coins.js', 'app.js', 'index.html'].forEach((file) => {
+        const source = fs.readFileSync(path.join(ROOT, file), 'utf8');
+        assert.doesNotMatch(source, /\$\s?\d/, `${file} に「$ + 数字」の価格表記が無い`);
+    });
+});
+
+test('ソース点検: iap.js はストア価格を表示用ヘルパーの戻り値に使わない', () => {
+    assert.doesNotMatch(IAP_SOURCE, /storePriceByProductId\[[^\]]+\]\s*\|\|/, '表示にストア価格を使わない');
+    assert.match(IAP_SOURCE, /getDisplayPrice\(packKey\) \{[\s\S]*?return this\.formatYen\(item\.yen\)/, 'getDisplayPrice は円固定');
+    assert.match(IAP_SOURCE, /getDisplayPriceForYen\(yen\) \{[\s\S]*?return this\.formatYen\(/, 'getDisplayPriceForYen も円固定');
+});
+
+/* ------------------------------------------------------------------ *
+ * 11. 課金完了トーストの改行整形
+ *     実機で「スタンダードパック」の後で折り返し、2行目が「を獲得。広告…」と
+ *     単語の途中から始まっていた不具合の再発防止。
+ * ------------------------------------------------------------------ */
+
+/**
+ * トースト1行の推定描画幅（px）。
+ * トーストは font-mono / text-xs（12px）、2行目は text-[11px]。
+ * 全角（CJK・全角記号）は 1em、半角は 0.6em として保守的に見積もる。
+ */
+function estimateLineWidth(text, fontSize) {
+    let em = 0;
+    for (const ch of String(text)) {
+        em += /[\u3000-\u30ff\u3400-\u9fff\uff00-\uffef]/.test(ch) ? 1 : 0.6;
+    }
+    return em * fontSize;
+}
+
+// 375px幅のトースト本文の描画可能幅（max-w-92vw = 345px - px-4 の左右32px）
+const TOAST_LINE_BUDGET_PX = 300;
+
+const AD_FREE_PACKS = {
+    [PACK_500]: 'スタンダードパック',
+    'com.shodai.territorywalk.coins14000': 'プレミアムパック',
+    'com.shodai.territorywalk.coins50000': 'アルティメットパック'
+};
+
+test('トースト: 500円以上パックは「〇〇パック (¥金額) を獲得！」と「Ad-Free解放」の2行に分かれる', () => {
+    Object.keys(AD_FREE_PACKS).forEach((productId, index) => {
+        const h = createHarness();
+        h.emitApproved(h.makeTransaction(productId, { transactionId: `tx-lines-${index}` }));
+
+        const toast = h.coins.toasts.find((t) => String(t[0] || '').indexOf('を獲得') >= 0);
+        assert.ok(toast, `${AD_FREE_PACKS[productId]} の購入完了トーストが出る`);
+
+        const [line1, line2] = toast;
+        assert.match(line1, /^.+パック \(¥[\d,]+\) を獲得！$/, '1行目は「パック名 (¥金額) を獲得！」');
+        assert.equal(line2, '広告完全非表示（Ad-Free）も解放しました', '2行目は Ad-Free 解放の一文だけ');
+        assert.equal(toast.length, 2, '3行目は作らない');
+    });
+});
+
+test('トースト: 1文の流し込みに戻らず、2行目が「を獲得」から始まらない', () => {
+    const h = createHarness();
+    h.emitApproved(h.makeTransaction(PACK_500, { transactionId: 'tx-lines-guard' }));
+
+    const all = h.coins.toasts.map((t) => t.filter(Boolean).join('\n'));
+    assert.ok(all.length > 0);
+    all.forEach((text) => {
+        assert.doesNotMatch(text, /を獲得。/, '「を獲得。広告…」の連結が残っていない');
+        text.split('\n').forEach((line) => {
+            assert.doesNotMatch(line, /^[をもの]/, `行頭が助詞から始まらない: ${line}`);
+        });
+    });
+});
+
+test('トースト: 375px幅（本文300px）で意図しない再折り返しをしない', () => {
+    Object.keys(AD_FREE_PACKS).forEach((productId, index) => {
+        const h = createHarness();
+        h.emitApproved(h.makeTransaction(productId, { transactionId: `tx-width-${index}` }));
+        const toast = h.coins.toasts.find((t) => String(t[0] || '').indexOf('を獲得') >= 0);
+
+        const [line1, line2] = toast;
+        assert.ok(estimateLineWidth(line1, 12) <= TOAST_LINE_BUDGET_PX,
+            `1行目が375pxに収まる（${Math.round(estimateLineWidth(line1, 12))}px）: ${line1}`);
+        assert.ok(estimateLineWidth(line2, 11) <= TOAST_LINE_BUDGET_PX,
+            `2行目が375pxに収まる（${Math.round(estimateLineWidth(line2, 11))}px）: ${line2}`);
+    });
+});
+
+test('トースト: 120円のビギナーパックは1行で「ビギナーパック (¥120) を獲得しました」', () => {
+    const h = createHarness();
+    h.emitApproved(h.makeTransaction(PACK_120, { transactionId: 'tx-beginner-line' }));
+
+    const toast = h.coins.toasts.find((t) => String(t[0] || '').indexOf('獲得しました') >= 0);
+    assert.ok(toast, '購入完了トーストが出る');
+    assert.equal(toast[0], 'ビギナーパック (¥120) を獲得しました', '文言は確定仕様どおり');
+    assert.equal(toast[1] == null, true, '2行目（Ad-Free行）は付けない');
+    assert.ok(estimateLineWidth(toast[0], 12) <= TOAST_LINE_BUDGET_PX,
+        `375px幅で1行に収まる（${Math.round(estimateLineWidth(toast[0], 12))}px）`);
+    assert.doesNotMatch(toast[0], /\$/, 'ドル表記を含まない（円固定）');
+});
+
+test('トースト: 旧文言（購入完了！ +N COIN / を獲得。…）が残っていない', () => {
+    assert.doesNotMatch(IAP_SOURCE, /購入完了！ \+/, '旧1行目の「購入完了！ +N COIN」を残さない');
+    assert.doesNotMatch(IAP_SOURCE, /を獲得。広告完全非表示/, '単語途中で折れる旧1文を残さない');
+});
+

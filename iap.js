@@ -115,7 +115,10 @@ class IAPManager {
         this.initStarted = false;
         this.pendingProductId = null; // product id with an order in flight
         this.pendingWatchdog = null;
-        this.priceByProductId = {};   // product id -> localized price string
+        // ストア（StoreKit）が返すローカライズ価格。**表示には使わない**参照用の記録。
+        // サンドボックスでは外貨（ドル）表記で返ることがあるため、ユーザー向けの金額は
+        // 常にカタログの円価格（formatYen）で固定する。
+        this.storePriceByProductId = {};
 
         this.init();
     }
@@ -221,9 +224,13 @@ class IAPManager {
 
     onProductUpdated(product) {
         if (!product || !product.id) return;
-        const price = this.extractLocalizedPrice(product);
-        if (price) {
-            this.priceByProductId[product.id] = price;
+        const storePrice = this.extractLocalizedPrice(product);
+        if (storePrice) {
+            // 参照用に記録するだけ。$ 表記が来ても画面には一切出さない。
+            this.storePriceByProductId[product.id] = storePrice;
+            if (/[$]/.test(storePrice)) {
+                console.log('[IAP] Store returned a non-yen price; the app always shows yen:', storePrice);
+            }
             this.refreshShopUI();
         }
         // Ownership of the ad-free pass can also arrive as a product update.
@@ -256,19 +263,29 @@ class IAPManager {
     }
 
     // ---------------------------------------------------------------
-    // Prices (used by the shop UI; falls back to the catalog price)
+    // Prices
+    //   表示は常に日本円（¥）固定。ストアが返すローカライズ価格（サンドボックスの
+    //   ドル建て表記など）は参照用に記録するだけで表示には使わない。
     // ---------------------------------------------------------------
 
+    /** 円価格の表示文字列（例: 1500 -> "¥1,500"） */
+    formatYen(yen) {
+        const n = Number(yen);
+        if (!Number.isFinite(n) || n <= 0) return '';
+        return `¥${Math.round(n).toLocaleString('ja-JP')}`;
+    }
+
+    /** パックの表示価格（常に円。ストア価格は使わない） */
     getDisplayPrice(packKey) {
         const item = this.products[packKey];
         if (!item) return null;
-        return this.priceByProductId[item.id] || item.fallbackPrice;
+        return this.formatYen(item.yen) || item.fallbackPrice || null;
     }
 
+    /** 円額から表示価格を引く（常に円。ストア価格は使わない） */
     getDisplayPriceForYen(yen) {
         const item = Object.values(this.products).find(p => p.yen === yen);
-        if (!item) return null;
-        return this.priceByProductId[item.id] || item.fallbackPrice;
+        return this.formatYen(item ? item.yen : yen) || null;
     }
 
     // ---------------------------------------------------------------
@@ -690,12 +707,22 @@ class IAPManager {
         const unlocksAdFree = this.packUnlocksAdFree(item);
         this.app.coinManager.addCoins(total, `IAP購入: ${item.title}`);
         if (unlocksAdFree) this.applyAdFree(`pack:${packKey}`);
-        this.toast(
-            `購入完了！ +${total.toLocaleString()} COIN`,
-            unlocksAdFree
-                ? `${item.title} を獲得。広告完全非表示（Ad-Free）も解放しました`
-                : `${item.title} (${this.getDisplayPrice(packKey) || item.fallbackPrice}) を獲得しました`
-        );
+
+        // 375px幅でも語の途中で折り返さないよう、意味の切れ目で行を分ける。
+        //   1行目: 「〇〇パック (¥金額) を獲得！」
+        //   2行目: 「広告完全非表示（Ad-Free）も解放しました」
+        // 以前は1文で流していたため「スタンダードパック」の後で折れ、
+        // 2行目が「を獲得。広告…」と単語の途中から始まっていた。
+        const priceLabel = this.getDisplayPrice(packKey) || item.fallbackPrice || '';
+        const packLabel = priceLabel ? `${item.title} (${priceLabel})` : item.title;
+        if (unlocksAdFree) {
+            this.toast(
+                `${packLabel} を獲得！`,
+                '広告完全非表示（Ad-Free）も解放しました'
+            );
+        } else {
+            this.toast(`${packLabel} を獲得しました`);
+        }
         this.refreshShopUI();
         return true;
     }
