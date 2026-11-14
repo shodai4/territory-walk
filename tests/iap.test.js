@@ -513,7 +513,46 @@ test('コインマネージャが未準備で付与できないときは finish 
 });
 
 /* ------------------------------------------------------------------ *
- * 7. ストア初期化の防御
+ * 7. リストア（復元）の点検
+ * ------------------------------------------------------------------ */
+test('復元: 非消耗型の Ad-Free を所有していれば権利を再適用し、コインは増やさない', async () => {
+    const h = createHarness();
+    h.makeProduct(AD_FREE, { owned: true });
+
+    await h.iap.restorePurchases();
+
+    assert.equal(h.coins.total, 0, '消耗型は復元できない');
+    assert.equal(h.storage.tw_is_ad_free, 'true');
+    assert.equal(h.storage.tw_ad_free_source, 'ad-free-pass');
+    assert.ok(h.coins.toasts.some(t => t[0] === '購入の復元が完了しました'));
+});
+
+test('復元: 何も持っていなければ「復元できる購入がありません」を出す', async () => {
+    const h = createHarness();
+    h.makeProduct(AD_FREE, { owned: false });
+
+    await h.iap.restorePurchases();
+
+    assert.equal(h.coins.total, 0);
+    assert.equal(h.storage.tw_is_ad_free, undefined);
+    assert.ok(h.coins.toasts.some(t => t[0] === '復元できる購入がありませんでした'));
+});
+
+test('復元: 500円以上のパック購入歴から Ad-Free 特典だけを復元する', async () => {
+    const h = createHarness();
+    h.makeProduct(AD_FREE, { owned: false });
+    // 消耗型なのでコインは再付与されないが、購入履歴はレシートに残っている
+    h.store.localTransactions = [{ products: [{ id: PACK_500 }], isPending: false }];
+
+    await h.iap.restorePurchases();
+
+    assert.equal(h.coins.total, 0);
+    assert.equal(h.storage.tw_is_ad_free, 'true');
+    assert.equal(h.storage.tw_ad_free_source, 'pack-history');
+});
+
+/* ------------------------------------------------------------------ *
+ * 8. ストア初期化の防御
  * ------------------------------------------------------------------ */
 test('商品登録に失敗しても例外を外に漏らさず、購入時にエラートーストで止まる', () => {
     const h = createHarness();
