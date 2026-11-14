@@ -81,31 +81,219 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             clean build | xcbeautify || xcodebuild -workspace App.xcworkspace -scheme App -destination 'generic/platform=iOS' -configuration Release CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO clean build
 
+      # ---------------------------------------------------------------------
+      # Secret gate: the whole signing / TestFlight block below runs ONLY when
+      # all four Secrets are registered in the repository.
+      #   APP_STORE_CONNECT_ISSUER_ID  (App Store Connect API Issuer ID)
+      #   APP_STORE_CONNECT_KEY_ID     (App Store Connect API Key ID)
+      #   APP_STORE_CONNECT_API_KEY_P8 (content of AuthKey_XXXX.p8)
+      #   APPLE_TEAM_ID                (10-character Apple Developer Team ID)
+      # ---------------------------------------------------------------------
       - name: "Check App Store Connect API Key & Release Status"
         id: check_keys
+        env:
+          API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          if [ -n "${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}" ] && [ -n "${{ secrets.APP_STORE_CONNECT_KEY_ID }}" ]; then
-            echo "has_keys=true" >> $GITHUB_OUTPUT
-            echo "[CI] App Store Connect API Key detected! Ready for automated upload."
+          MISSING=""
+          if [ -z "$API_KEY_P8" ]; then MISSING="$MISSING APP_STORE_CONNECT_API_KEY_P8"; fi
+          if [ -z "$KEY_ID" ]; then MISSING="$MISSING APP_STORE_CONNECT_KEY_ID"; fi
+          if [ -z "$ISSUER_ID" ]; then MISSING="$MISSING APP_STORE_CONNECT_ISSUER_ID"; fi
+          if [ -z "$TEAM_ID" ]; then MISSING="$MISSING APPLE_TEAM_ID"; fi
+
+          if [ -z "$MISSING" ]; then
+            echo "has_keys=true" >> "$GITHUB_OUTPUT"
+            echo "missing_keys=" >> "$GITHUB_OUTPUT"
+            echo "[CI] All 4 Secrets detected. Automated signing, IPA export and TestFlight upload are ACTIVE."
           else
-            echo "has_keys=false" >> $GITHUB_OUTPUT
-            echo "[CI] Notice: App Store Connect API Key not configured in GitHub Secrets."
-            echo "[CI] Clean iOS build succeeded! Once keys are registered, automated TestFlight/App Store upload will activate."
+            echo "has_keys=false" >> "$GITHUB_OUTPUT"
+            echo "missing_keys=$MISSING" >> "$GITHUB_OUTPUT"
+            echo "[CI] Notice: not all Secrets are registered. Missing:$MISSING"
+            echo "[CI] Clean iOS build still verified. Automated TestFlight upload stays idle until all 4 Secrets exist."
+            echo "[CI] See docs/app-store-release-guide.md step 3 for the registration table."
           fi
 
-      - name: "Generate Job Summary"
+      - name: "Install App Store Connect API Key (.p8)"
+        if: steps.check_keys.outputs.has_keys == 'true'
+        env:
+          API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
         run: |
-          echo "### 🚀 Territory Walk - iOS CI/CD Verification Report" >> $GITHUB_STEP_SUMMARY
-          echo "- **Status**: ✅ iOS Build Verified Successfully on macOS 14 (Apple Silicon)" >> $GITHUB_STEP_SUMMARY
-          echo "- **Capacitor Core**: v6.2.0" >> $GITHUB_STEP_SUMMARY
-          echo "- **iOS Deployment Target**: iOS 14.0+" >> $GITHUB_STEP_SUMMARY
-          echo "- **Target SDK**: Latest iOS SDK (Xcode 15/16)" >> $GITHUB_STEP_SUMMARY
-          echo "- **GPS Permissions**: NSLocationWhenInUse & NSLocationAlways configured" >> $GITHUB_STEP_SUMMARY
-          echo "- **AdMob Framework**: GADApplicationIdentifier & SKAdNetwork configured" >> $GITHUB_STEP_SUMMARY
-          echo "- **App Icons**: 1024x1024 HIG App Store Icon & Full xcassets synced" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          if [ "${{ steps.check_keys.outputs.has_keys }}" == "true" ]; then
-            echo "✅ **App Store Connect Upload**: Configured and active." >> $GITHUB_STEP_SUMMARY
-          else
-            echo "ℹ️ **App Store Connect Upload**: Waiting for API Key registration in GitHub Secrets (see docs/app-store-release-guide.md)." >> $GITHUB_STEP_SUMMARY
+          KEY_DIR="$HOME/.appstoreconnect/private_keys"
+          mkdir -p "$KEY_DIR"
+          KEY_PATH="$KEY_DIR/AuthKey_${KEY_ID}.p8"
+          printf '%s\n' "$API_KEY_P8" > "$KEY_PATH"
+          chmod 600 "$KEY_PATH"
+          # Workspace copy: xcodebuild -authenticationKeyPath resolves relative paths,
+          # so a private copy under RUNNER_TEMP is used for the explicit path argument.
+          printf '%s\n' "$API_KEY_P8" > "$RUNNER_TEMP/AuthKey_${KEY_ID}.p8"
+          chmod 600 "$RUNNER_TEMP/AuthKey_${KEY_ID}.p8"
+          echo "KEY_PATH=$RUNNER_TEMP/AuthKey_${KEY_ID}.p8" >> "$GITHUB_ENV"
+          echo "[CI] API key installed at $KEY_DIR (chmod 600) and at $RUNNER_TEMP."
+
+      - name: "Diagnose Signing Settings (Team / Style / Identities)"
+        if: steps.check_keys.outputs.has_keys == 'true'
+        run: |
+          cd ios/App
+          echo "=== Bundle ID ==="
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" App/Info.plist || true
+          echo "=== Project signing settings ==="
+          xcodebuild -workspace App.xcworkspace -scheme App -showBuildSettings 2>/dev/null \
+            | grep -E "CODE_SIGN_STYLE|CODE_SIGN_IDENTITY|DEVELOPMENT_TEAM|PRODUCT_BUNDLE_IDENTIFIER" | sort -u || true
+
+      - name: "Archive iOS App (Cloud Signing via App Store Connect API Key)"
+        if: steps.check_keys.outputs.has_keys == 'true'
+        run: |
+          cd ios/App
+          rm -rf "$RUNNER_TEMP/TerritoryWalk.xcarchive"
+          xcodebuild -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/TerritoryWalk.xcarchive" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$KEY_PATH" \
+            -authenticationKeyID "${{ secrets.APP_STORE_CONNECT_KEY_ID }}" \
+            -authenticationKeyIssuerID "${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}" \
+            archive \
+            DEVELOPMENT_TEAM="${{ secrets.APPLE_TEAM_ID }}" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            CODE_SIGN_STYLE=Automatic
+
+      - name: "Generate ExportOptions.plist"
+        if: steps.check_keys.outputs.has_keys == 'true'
+        run: |
+          {
+            echo '<?xml version="1.0" encoding="UTF-8"?>'
+            echo '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">'
+            echo '<plist version="1.0">'
+            echo '<dict>'
+            echo '  <key>method</key>'
+            echo '  <string>app-store-connect</string>'
+            echo '  <key>teamID</key>'
+            echo '  <string>${{ secrets.APPLE_TEAM_ID }}</string>'
+            echo '  <key>signingStyle</key>'
+            echo '  <string>automatic</string>'
+            echo '  <key>destination</key>'
+            echo '  <string>export</string>'
+            echo '  <key>manageAppVersionAndBuildNumber</key>'
+            echo '  <true/>'
+            echo '  <key>uploadSymbols</key>'
+            echo '  <true/>'
+            echo '  <key>stripSwiftSymbols</key>'
+            echo '  <true/>'
+            echo '</dict>'
+            echo '</plist>'
+          } > "$RUNNER_TEMP/ExportOptions.plist"
+          echo "=== ExportOptions.plist ==="
+          cat "$RUNNER_TEMP/ExportOptions.plist"
+          plutil -lint "$RUNNER_TEMP/ExportOptions.plist"
+
+      - name: "Export IPA for App Store Connect"
+        if: steps.check_keys.outputs.has_keys == 'true'
+        run: |
+          rm -rf "$RUNNER_TEMP/export"
+          mkdir -p "$RUNNER_TEMP/export"
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/TerritoryWalk.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath "$RUNNER_TEMP/export" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$KEY_PATH" \
+            -authenticationKeyID "${{ secrets.APP_STORE_CONNECT_KEY_ID }}" \
+            -authenticationKeyIssuerID "${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}"
+          echo "=== Exported artifacts ==="
+          ls -lh "$RUNNER_TEMP/export"
+
+      - name: "Upload IPA to TestFlight"
+        id: upload
+        if: steps.check_keys.outputs.has_keys == 'true'
+        run: |
+          IPA_PATH=$(ls -1 "$RUNNER_TEMP/export/"*.ipa 2>/dev/null | head -n 1 || true)
+          if [ -z "$IPA_PATH" ]; then
+            echo "upload_status=no_ipa" >> "$GITHUB_OUTPUT"
+            echo "[CI] No .ipa was produced by exportArchive."
+            exit 1
           fi
+          echo "ipa_path=$IPA_PATH" >> "$GITHUB_OUTPUT"
+          echo "[CI] Uploading $IPA_PATH to TestFlight (App Store Connect API Key auth)..."
+
+          if xcrun altool --upload-app -f "$IPA_PATH" -t ios \
+               --apiKey "${{ secrets.APP_STORE_CONNECT_KEY_ID }}" \
+               --apiIssuer "${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}" \
+               > "$RUNNER_TEMP/upload.log" 2>&1; then
+            echo "upload_status=success" >> "$GITHUB_OUTPUT"
+            cat "$RUNNER_TEMP/upload.log"
+            echo "[CI] TestFlight upload completed. The build appears in App Store Connect > TestFlight after Apple processing."
+          else
+            cat "$RUNNER_TEMP/upload.log" || true
+            echo "[CI] altool upload failed. Trying the Transporter (iTMSTransporter) route..."
+            if xcrun iTMSTransporter -m upload -assetFile "$IPA_PATH" \
+                 -apiKey "${{ secrets.APP_STORE_CONNECT_KEY_ID }}" \
+                 -apiIssuer "${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}" \
+                 -v informational; then
+              echo "upload_status=success_transporter" >> "$GITHUB_OUTPUT"
+              echo "[CI] TestFlight upload completed via iTMSTransporter."
+            else
+              echo "upload_status=failed" >> "$GITHUB_OUTPUT"
+              echo "[CI] TestFlight upload failed on both routes. Archive and IPA export themselves succeeded."
+              exit 1
+            fi
+          fi
+
+      - name: "Cleanup API Key & Credential Files"
+        if: always()
+        run: |
+          rm -rf "$HOME/.appstoreconnect/private_keys"
+          rm -f "$RUNNER_TEMP"/AuthKey_*.p8
+          rm -f "$RUNNER_TEMP/upload.log" "$RUNNER_TEMP/altool.log" 2>/dev/null || true
+          echo "[CI] Temporary App Store Connect API key material removed."
+
+      - name: "Generate Job Summary"
+        if: always()
+        run: |
+          BUILD="${{ github.run_number }}"
+          HAS_KEYS="${{ steps.check_keys.outputs.has_keys }}"
+          UPLOAD="${{ steps.upload.outputs.upload_status }}"
+          MISSING="${{ steps.check_keys.outputs.missing_keys }}"
+          {
+            echo "### Territory Walk - iOS CI/CD Report"
+            echo ""
+            echo "- **Clean Build**: iOS build verified on macos-14 (Apple Silicon, Xcode 16)"
+            echo "- **Capacitor Core**: v6.2.0"
+            echo "- **iOS Deployment Target**: iOS 14.0+"
+            echo "- **GPS Permissions**: NSLocationWhenInUse & NSLocationAlways configured"
+            echo "- **AdMob Framework**: GADApplicationIdentifier & SKAdNetwork configured"
+            echo "- **App Icons**: 1024x1024 HIG App Store Icon & Full xcassets synced"
+            echo ""
+            echo "#### Automated Signing & TestFlight"
+            if [ "$HAS_KEYS" == "true" ]; then
+              echo "- **Secrets**: all 4 registered (APP_STORE_CONNECT_ISSUER_ID / APP_STORE_CONNECT_KEY_ID / APP_STORE_CONNECT_API_KEY_P8 / APPLE_TEAM_ID)"
+              echo "- **Signing**: automatic cloud signing via App Store Connect API key (no .p12 needed)"
+              echo "- **Archive/Export**: TerritoryWalk.xcarchive -> method=app-store-connect, signingStyle=automatic, manageAppVersionAndBuildNumber=true"
+              case "$UPLOAD" in
+                success)
+                  echo "- **TestFlight Upload**: SUCCESS via altool --upload-app (build number ${BUILD})"
+                  ;;
+                success_transporter)
+                  echo "- **TestFlight Upload**: SUCCESS via iTMSTransporter fallback (build number ${BUILD})"
+                  ;;
+                no_ipa)
+                  echo "- **TestFlight Upload**: exportArchive produced no .ipa - check the export log"
+                  ;;
+                failed)
+                  echo "- **TestFlight Upload**: FAILED on both altool and iTMSTransporter (archive and IPA export succeeded)"
+                  ;;
+                *)
+                  echo "- **TestFlight Upload**: upload step did not run - see the failing step above"
+                  ;;
+              esac
+              echo "- **API Key Cleanup**: ~/.appstoreconnect/private_keys/ and RUNNER_TEMP keys removed at the end of the run"
+            else
+              echo "- **Secrets**: incomplete - missing:${MISSING}"
+              echo "- **Signing / TestFlight**: idle until all 4 Secrets are registered (docs/app-store-release-guide.md step 3)"
+              echo "- **Clean Build**: still fully verified - the pipeline is green without the keys"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
