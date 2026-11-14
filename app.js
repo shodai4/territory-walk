@@ -4,7 +4,7 @@
  */
 
 const CONFIG = {
-    DEFAULT_CENTER: [34.6662, 135.6276], // 東大阪・近鉄瓢箪山駅〜東花園エリア
+    DEFAULT_CENTER: [35.658034, 139.701636], // 渋谷（渋谷駅周辺）— 起動時の初期表示位置
     DEFAULT_ZOOM: 17,
     MIN_ZOOM: 2,
     MAX_ZOOM: 20,
