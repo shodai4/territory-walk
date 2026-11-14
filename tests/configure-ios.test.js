@@ -155,8 +155,7 @@ test('値の訂正: 既に <true/> で入っていても <false/> に直す', ()
 
 /* ------------------------------------------------------------------ *
  * 3. 既存設定を壊さない
- * ------------------------------------------------------------------ */
-test('既存設定の保護: 手で足した SKAdNetworkItems / UIBackgroundModes を上書きしない', () => {
+ * ------------------------------------------------------------------ */test('既存設定の保護: 手で足した SKAdNetworkItems / UIBackgroundModes を上書きしない', () => {
     const extra = `\t<key>SKAdNetworkItems</key>
 	<array>
 		<dict>
@@ -282,4 +281,84 @@ test('配線: GitHub Actions が Info.plist 設定ステップで configure-ios.
     const configureIndex = workflow.indexOf('node scripts/configure-ios.js');
     const archiveIndex = workflow.indexOf('Archive iOS App');
     assert.ok(configureIndex > 0 && archiveIndex > configureIndex);
+});
+
+/* ------------------------------------------------------------------ *
+ * 6. AdMob 本番アプリID（GADApplicationIdentifier）
+ *    サンプルIDのまま出荷すると実機で本番広告が配信されないため、
+ *    値まで一致させて必ず本番IDに直す。
+ * ------------------------------------------------------------------ */
+const GAD_KEY = 'GADApplicationIdentifier';
+const GAD_APP_ID = 'ca-app-pub-5739782559889389~3477680072';
+const SAMPLE_APP_ID = 'ca-app-pub-3940256099942544~1458102511';
+
+test('AdMob: GADApplicationIdentifier が無ければ本番アプリIDを注入する', () => {
+    const { content, actions } = configureContent(templatePlist());
+
+    assert.equal(countKey(content, GAD_KEY), 1);
+    assert.match(content, new RegExp(`<key>${GAD_KEY}</key>\\s*<string>${GAD_APP_ID}</string>`));
+    assert.ok(actions.some((item) => item.key === GAD_KEY && item.action === 'injected'));
+    assert.deepEqual(verifyContent(content), []);
+});
+
+test('AdMob: Google のサンプルアプリIDが入っていても本番アプリIDに書き換える', () => {
+    const stale = templatePlist(`\t<key>${GAD_KEY}</key>\n\t<string>${SAMPLE_APP_ID}</string>\n`);
+    const { content, actions } = configureContent(stale);
+
+    assert.match(content, new RegExp(`<key>${GAD_KEY}</key>\\s*<string>${GAD_APP_ID}</string>`));
+    assert.doesNotMatch(content, new RegExp(SAMPLE_APP_ID.replace(/[.~]/g, '\\$&')));
+    assert.equal(countKey(content, GAD_KEY), 1);
+    assert.ok(actions.some((item) => item.key === GAD_KEY && item.action === 'updated'));
+    assert.deepEqual(verifyContent(content), []);
+});
+
+test('AdMob: 本番IDが既に入っていれば書き換えない（冪等）', () => {
+    const already = templatePlist(`\t<key>${GAD_KEY}</key>\n\t<string>${GAD_APP_ID}</string>\n`);
+    const first = configureContent(already);
+    const second = configureContent(first.content);
+
+    assert.equal(second.modified, false, '2回目は書き換えなし');
+    assert.equal(second.content, first.content);
+    assert.ok(second.actions.some((item) => item.key === GAD_KEY && item.action === 'verified'));
+    assert.match(second.content, new RegExp(`<key>${GAD_KEY}</key>\\s*<string>${GAD_APP_ID}</string>`));
+});
+
+test('AdMob: 重複した GADApplicationIdentifier は1件にまとめる', () => {
+    const duplicated = templatePlist(
+        `\t<key>${GAD_KEY}</key>\n\t<string>${SAMPLE_APP_ID}</string>\n` +
+        `\t<key>${GAD_KEY}</key>\n\t<string>${GAD_APP_ID}</string>\n`
+    );
+    const { content, actions } = configureContent(duplicated);
+
+    assert.equal(countKey(content, GAD_KEY), 1);
+    assert.ok(actions.some((item) => item.key === GAD_KEY && item.action === 'deduped'));
+    assert.match(content, new RegExp(`<key>${GAD_KEY}</key>\\s*<string>${GAD_APP_ID}</string>`));
+    assert.deepEqual(verifyContent(content), []);
+});
+
+test('AdMob: サンプルIDのままなら verifyContent が問題として返す', () => {
+    const wrong = templatePlist(`\t<key>${GAD_KEY}</key>\n\t<string>${SAMPLE_APP_ID}</string>\n`);
+    const problems = verifyContent(wrong);
+    assert.ok(problems.some((problem) => problem.includes(GAD_KEY)));
+});
+
+test('AdMob: CLI 実行で Info.plist に本番アプリIDが入り、plist としても読める', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tw-admob-config-'));
+    const plistPath = path.join(dir, 'Info.plist');
+    try {
+        fs.writeFileSync(plistPath, templatePlist(`\t<key>${GAD_KEY}</key>\n\t<string>${SAMPLE_APP_ID}</string>\n`), 'utf8');
+        const out = execFileSync(process.execPath, [SCRIPT], {
+            env: { ...process.env, IOS_PLIST_PATH: plistPath },
+            stdio: ['ignore', 'pipe', 'pipe']
+        }).toString('utf8');
+
+        const written = fs.readFileSync(plistPath, 'utf8');
+        assert.match(out, /Updated value for <key>GADApplicationIdentifier<\/key>/);
+
+        const parsed = readPlistWithPython(plistPath);
+        if (parsed) assert.equal(parsed[GAD_KEY], GAD_APP_ID, 'plist として本番アプリID');
+        assert.match(written, new RegExp(`<string>${GAD_APP_ID}</string>`));
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
 });

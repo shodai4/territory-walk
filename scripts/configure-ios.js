@@ -71,9 +71,13 @@ const CONFIG_ENTRIES = [
         mode: 'presence'
     },
     {
+        // Google AdMob の iOS アプリID（本番。Google のサンプルIDではない）。
+        // 値まで一致させる：サンプルIDのまま出荷すると TestFlight / App Store の
+        // 実機で本番広告が一切配信されないため、違えば必ず書き換える。
+        // 広告ユニットIDは admob.js の ADMOB_AD_UNITS（同じ ca-app-pub-5739782559889389）と対。
         key: 'GADApplicationIdentifier',
-        value: '<string>ca-app-pub-3940256099942544~1458102511</string>',
-        mode: 'presence'
+        value: '<string>ca-app-pub-5739782559889389~3477680072</string>',
+        mode: 'value'
     },
     {
         key: 'NSUserTrackingUsageDescription',

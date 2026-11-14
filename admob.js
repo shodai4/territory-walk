@@ -1,19 +1,62 @@
 /**
  * TERRITORY WALK - admob.js
  * Google AdMob Native Integration for iOS (Capacitor) & Web Simulator Fallback
+ *
+ * 【本番ID（Google AdMob で 2026-11-15 発行）】
+ *   App ID  : ca-app-pub-5739782559889389~3477680072  … Info.plist の GADApplicationIdentifier
+ *                                                      （scripts/configure-ios.js が設定）
+ *   バナー  : ca-app-pub-5739782559889389/9566456603
+ *   リワード: ca-app-pub-5739782559889389/9650217089
+ *
+ * 【テスト広告 / 本番広告の切り替え＝1か所だけ】
+ *   CONFIG.ENABLE_DEBUG_TOOLS（app.js）がそのままスイッチになる。
+ *     true  … 開発中・TestFlight 実機テスト中。isTesting: true で Google 公式テスト広告を配信
+ *             （@capacitor-community/admob の iOS 側 getAdId() が、isTesting が真なら
+ *               公式テストユニットIDに差し替える。収益も発生せず、無効トラフィックにもならない）
+ *     false … App Store 提出ビルド。isTesting: false で上記の本番ユニットIDから本番広告を配信
+ *
+ *   本番ユニットIDのまま実機で自分の広告を表示・クリックすると「無効トラフィック」で
+ *   AdMob アカウントが停止され得るため、広告リクエストには必ず isTesting を必ず添える
+ *   （buildAdOptions() / buildInitializeOptions() を経由させる）。
+ *   提出時は app.js の ENABLE_DEBUG_TOOLS を false にするだけでよい（本ファイルは触らない）。
  */
+
+/**
+ * 本番広告ユニット。値は Google AdMob 管理画面の発行値そのもの。
+ * （Info.plist の App ID は scripts/configure-ios.js の GADApplicationIdentifier と一致させる）
+ */
+const ADMOB_AD_UNITS = Object.freeze({
+    appId: 'ca-app-pub-5739782559889389~3477680072',
+    banner: 'ca-app-pub-5739782559889389/9566456603',
+    reward: 'ca-app-pub-5739782559889389/9650217089'
+});
+
+/**
+ * テストデバイス（initialize の testingDevices）。
+ * initializeForTesting: true のときだけ SDK に渡す。実機のハッシュが分かったら追記する。
+ */
+const ADMOB_TESTING_DEVICES = Object.freeze(['2077ef9a63d2b398840261c8221a0c9b']);
+
+/**
+ * いま「テスト広告モード」で動くべきか。
+ * CONFIG が無い環境（単体テスト・Webシミュレータ）は安全側＝テスト配信に倒す。
+ * @returns {boolean}
+ */
+function isAdMobTestingMode() {
+    if (typeof CONFIG === 'undefined' || CONFIG === null) return true;
+    return CONFIG.ENABLE_DEBUG_TOOLS !== false;
+}
 
 class AdMobManager {
     constructor(appInstance, options = {}) {
         this.app = appInstance;
-        this.isNative = typeof window.Capacitor !== 'undefined'
+        this.isNative = typeof window !== 'undefined'
+            && typeof window.Capacitor !== 'undefined'
             && typeof window.Capacitor.isNativePlatform === 'function'
             && window.Capacitor.isNativePlatform();
         this.admob = null;
         this.isAdLoaded = false;
         this.initStarted = false;
-        this.testRewardAdId = 'ca-app-pub-3940256099942544/1712485313'; // Google Official Test Reward Ad ID for iOS
-        this.testBannerAdId = 'ca-app-pub-3940256099942544/2934735716'; // Google Official Test Banner Ad ID for iOS
 
         this.applyPlatformVisibility();
 
@@ -21,6 +64,47 @@ class AdMobManager {
         // 呼び出し側は deferInit: true で生成し、後から init() を呼ぶ。
         // （initialize は ATT の許可要求を含むため、ルール説明より先に出さない）
         if (!options.deferInit) this.init();
+    }
+
+    /**
+     * テスト広告モードか（CONFIG.ENABLE_DEBUG_TOOLS に常に連動。毎回読み直すので
+     * 実行中にフラグを切り替えても次のリクエストから効く）。
+     */
+    get isTesting() {
+        return isAdMobTestingMode();
+    }
+
+    /** 本番バナー広告ユニットID */
+    get bannerAdId() {
+        return ADMOB_AD_UNITS.banner;
+    }
+
+    /** 本番リワード動画広告ユニットID */
+    get rewardAdId() {
+        return ADMOB_AD_UNITS.reward;
+    }
+
+    /**
+     * 広告リクエスト共通オプション。isTesting を必ず載せることで、
+     * 実機テスト中の誤クリックが本番広告の無効トラフィックとして計上されるのを防ぐ。
+     * @returns {{isTesting: boolean}}
+     */
+    buildAdOptions() {
+        return { isTesting: this.isTesting };
+    }
+
+    /**
+     * initialize に渡すオプション。テスト中だけ testingDevices を登録する。
+     * @returns {{requestTrackingAuthorization: boolean, initializeForTesting: boolean, testingDevices?: string[]}}
+     */
+    buildInitializeOptions() {
+        const testing = this.isTesting;
+        const options = {
+            requestTrackingAuthorization: true,
+            initializeForTesting: testing
+        };
+        if (testing) options.testingDevices = [...ADMOB_TESTING_DEVICES];
+        return options;
     }
 
     /**
@@ -63,14 +147,10 @@ class AdMobManager {
         try {
             if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.AdMob) {
                 this.admob = window.Capacitor.Plugins.AdMob;
-                
-                // Initialize AdMob
-                await this.admob.initialize({
-                    requestTrackingAuthorization: true,
-                    testingDevices: ['2077ef9a63d2b398840261c8221a0c9b'],
-                    initializeForTesting: true
-                });
-                console.log('[AdMob] Native AdMob initialized successfully.');
+
+                // Initialize AdMob（テスト中は initializeForTesting + testingDevices）
+                await this.admob.initialize(this.buildInitializeOptions());
+                console.log(`[AdMob] Native AdMob initialized successfully. (testing=${this.isTesting})`);
 
                 // Prepare first reward video
                 this.preloadRewardVideo();
@@ -91,7 +171,8 @@ class AdMobManager {
 
         try {
             await this.admob.prepareRewardVideoAd({
-                adId: this.testRewardAdId
+                ...this.buildAdOptions(),
+                adId: this.rewardAdId
             });
             this.isAdLoaded = true;
             console.log('[AdMob] Reward video preloaded and ready.');
@@ -184,7 +265,8 @@ class AdMobManager {
             if (this.admob) {
                 try {
                     await this.admob.showBanner({
-                        adId: this.testBannerAdId,
+                        ...this.buildAdOptions(),
+                        adId: this.bannerAdId,
                         adSize: 'BANNER',
                         position: 'BOTTOM_CENTER',
                         margin: 0
