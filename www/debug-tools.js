@@ -103,6 +103,10 @@ class DebugTools {
         }
 
         // --- 1. ローカル白紙化（地図・保存データ・Outbox） ---
+        // 削除完了を待つ間に走っているリモート取得が戻さないよう、
+        // 先にガードを張ってから消す（60秒間は再マージしない）。
+        app.territoryReset = { at: Date.now(), ids: new Set(targetIds) };
+
         let localCleared = 0;
         let outboxCleared = 0;
         if (app.gridManager) {
@@ -136,10 +140,18 @@ class DebugTools {
             serverSkipped = true;
         }
 
-        // 削除直前に始まっていたリモート取得が、消したはずのマスを
-        // キャッシュに戻してしまうのを防ぐ（60秒間は再マージしない）。
-        if (serverDeleted > 0 || serverSkipped) {
-            app.territoryReset = { at: Date.now(), ids: new Set(targetIds) };
+        // 削除中に混入した分を最後にもう一度消す（確定で白紙にする）
+        if (app.gridManager && app.gridManager.claimedTilesCache && targetIds.length > 0) {
+            let swept = 0;
+            for (const id of targetIds) {
+                if (app.gridManager.claimedTilesCache.delete(id)) swept += 1;
+            }
+            if (swept > 0) {
+                localCleared += swept;
+                if (typeof app.gridManager.saveTilesToStorage === 'function') app.gridManager.saveTilesToStorage();
+                if (typeof app.gridManager.redrawTiles === 'function') app.gridManager.redrawTiles();
+                if (typeof app.updateScoreUI === 'function') app.updateScoreUI();
+            }
         }
 
         return {
