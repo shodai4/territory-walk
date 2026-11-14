@@ -23,7 +23,7 @@
         <!-- タイトル -->
         <div>
             <h1 class="text-base font-bold text-white tracking-wider mb-1">プライバシーポリシー (Privacy Policy)</h1>
-            <p class="text-[11px] text-zinc-500">制定日: 2026年11月13日 / 最終改定日: 2026年11月13日</p>
+            <p class="text-[11px] text-zinc-500">制定日: 2026年11月13日 / 最終改定日: 2026年11月15日</p>
         </div>
 
         <!-- 本文セクション -->
@@ -44,11 +44,15 @@
                     </div>
                     <div>
                         <span class="font-bold text-zinc-200">二、バックグラウンド位置情報</span>
-                        <p class="mt-0.5">利用者がアプリ画面を消灯してスマートフォンをポケットに入れた状態でも歩行陣取りを継続できるよう、バックグラウンドでの位置情報更新を使用します。この処理は陣地マスの塗り替え判定のみに使用されます。</p>
+                        <p class="mt-0.5">利用者がアプリ画面を消灯してスマートフォンをポケットに入れた状態でも歩行陣取りを継続できるよう、バックグラウンドでの位置情報更新を使用します。この処理は陣地マスの塗り替え判定のみに使用されます。位置情報マーキングは本アプリ内のボタンでいつでも一時停止でき、停止中は測位を行いません。</p>
                     </div>
                     <div>
-                        <span class="font-bold text-zinc-200">三、端末識別子およびゲーム内データ</span>
-                        <p class="mt-0.5">端末のlocalStorageに保存されるランダム生成UUID（ユーザーID）、任意の表示名、週間開拓マス数、所持コイン数、解放済みテーマ・称号情報を取得・管理します。</p>
+                        <span class="font-bold text-zinc-200">三、端末識別子およびゲーム内外のデータ</span>
+                        <p class="mt-0.5">端末のlocalStorageに保存されるランダム生成UUID（ユーザーID）、任意の表示名、週間開拓マス数、所持コイン数、解放済みテーマ・称号・購入状態を取得・管理します。</p>
+                    </div>
+                    <div>
+                        <span class="font-bold text-zinc-200">四、アプリ内課金の情報</span>
+                        <p class="mt-0.5">コインパックおよび広告非表示パスの購入は、AppleのApp Store（StoreKit）を通じて処理されます。当運営はクレジットカード番号等の決済情報を受け取らず、Appleから提供される購入結果（購入した商品・トランザクションID・購入の復元可否）のみを、商品の付与と再適用のために利用します。</p>
                     </div>
                 </div>
             </section>
@@ -62,7 +66,19 @@
                     </div>
                     <div>
                         <span class="font-bold text-zinc-200">二、広告配信事業者 (Google AdMob)</span>
-                        <p class="mt-0.5">本アプリでは、ゲーム内コインを獲得するための動画リワード広告配信のためにGoogle AdMobを使用する場合があります。App Tracking Transparency（ATT）に基づくトラッキング許可が得られた場合に限り、最適な広告配信のための識別子が利用されることがあります。</p>
+                        <p class="mt-0.5">本アプリでは、画面下部のバナー広告およびゲーム内コインを獲得するための動画リワード広告の配信にGoogle AdMobを使用します。広告配信のため、Google社が広告識別子（IDFA）・端末情報・おおよその位置情報・広告の表示／クリックに関する情報を取得する場合があります。App Tracking Transparency（ATT）に基づくトラッキングの許可が得られた場合に限り、パーソナライズされた広告のために識別子が利用されます。<br>許可しない場合でも、本アプリのすべての機能（陣地の塗り替え・ランキング・ショップ・購入の復元）は同じようにご利用いただけます。広告はパーソナライズされていないものに切り替わります。Google社のプライバシーポリシーは <a href="https://policies.google.com/privacy" target="_blank" rel="noopener" class="text-sky-400 hover:underline">policies.google.com/privacy</a> をご確認ください。</p>
+                    </div>
+                    <div>
+                        <span class="font-bold text-zinc-200">三、地図・地名検索 (OpenStreetMap)</span>
+                        <p class="mt-0.5">地図の表示にはOpenStreetMapのタイル配信サーバーを、地名・駅名の検索にはOpenStreetMap Nominatimを利用します。地図表示の際は表示範囲が、検索の際は入力した検索語が、それぞれOpenStreetMap財団のサーバーへ送信されます（氏名・メールアドレス等は送信しません）。</p>
+                    </div>
+                    <div>
+                        <span class="font-bold text-zinc-200">四、決済 (Apple)</span>
+                        <p class="mt-0.5">アプリ内課金の決済はApple社が処理します。当運営がカード情報を保持・閲覧することはありません。</p>
+                    </div>
+                    <div>
+                        <span class="font-bold text-zinc-200">五、法令に基づく場合</span>
+                        <p class="mt-0.5">法令に基づき開示が必要となった場合を除き、利用者の同意なく個人情報を第三者へ提供することはありません。</p>
                     </div>
                 </div>
             </section>
@@ -70,16 +86,25 @@
             <section class="space-y-1.5 bg-zinc-950 p-4 rounded-xl border border-zinc-800/80">
                 <h2 class="font-bold text-white text-xs">4. 安全管理措置およびデータの削除</h2>
                 <p class="text-[11px] text-zinc-400">
-                    当運営は、取得したデータの漏洩、滅失または毀損の防止その他の安全管理のために必要かつ適切な措置を講じます。利用者が本アプリのアンインストールまたはブラウザのデータ初期化を行った場合、端末ローカルに保存されたデータは消去されます。サーバー上のデータの削除をご希望の場合は、下記窓口までお問い合わせください。
+                    当運営は、取得したデータの漏洩、滅失または毀損の防止その他の安全管理のために必要かつ適切な措置を講じます。通信はすべてHTTPSで暗号化されます。利用者が本アプリのアンインストールまたはブラウザのデータ初期化を行った場合、端末ローカルに保存されたデータ（UUID・陣地・コイン等）は消去されます。サーバー上に保存された陣地データおよびランキング記録の削除をご希望の場合は、第5項の窓口まで、削除を希望する旨とアプリ内の表示名をお知らせください。確認のうえ、合理的な期間内に削除します。
                 </p>
             </section>
 
             <section class="space-y-1.5 bg-zinc-950 p-4 rounded-xl border border-zinc-800/80">
                 <h2 class="font-bold text-white text-xs">5. お問い合わせ窓口</h2>
                 <p class="text-[11px] text-zinc-400">
-                    本ポリシーに関するお問い合わせ、ご質問、ご相談は下記サポート窓口までご連絡ください。<br>
+                    本ポリシーに関するお問い合わせ、開示・訂正・削除のご請求は下記サポート窓口までご連絡ください。<br>
                     運営者: お絵描き楽しも委員会（代表: 植田 翔大）<br>
-                    サポートページ: <a href="support.html" class="text-sky-400 hover:underline">support.html</a>
+                    メール: <a href="mailto:shodai121ueda+territorywalk@gmail.com" class="text-sky-400 hover:underline">shodai121ueda+territorywalk@gmail.com</a><br>
+                    サポートページ: <a href="support.html" class="text-sky-400 hover:underline">support.html</a><br>
+                    お問い合わせフォーム（GitHub Issues）: <a href="https://github.com/shodai4/territory-walk/issues" target="_blank" rel="noopener" class="text-sky-400 hover:underline">github.com/shodai4/territory-walk/issues</a>
+                </p>
+            </section>
+
+            <section class="space-y-1.5 bg-zinc-950 p-4 rounded-xl border border-zinc-800/80">
+                <h2 class="font-bold text-white text-xs">6. 本ポリシーの改定</h2>
+                <p class="text-[11px] text-zinc-400">
+                    当運営は、法令の改正やアプリの機能追加に応じて本ポリシーを改定することがあります。重要な変更を行う場合は、本アプリ内または本ページにて告知します。改定後の内容は本ページに掲載した時点から効力を生じます。
                 </p>
             </section>
         </div>

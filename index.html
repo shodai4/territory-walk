@@ -203,9 +203,12 @@
         </div>
     </div>
 
-    <!-- 最下部中央クレジット（薄く邪魔にならないよう配置、タップ無効化） -->
-    <div id="app-footer-note" class="absolute bottom-2 left-0 right-0 z-[900] pointer-events-none text-center text-[10px] text-zinc-400 opacity-40 font-mono select-none">
-        Created for お絵描き楽しも委員会（しょうだい）
+    <!-- 最下部中央クレジット（薄く邪魔にならないよう配置）＋地図データの著作権表示。
+         Leaflet の attributionControl は意図的に切っている（デザイン優先）ため、
+         OpenStreetMap の帰属表示はここで常時出す（ODbL / タイル利用ポリシーの要件）。 -->
+    <div id="app-footer-note" class="absolute bottom-2 left-0 right-0 z-[900] pointer-events-none text-center font-mono select-none">
+        <div class="text-[10px] text-zinc-400 opacity-40">Created for お絵描き楽しも委員会（しょうだい）</div>
+        <a id="map-attribution" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener" class="pointer-events-auto inline-block mt-0.5 text-[9px] leading-none text-zinc-400/80 hover:text-zinc-100 underline">© OpenStreetMap contributors</a>
     </div>
 
     <!-- 右下：テスト用仮想散歩 D-Pad ＆ チーム切替デバッグ機能（MENUでON/OFF可能） -->
@@ -673,17 +676,15 @@
             
             <ul class="text-zinc-300 list-disc list-inside space-y-1.5 text-xs">
                 <li>限定スキン使い放題（ネオン・ゴールド・レトロ）</li>
-                <li>陣地ポスター出力（高画質PNG）</li>
-                <li>過去ログ無制限保存</li>
+                <li>陣地ポスター出力（高画質PNG）が無制限</li>
+                <li>広告完全非表示＆動画リワードの待ち時間なし</li>
                 <li>サポーターゴールドバッジ付与</li>
             </ul>
 
             <div class="space-y-2">
-                <input id="input-pro-code" type="text" placeholder="コードを入力 (例: SHODAI-PRO)" class="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-white font-mono">
+                <input id="input-pro-code" type="text" placeholder="コードを入力" class="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-white font-mono">
                 <button id="btn-activate-pro" class="w-full bg-amber-600 hover:bg-amber-500 text-white py-2 rounded-lg font-bold">解除する</button>
             </div>
-            
-            <button class="w-full bg-zinc-800 text-zinc-400 py-2 rounded-lg text-[10px]">Stripeで支援する（準備中）</button>
         </div>
     </div>
 

@@ -33,7 +33,8 @@ const ASSETS_TO_COPY = [
     'favicon.ico',
     'icon-192.png',
     'icon-512.png',
-    'apple-touch-icon.png'
+    'apple-touch-icon.png',
+    'app-ads.txt'
 ];
 
 console.log('[Build] Preparing www/ directory for Capacitor iOS...');

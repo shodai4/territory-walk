@@ -15,6 +15,26 @@ const ROOT_DIR = path.resolve(__dirname, '..');
 const PLIST_PATH = process.env.IOS_PLIST_PATH
     ? path.resolve(process.env.IOS_PLIST_PATH)
     : path.join(ROOT_DIR, 'ios', 'App', 'App', 'Info.plist');
+const PODFILE_PATH = process.env.IOS_PODFILE_PATH
+    ? path.resolve(process.env.IOS_PODFILE_PATH)
+    : path.join(ROOT_DIR, 'ios', 'App', 'Podfile');
+const PROJECT_PATH = process.env.IOS_PROJECT_PATH
+    ? path.resolve(process.env.IOS_PROJECT_PATH)
+    : path.join(ROOT_DIR, 'ios', 'App', 'App.xcodeproj', 'project.pbxproj');
+
+/**
+ * 最低対応OS（IPHONEOS_DEPLOYMENT_TARGET / Podfile の platform）。
+ *
+ * Capacitor 6 のテンプレートは 13.0 だが、Apple は 2027年4月以降の
+ * アップロード・配布申請で「15.0 以上」を必須にすると告げている
+ * （TestFlight アップロード時の警告 code 90068:
+ *  "Deployment target too low. Your app targets iOS 13.0. Starting in April 2027,
+ *   iOS apps must target 15.0 or later..."）。
+ * 2026年11月の初回リリース時点で 15.0 に揃えておけば、
+ * 1年後に再申請・再提出を迫られない。iOS 15 は iPhone 6s 以降が対象で、
+ * 13.0/14.0 にしか対応していない端末はごく僅か。
+ */
+const MINIMUM_IOS_VERSION = '15.0';
 
 /**
  * ホーム画面（アイコンの下）に表示するアプリ名。
@@ -80,9 +100,11 @@ const CONFIG_ENTRIES = [
         mode: 'value'
     },
     {
+        // App Tracking Transparency (ATT)。審査では「何のために識別子を使うのか」が
+        // 具体的に書かれているかを見られる。拒否しても全機能が使えることも明記する。
         key: 'NSUserTrackingUsageDescription',
-        value: '<string>最適な広告を表示するためにトラッキングの許可をお願いいたします。</string>',
-        mode: 'presence'
+        value: '<string>利用者に合わせた広告を表示するために、広告識別子（IDFA）の利用許可をお願いしています。許可しない場合も、陣地の塗り替えやランキングなどすべての機能を同じようにご利用いただけます。</string>',
+        mode: 'value'
     },
     {
         key: 'SKAdNetworkItems',
@@ -273,6 +295,133 @@ function verifyContent(content) {
 }
 
 /* ------------------------------------------------------------------ *
+ * 最低対応OS（iOS 15.0）
+ *   Info.plist の MinimumOSVersion は Xcode プロジェクトの
+ *   IPHONEOS_DEPLOYMENT_TARGET と Podfile の platform 行から決まる。
+ *   Capacitor のテンプレートは 13.0 のままなので、両方を揃える。
+ * ------------------------------------------------------------------ */
+
+/** "15.0" と "13" のような表記を数値の配列にして比べる（a<b なら負） */
+function compareVersions(a, b) {
+    const parse = (value) => String(value == null ? '' : value)
+        .split('.')
+        .map((part) => parseInt(part, 10))
+        .map((num) => (Number.isFinite(num) ? num : 0));
+    const left = parse(a);
+    const right = parse(b);
+    const length = Math.max(left.length, right.length);
+    for (let i = 0; i < length; i += 1) {
+        const l = left[i] || 0;
+        const r = right[i] || 0;
+        if (l !== r) return l - r;
+    }
+    return 0;
+}
+
+/**
+ * Podfile の `platform :ios, '13.0'` を MINIMUM_IOS_VERSION に揃える（純粋関数）。
+ * platform 行が無いテンプレートでも、`use_frameworks!` の直前に追記する。
+ * @returns {{content: string, modified: boolean, added: boolean}}
+ */
+function configurePodfileContent(input, minimum = MINIMUM_IOS_VERSION) {
+    const source = String(input == null ? '' : input);
+    const line = `platform :ios, '${minimum}'`;
+    const pattern = /^([ \t]*platform[ \t]+:ios[ \t]*,[ \t]*['"])[0-9.]+(['"])/m;
+
+    if (!pattern.test(source)) {
+        const anchor = /^([ \t]*use_frameworks!)/m;
+        const content = anchor.test(source)
+            ? source.replace(anchor, (_m, keep) => `${line}\n${keep}`)
+            : `${line}\n${source}`;
+        return { content, modified: content !== source, added: true };
+    }
+
+    const content = source.replace(pattern, (_m, head, tail) => `${head}${minimum}${tail}`);
+    return { content, modified: content !== source, added: false };
+}
+
+/** Podfile の platform が minimum 以上かを点検する */
+function verifyPodfileContent(content, minimum = MINIMUM_IOS_VERSION) {
+    const found = /^[ \t]*platform[ \t]+:ios[ \t]*,[ \t]*['"]([0-9.]+)['"]/m.exec(String(content == null ? '' : content));
+    if (!found) return ['Podfile に platform :ios の指定がありません'];
+    if (compareVersions(found[1], minimum) < 0) {
+        return [`Podfile の platform は iOS ${found[1]} です（iOS ${minimum} 以上にしてください）`];
+    }
+    return [];
+}
+
+/**
+ * Xcode プロジェクト（project.pbxproj）の IPHONEOS_DEPLOYMENT_TARGET を
+ * minimum 以上に引き上げる（純粋関数）。Debug/Release の両方に入っている。
+ * @returns {{content: string, modified: boolean, occurrences: number, raised: number}}
+ */
+function configureProjectContent(input, minimum = MINIMUM_IOS_VERSION) {
+    const source = String(input == null ? '' : input);
+    let occurrences = 0;
+    let raised = 0;
+    const content = source.replace(/(IPHONEOS_DEPLOYMENT_TARGET[ \t]*=[ \t]*)([0-9.]+)([ \t]*;)/g, (match, head, version, tail) => {
+        occurrences += 1;
+        if (compareVersions(version, minimum) < 0) {
+            raised += 1;
+            return `${head}${minimum}${tail}`;
+        }
+        return match;
+    });
+    return { content, modified: content !== source, occurrences, raised };
+}
+
+/** Xcode プロジェクトの展開先OSが minimum 以上かを点検する */
+function verifyProjectContent(content, minimum = MINIMUM_IOS_VERSION) {
+    const source = String(content == null ? '' : content);
+    const found = [...source.matchAll(/IPHONEOS_DEPLOYMENT_TARGET[ \t]*=[ \t]*([0-9.]+)[ \t]*;/g)].map((m) => m[1]);
+    if (found.length === 0) return ['project.pbxproj に IPHONEOS_DEPLOYMENT_TARGET がありません'];
+    return found
+        .filter((version) => compareVersions(version, minimum) < 0)
+        .map((version) => `IPHONEOS_DEPLOYMENT_TARGET が ${version} です（iOS ${minimum} 以上にしてください）`);
+}
+
+/**
+ * 実ファイルに対して上記を適用する。存在しないファイルは黙って飛ばす。
+ * @returns {Array<{file: string, action: string, detail?: string}>}
+ */
+function applyMinimumOS(targets = {}) {
+    const podfilePath = targets.podfilePath || PODFILE_PATH;
+    const projectPath = targets.projectPath || PROJECT_PATH;
+    const results = [];
+
+    if (fs.existsSync(podfilePath)) {
+        try {
+            const before = fs.readFileSync(podfilePath, 'utf8');
+            const { content, modified, added } = configurePodfileContent(before);
+            if (modified) fs.writeFileSync(podfilePath, content, 'utf8');
+            results.push({
+                file: path.basename(podfilePath),
+                action: modified ? (added ? 'added' : 'updated') : 'verified'
+            });
+        } catch (err) {
+            results.push({ file: path.basename(podfilePath), action: 'failed', detail: err.message });
+        }
+    }
+
+    if (fs.existsSync(projectPath)) {
+        try {
+            const before = fs.readFileSync(projectPath, 'utf8');
+            const { content, modified, occurrences, raised } = configureProjectContent(before);
+            if (modified) fs.writeFileSync(projectPath, content, 'utf8');
+            results.push({
+                file: path.basename(projectPath),
+                action: modified ? 'updated' : (occurrences > 0 ? 'verified' : 'missing'),
+                detail: occurrences > 0 ? `${raised} 件を iOS ${MINIMUM_IOS_VERSION} に引き上げ` : 'IPHONEOS_DEPLOYMENT_TARGET なし'
+            });
+        } catch (err) {
+            results.push({ file: path.basename(projectPath), action: 'failed', detail: err.message });
+        }
+    }
+
+    return results;
+}
+
+/* ------------------------------------------------------------------ *
  * 表示名（InfoPlist.strings）ヘルパー
  * ------------------------------------------------------------------ */
 
@@ -395,6 +544,25 @@ function main() {
 
         console.log(`[iOS Config] Home screen name: ${APP_DISPLAY_NAME}`);
 
+        // 最低対応OS: Podfile と Xcode プロジェクトを iOS 15.0 に揃える
+        // （2027年4月からのApple要件。警告 code 90068 の根絶）
+        applyMinimumOS().forEach((item) => {
+            switch (item.action) {
+                case 'updated':
+                case 'added':
+                    console.log(`[iOS Config] ${item.file}: minimum iOS set to ${MINIMUM_IOS_VERSION}${item.detail ? ` (${item.detail})` : ''}`);
+                    break;
+                case 'verified':
+                    console.log(`[iOS Config] ${item.file}: minimum iOS ${MINIMUM_IOS_VERSION} verified${item.detail ? ` (${item.detail})` : ''}`);
+                    break;
+                case 'missing':
+                    console.warn(`[iOS Config] ${item.file}: IPHONEOS_DEPLOYMENT_TARGET not found (${item.detail})`);
+                    break;
+                default:
+                    console.warn(`[iOS Config] ${item.file}: minimum iOS could not be applied (${item.detail})`);
+            }
+        });
+
         const problems = verifyContent(fs.readFileSync(PLIST_PATH, 'utf8'));
         if (problems.length > 0) {
             problems.forEach((problem) => console.error(`[iOS Config] Verification failed: ${problem}`));
@@ -415,12 +583,21 @@ if (require.main === module) {
 module.exports = {
     CONFIG_ENTRIES,
     APP_DISPLAY_NAME,
+    MINIMUM_IOS_VERSION,
     PLIST_PATH,
+    PODFILE_PATH,
+    PROJECT_PATH,
     configureContent,
     configureStringsContent,
+    configurePodfileContent,
+    configureProjectContent,
     verifyStringsContent,
     verifyContent,
+    verifyPodfileContent,
+    verifyProjectContent,
     applyLocalizedDisplayName,
+    applyMinimumOS,
+    compareVersions,
     findValueEnd,
     dedupeKey,
     normalizeXml,

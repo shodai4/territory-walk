@@ -11,7 +11,7 @@ permissions:
 jobs:
   build-ios:
     name: "Build iOS App with Latest Xcode (macOS)"
-    runs-on: macos-14
+    runs-on: macos-26
 
     steps:
       - name: "Checkout repository"
@@ -21,7 +21,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
 
       - name: "Setup Python 3"
         uses: actions/setup-python@v5
@@ -68,7 +67,20 @@ jobs:
         run: |
           cd ios/App
           pod --version
+          # @capacitor-community/admob@6.2.0 pins Google-Mobile-Ads-SDK 11.3.0, whose Swift
+          # sources use the pre-3.0 messaging symbols (UMPConsentStatus, UMPRequestParameters...).
+          # CocoaPods can otherwise resolve GoogleUserMessagingPlatform 3.x, where those symbols
+          # are renamed, and the plugin then fails to compile. Pin the messaging platform to 2.x.
+          printf '%s\n' "import pathlib" "p = pathlib.Path('Podfile')" "s = p.read_text()" "if 'GoogleUserMessagingPlatform' not in s:" "    p.write_text(s.replace('  capacitor_pods\n', \"  capacitor_pods\n  pod 'GoogleUserMessagingPlatform', '~> 2.1'\n\", 1))" > /tmp/pin_ump.py
+          python3 /tmp/pin_ump.py
+          echo "=== Podfile target block ==="
+          grep -A4 "^target 'App' do" Podfile || true
+          # `npx cap sync ios` already ran pod install and wrote a Podfile.lock that pins
+          # GoogleUserMessagingPlatform 3.x; drop it so the pin above takes effect.
+          rm -f Podfile.lock
           pod install
+          echo "=== Resolved Google pod versions ==="
+          grep -E "Google-Mobile-Ads-SDK|GoogleUserMessagingPlatform" Podfile.lock | head -10 || true
 
       - name: "Compile & Verify iOS Build (Clean Build)"
         run: |
@@ -148,6 +160,12 @@ jobs:
         run: |
           cd ios/App
           rm -rf "$RUNNER_TEMP/TerritoryWalk.xcarchive"
+          # The Capacitor template ships CODE_SIGN_IDENTITY = "iPhone Developer" (development), so an
+          # automatic-signing archive resolves an *iOS App Development* profile - which Apple only
+          # issues to teams that have at least one registered device, and this team has none.
+          # Archiving unsigned sidesteps that resolution entirely; the export step below signs for
+          # App Store distribution (distribution profiles need no devices).
+          echo "[CI] Archiving unsigned; App Store distribution signing happens at export."
           xcodebuild -workspace App.xcworkspace \
             -scheme App \
             -configuration Release \
@@ -160,7 +178,9 @@ jobs:
             archive \
             DEVELOPMENT_TEAM="${{ secrets.APPLE_TEAM_ID }}" \
             CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
-            CODE_SIGN_STYLE=Automatic
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
 
       - name: "Generate ExportOptions.plist"
         if: steps.check_keys.outputs.has_keys == 'true'
@@ -261,7 +281,7 @@ jobs:
           {
             echo "### Territory Walk - iOS CI/CD Report"
             echo ""
-            echo "- **Clean Build**: iOS build verified on macos-14 (Apple Silicon, Xcode 16)"
+            echo "- **Clean Build**: iOS build verified on macos-26 (Apple Silicon, Xcode 26)"
             echo "- **Capacitor Core**: v6.2.0"
             echo "- **iOS Deployment Target**: iOS 14.0+"
             echo "- **GPS Permissions**: NSLocationWhenInUse & NSLocationAlways configured"

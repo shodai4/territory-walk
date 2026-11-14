@@ -90,6 +90,7 @@ App Store Connect にアプリのレコード（＝Appの入れ物）が無い�
 
 GitHub Actions は **`.github/workflows/`** 配下のYAMLしかワークフローとして認識しません。
 このリポジトリの完成版ワークフローは **`ci/ios-build.yml`** にあり、こちらは既にGitHubへプッシュ済みです（中身は同じものをそのまま使えます）。
+実際に動いている `.github/workflows/ios-build.yml` と `ci/ios-build.yml` は**完全に同一**です（テスト `tests/minimum-ios.test.js` が差分ゼロを常時監視）。
 
 ただし、Pickle（私）のGitHub連携アプリには `workflows` 権限が無いため、`.github/workflows/ios-build.yml` の作成だけは自動プッシュできません（2026年11月14日に実際に試し、`refusing to allow a GitHub App to create or update workflow ... without workflows permission` で拒否されています）。
 **次のどちらかで、1回だけ置いてください。以降はもう触らなくてOKです。**
@@ -214,6 +215,20 @@ App Store Connectでアプリ情報を登録する際、以下の内容をその
 ### App Store 本番リリース前の必須切り替え（デバッグ無効化）
 - `app.js` の `CONFIG.ENABLE_DEBUG_TOOLS` を `false` にしてください（TestFlight検証中は `true`）。
   - このフラグ1つで、MENU内の「デバッグモード」欄、仮想十字キー（D-PAD）、結果発表・チームリセットのプレビュー、コイン増減、購入アイテムリセット、チーム強制切替、Pro制限のデバッグバイパスがすべてUI非表示＋処理無効になります。
+  - 同時に AdMob の広告リクエストも `isTesting: false`（本番広告）へ自動で切り替わります（`admob.js` は触らなくてOK）。
+  - `false` の状態での起動・全画面・デバッグ操作の無効化は `tests/debug-off.test.js` が毎回検証しています（`npm test`）。
+
+### 最低対応OS（iOS 15.0）
+- `scripts/configure-ios.js` が、CIで生成される `Podfile` の `platform :ios` と
+  `project.pbxproj` の `IPHONEOS_DEPLOYMENT_TARGET`（Debug / Release）を **15.0** に揃えます。
+  - これにより TestFlight アップロード時の警告 **code 90068**（「2027年4月以降は iOS 15.0 以上が必須」）が出なくなります。
+  - CI のジョブサマリーに「iOS Deployment Target: iOS 14.0+」と古い表記が残っていますが、
+    `.github/workflows/ios-build.yml` は workflows 権限が必要なため、手元で1行だけ直してください（`iOS 15.0+`）。
+
+### サポート窓口
+- 公開窓口は `support.html` / `privacy.html` に記載済み：`shodai121ueda+territorywalk@gmail.com`（Gmailのプラスアドレス。同じ受信箱に届き、振り分け可能）と GitHub Issues。
+- App Review Information の連絡先は従来どおり `shodai121ueda@gmail.com`（Appleとのやり取り用。公開ページには出しません）。
+
 
 App Store Connect上でメタデータ入力とビルド選択（自動アップロードされた最新ビルドを選択）が完了したら、右上の **「審査へ提出」** ボタンをポチッと押すだけです！
 通常24時間〜48時間以内にAppleのレビューチームから承認通知が届き、App Storeで世界中に配信されます。
