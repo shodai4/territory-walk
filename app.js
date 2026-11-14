@@ -452,7 +452,7 @@ class TerritoryWalkApp {
     }
 
     renderTeamBadge() {
-        const isPro = this.proManager && this.proManager.isPro();
+        const isPro = this.isProActive();
         const supporterBadge = isPro ? this.proManager.getSupporterBadgeHtml() : '';
 
         // 対戦バー上部の「YOU」インジケーターを左上に完全固定 ＆ 対戦バーの自陣営「左側」固定
@@ -1269,13 +1269,32 @@ class TerritoryWalkApp {
         }
     }
 
+    /**
+     * Pro状態を安全に読む。
+     * 過去バージョンが `proManager.isPro = false` とメソッドを上書きした端末では
+     * `isPro()` が TypeError になり、ショップやバッジ描画が巻き添えで落ちていた。
+     */
+    isProActive() {
+        const pm = this.proManager;
+        if (!pm) return false;
+        if (typeof pm.isPro === 'function') {
+            try {
+                return !!pm.isPro();
+            } catch (e) {
+                console.warn('[App] Pro check failed:', e);
+                return false;
+            }
+        }
+        return pm.isPro === true;
+    }
+
     checkProAccess(actionName) {
         if (this.debugEnabled && this.isDebugMode) {
             console.log(`[Debug Mode] Pro restriction bypassed for: ${actionName}`);
             return true;
         }
 
-        if (!this.proManager || !this.proManager.isPro()) {
+        if (!this.isProActive()) {
             alert(`${actionName}を利用するには、Proサポーターへのアップグレードが必要です！`);
             const modal = document.getElementById('pro-modal');
             if (modal) modal.classList.remove('hidden');
@@ -1285,7 +1304,7 @@ class TerritoryWalkApp {
     }
 
     async exportPosterAction() {
-        const hasAccess = (this.proManager && this.proManager.isPro()) ||
+        const hasAccess = this.isProActive() ||
                           (this.coinManager && this.coinManager.canAccessPosterExport());
         if (!hasAccess) {
             const ok = confirm('【ポスター保存】\n週間陣地ポスターの書き出しはPro機能またはチケット（30 COIN）が必要です。\nショップでチケットを入手しますか？');

@@ -13,9 +13,28 @@ class ProManager {
         return localStorage.getItem(this.STORAGE_KEY) === 'true';
     }
 
+    /**
+     * Pro状態を切り替える。
+     * 以前のコードは `proManager.isPro = false` とメソッド自体を真偽値で上書きしており、
+     * 以後 `isPro()` の全呼び出しが TypeError になってショップが開かなくなっていた。
+     * 状態の変更は必ずこのメソッド（保存キーの付け外し）で行う。
+     */
+    setPro(enabled) {
+        try {
+            if (enabled) {
+                localStorage.setItem(this.STORAGE_KEY, 'true');
+            } else {
+                localStorage.removeItem(this.STORAGE_KEY);
+            }
+        } catch (e) {
+            console.warn('[Pro] Failed to update pro state:', e);
+        }
+        return !!enabled;
+    }
+
     activateCode(code) {
         if (this.VALID_CODES.includes(code.trim())) {
-            localStorage.setItem(this.STORAGE_KEY, 'true');
+            this.setPro(true);
             return true;
         }
         return false;

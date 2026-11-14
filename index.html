@@ -33,7 +33,7 @@
 
             <!-- 右：コイン残高 & MENUボタン（チーム表示は対戦バー上YOUマークへ統合し2要素にスッキリ整理、親指タップ性向上） -->
             <div class="flex items-center gap-1.5 shrink-0">
-                <button id="btn-header-coins" class="flex items-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-700 border border-zinc-700/80 hover:border-amber-400/80 px-3 py-1.5 rounded-xl font-mono text-xs text-amber-400 shadow transition-all active:scale-95 min-h-[34px]" title="コイン・ショップを開く">
+                <button id="btn-header-coins" data-tw-open-shop="earn" class="flex items-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-700 border border-zinc-700/80 hover:border-amber-400/80 px-3 py-1.5 rounded-xl font-mono text-xs text-amber-400 shadow transition-all active:scale-95 min-h-[34px]" title="コイン・ショップを開く">
                     <svg class="w-4 h-4 text-amber-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <circle cx="12" cy="12" r="9"></circle>
                         <path d="M12 7v10"></path>
@@ -164,7 +164,7 @@
                     <div class="text-zinc-500 text-[9px] truncate">街を歩いて白黒陣地を開拓</div>
                 </div>
             </div>
-            <button id="btn-ad-free-prompt" class="px-2 py-1 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 text-[10px] rounded font-bold shrink-0 ml-2 whitespace-nowrap active:scale-95 transition-all">
+            <button id="btn-ad-free-prompt" data-tw-open-shop="packs" class="px-2 py-1 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 text-[10px] rounded font-bold shrink-0 ml-2 whitespace-nowrap active:scale-95 transition-all">
                 広告を消す
             </button>
         </div>
@@ -469,7 +469,7 @@
             </details>
 
             <!-- 5. ショップ ＆ コイン獲得（アクセントカラー） -->
-            <button id="btn-open-shop-from-menu" class="w-full py-2.5 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 border border-amber-400 text-black font-mono text-xs font-bold rounded-xl shadow transition-all active:scale-95 flex items-center justify-center gap-1.5 shrink-0">
+            <button id="btn-open-shop-from-menu" data-tw-open-shop="packs" class="w-full py-2.5 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 border border-amber-400 text-black font-mono text-xs font-bold rounded-xl shadow transition-all active:scale-95 flex items-center justify-center gap-1.5 shrink-0">
                 <svg class="w-4 h-4 text-black" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="12" cy="12" r="9"></circle>
                     <path d="M12 7v10"></path>
@@ -906,7 +906,11 @@
                 <!-- パネル2: コイン購入 (PACKS / IAP) -->
                 <div id="panel-shop-packs" class="hidden space-y-2.5">
                     <div class="shop-desc bg-zinc-950/80 border border-zinc-800 p-2.5 rounded-xl text-[10px] text-zinc-400 leading-relaxed">
-                        <span class="text-amber-400 font-bold">※課金で勝敗は変わりません：</span> ここで買えるのは見た目や称号などの着せ替えだけ。勝負は歩いた分だけで決まります！
+                        <div class="text-amber-400 font-bold leading-tight">※課金で勝敗は変わりません</div>
+                        <div class="mt-0.5">
+                            <span class="block">ここで買えるのは見た目や称号などの着せ替えだけ。</span>
+                            <span class="block">勝負は歩いた分だけで決まります！</span>
+                        </div>
                     </div>
                     <div id="container-shop-packs" class="space-y-2">
                         <!-- JSで動的描画 -->
@@ -915,7 +919,11 @@
 
                 <!-- パネル2: マステーマ (SKINS) -->
                 <div id="panel-shop-skins" class="hidden space-y-2">
-                    <div class="shop-desc text-[10px] text-zinc-400">※課金で勝敗は変わりません。買えるのは見た目や称号などの着せ替えだけ。勝負は歩いた分だけで決まります！</div>
+                    <div class="shop-desc text-[10px] text-zinc-400 leading-relaxed">
+                        <div class="text-amber-400 font-bold leading-tight">※課金で勝敗は変わりません</div>
+                        <span class="block mt-0.5">買えるのは見た目や称号などの着せ替えだけ。</span>
+                        <span class="block">勝負は歩いた分だけで決まります！</span>
+                    </div>
                     <div id="container-shop-skins" class="space-y-1.5">
                         <!-- JSで動的描画 -->
                     </div>
@@ -1023,10 +1031,10 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <!-- Feature Modules -->
     <script src="poster.js?v=20261113v24"></script>
-    <script src="pro.js?v=20261113v24"></script>
+    <script src="pro.js?v=20261114v43"></script>
     <script src="search.js?v=20261113v24"></script>
-    <script src="coins.js?v=20261114v42"></script>
-    <script src="admob.js?v=20261114v41"></script>
+    <script src="coins.js?v=20261114v43"></script>
+    <script src="admob.js?v=20261114v43"></script>
     <script src="iap.js?v=20261114v26"></script>
     <script src="stats.js?v=20261114v26"></script>
     <script src="supabase.js?v=20261114v35"></script>
@@ -1036,6 +1044,6 @@
     <script src="startup-gate.js?v=20261114v41"></script>
     <script src="permission.js?v=20261114v42"></script>
     <script src="debug-tools.js?v=20261114v39"></script>
-    <script src="app.js?v=20261114v42"></script>
+    <script src="app.js?v=20261114v43"></script>
 </body>
 </html>

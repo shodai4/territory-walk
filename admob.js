@@ -139,9 +139,14 @@ class AdMobManager {
     }
 
     showWebSimulator(onSuccess) {
-        if (this.app && this.app.coinManager) {
-            this.app.coinManager.showRewardAdModal(onSuccess);
+        const coinManager = this.app && this.app.coinManager;
+        if (coinManager && typeof coinManager.showRewardAdModal === 'function') {
+            coinManager.showRewardAdModal(onSuccess);
+        } else if (coinManager && typeof coinManager.startRewardAdSimulation === 'function') {
+            // 旧インターフェース互換
+            coinManager.startRewardAdSimulation(onSuccess);
         } else {
+            // モーダルが使えない環境でもリワードを失わない
             if (typeof onSuccess === 'function') onSuccess();
         }
     }

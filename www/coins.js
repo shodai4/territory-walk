@@ -22,6 +22,11 @@ class CoinManager {
 
         this.adTimer = null;
         this.adSecondsLeft = 5;
+        // 動画リワード完了時のコールバック（AdMob フォールバック用）
+        this.rewardAdSuccessCallback = null;
+        // ショップを開く処理の多重実行ガード（finally ＋ タイマーで必ず解除する）
+        this.shopOpening = false;
+        this.shopOpenWatchdog = null;
 
         // 1. Tile & Grid Skins Catalog (Graduated Pricing by Rarity & Vibrant Colors)
         this.SKINS = {
@@ -262,12 +267,44 @@ class CoinManager {
         return this.coins;
     }
 
+    /**
+     * Pro状態を安全に読む。
+     * 過去バージョンが `proManager.isPro = false` とメソッドを真偽値で上書きした端末では
+     * `isPro()` の呼び出しが TypeError になり、ショップ全体が開かなくなっていた。
+     * ここではメソッドでない／例外を投げる状態でも落とさず false として扱う。
+     */
+    isProActive() {
+        const pm = this.app && this.app.proManager;
+        if (!pm) return false;
+        if (typeof pm.isPro === 'function') {
+            try {
+                return !!pm.isPro();
+            } catch (e) {
+                console.warn('[Coins] Pro check failed:', e);
+                return false;
+            }
+        }
+        // 上書きされた端末のための保険（真偽値が入っている場合のみ尊重）
+        return pm.isPro === true;
+    }
+
+    /** localStorage 書き込み失敗（容量超過など）でコイン付与が中断しないようにする */
+    safeSetItem(key, value) {
+        try {
+            localStorage.setItem(key, value);
+            return true;
+        } catch (e) {
+            console.warn('[Coins] localStorage write skipped:', key, e);
+            return false;
+        }
+    }
+
     addCoins(amount, reason = '') {
         const n = parseInt(amount, 10);
         if (isNaN(n) || n <= 0) return;
 
         this.coins += n;
-        localStorage.setItem(this.STORAGE_KEY_COINS, this.coins.toString());
+        this.safeSetItem(this.STORAGE_KEY_COINS, this.coins.toString());
         this.updateCoinUI();
 
         if (reason && this.app && this.app.showToast) {
@@ -291,7 +328,7 @@ class CoinManager {
         }
 
         this.coins -= n;
-        localStorage.setItem(this.STORAGE_KEY_COINS, this.coins.toString());
+        this.safeSetItem(this.STORAGE_KEY_COINS, this.coins.toString());
         this.updateCoinUI();
 
         if (itemName && this.app && this.app.showToast) {
@@ -313,16 +350,25 @@ class CoinManager {
     }
 
     updateCoinUI() {
+        try {
+            this.updateCoinCounts();
+        } catch (e) {
+            console.warn('[Coins] coin counter update skipped:', e);
+        }
+        this.renderShopPanels();
+    }
+
+    /** コイン残高の数値表示だけを更新する（パネル再描画を含まない） */
+    updateCoinCounts() {
+        const label = (this.coins || 0).toLocaleString();
         const headerCount = document.getElementById('header-coin-count');
-        if (headerCount) headerCount.textContent = this.coins.toLocaleString();
+        if (headerCount) headerCount.textContent = label;
 
         const modalCount = document.getElementById('shop-modal-coin-count');
-        if (modalCount) modalCount.textContent = this.coins.toLocaleString();
+        if (modalCount) modalCount.textContent = label;
 
         const adRewardBalance = document.getElementById('reward-ad-current-coins');
-        if (adRewardBalance) adRewardBalance.textContent = this.coins.toLocaleString();
-
-        this.renderShopPanels();
+        if (adRewardBalance) adRewardBalance.textContent = label;
     }
 
     syncCoinsToSupabase() {
@@ -346,7 +392,7 @@ class CoinManager {
     // --- Skins Management ---
     isSkinUnlocked(skinId) {
         if (skinId === 'default') return true;
-        if (this.app && this.app.proManager && this.app.proManager.isPro()) return true;
+        if (this.isProActive()) return true;
         return this.unlockedSkins.includes(skinId);
     }
 
@@ -422,12 +468,12 @@ class CoinManager {
 
     // --- Perks Management ---
     isPerkUnlocked(perkId) {
-        if (this.app && this.app.proManager && this.app.proManager.isPro()) return true;
+        if (this.isProActive()) return true;
         return this.unlockedPerks.includes(perkId);
     }
 
     canAccessPosterExport() {
-        if (this.app && this.app.proManager && this.app.proManager.isPro()) return true;
+        if (this.isProActive()) return true;
         if (this.isPerkUnlocked('poster_permanent')) return true;
 
         const tickets = parseInt(localStorage.getItem(this.STORAGE_KEY_POSTER_TICKETS) || '0', 10);
@@ -488,7 +534,7 @@ class CoinManager {
 
     // --- Ad-Free Management ---
     isAdFree() {
-        if (this.app && this.app.proManager && this.app.proManager.isPro()) return true;
+        if (this.isProActive()) return true;
         return localStorage.getItem('tw_is_ad_free') === 'true';
     }
 
@@ -547,7 +593,33 @@ class CoinManager {
         this.renderShopPanels();
     }
 
+    /**
+     * デバッグ用: 購入アイテムを初期状態に戻す。
+     * 途中で例外が出てもアプリを壊さないようラッパーで保護し、最後に必ず再描画する。
+     * （以前はここで proManager.isPro というメソッドを false で上書きしてしまい、
+     *   再起動するまでショップが二度と開かない状態になっていた）
+     */
     resetPurchasedItems() {
+        try {
+            this.resetPurchasedItemsInternal();
+            if (this.app && this.app.showToast) {
+                this.app.showToast('購入アイテムリセット完了', 'テーマ・機能・広告パスを初期化しました');
+            }
+        } catch (e) {
+            console.error('[Coins] resetPurchasedItems failed:', e);
+            if (this.app && this.app.showToast) {
+                this.app.showToast('リセットを完了できませんでした', 'アプリを再起動しても直らない場合はサポートへ');
+            }
+        } finally {
+            try {
+                this.renderShopPanels();
+            } catch (err) {
+                console.warn('[Coins] shop re-render skipped:', err);
+            }
+        }
+    }
+
+    resetPurchasedItemsInternal() {
         // 1. スキン初期化
         this.unlockedSkins = ['default'];
         localStorage.setItem(this.STORAGE_KEY_UNLOCKED_SKINS, JSON.stringify(['default']));
@@ -574,10 +646,14 @@ class CoinManager {
         if (this.app && this.app.setMapTheme) this.app.setMapTheme('mono', false);
         this.renderMapThemesPanel();
 
-        // 4. Proアンロック情報初期化
+        // 4. Proアンロック情報初期化（isPro はメソッドなので絶対に上書きしない）
+        localStorage.removeItem('territory_pro_unlocked');
         localStorage.removeItem('tw_pro_unlocked');
-        if (this.app.proManager) {
-            this.app.proManager.isPro = false;
+        try {
+            const pm = this.app && this.app.proManager;
+            if (pm && typeof pm.setPro === 'function') pm.setPro(false);
+        } catch (e) {
+            console.warn('[Coins] Pro state reset skipped:', e);
         }
 
         // 5. 称号初期化
@@ -588,12 +664,7 @@ class CoinManager {
             localStorage.setItem('tw_active_title', '');
         }
 
-        // 6. ショップ画面再描画
-        this.renderShopPanels();
-
-        if (this.app && this.app.showToast) {
-            this.app.showToast('購入アイテムリセット完了', 'テーマ・機能・広告パスを初期化しました');
-        }
+        // 6. ショップ画面の再描画は呼び出し側（finally）で必ず行う
     }
 
     // --- Step-Up Walking Bonus System ---
@@ -679,7 +750,7 @@ class CoinManager {
 
         const totalEarned = base + stepBonus;
         this.coins += totalEarned;
-        localStorage.setItem(this.STORAGE_KEY_COINS, this.coins.toString());
+        this.safeSetItem(this.STORAGE_KEY_COINS, this.coins.toString());
         this.updateCoinUI();
         this.syncCoinsToSupabase();
 
@@ -723,6 +794,21 @@ class CoinManager {
         this.renderShopPanels();
     }
 
+    /**
+     * 招待コード（app.js から `coinManager.getInviteCode()` で参照される互換API）。
+     * 存在しなかったためシーズン結果のシェアが無反応になっていた。
+     */
+    getInviteCode() {
+        try {
+            const sm = this.app && this.app.statsManager;
+            if (!sm || typeof sm.getOrCreateReferralCode !== 'function') return '';
+            return sm.getOrCreateReferralCode() || '';
+        } catch (e) {
+            console.warn('[Coins] referral code unavailable:', e);
+            return '';
+        }
+    }
+
     // --- Viral Sharing: X (Twitter) Daily Share Bonus (+30 COIN) ---
     canShareToXToday() {
         const today = new Date().toISOString().split('T')[0];
@@ -738,7 +824,7 @@ class CoinManager {
             ? this.app.statsManager.stats.lifetime_tiles 
             : 0;
         const myTeam = this.app ? (this.app.currentTeam === 'black' ? 'Black (黒)' : 'White (白)') : 'Black';
-        const code = (this.app && this.app.statsManager) ? this.app.statsManager.getOrCreateReferralCode() : 'WALK';
+        const code = this.getInviteCode() || 'WALK';
 
         const tweetText = `歩行陣取り #テリトリーウォーク で現在 ${tiles} マス開拓中！今週は【${myTeam}】陣営で白熱バトル！一緒に歩いて陣地を奪い合おう！\n招待コード: ${code}\n#TerritoryWalk`;
         const tweetUrl = 'https://shodai4.github.io/territory-walk/';
@@ -762,7 +848,7 @@ class CoinManager {
 
     // --- Viral Sharing: Friend Referral (+150 COIN) ---
     copyReferralCode() {
-        const code = this.app && this.app.statsManager ? this.app.statsManager.getOrCreateReferralCode() : '';
+        const code = this.getInviteCode();
         if (!code) return;
 
         if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -779,7 +865,7 @@ class CoinManager {
     }
 
     shareReferralNative() {
-        const code = this.app && this.app.statsManager ? this.app.statsManager.getOrCreateReferralCode() : '';
+        const code = this.getInviteCode();
         const url = 'https://shodai4.github.io/territory-walk/';
         const text = `リアル歩行陣取り「テリトリーウォーク」で白黒の陣地を奪い合おう！\n招待コード【${code}】を入力すると +150 COIN プレゼント！\n`;
 
@@ -815,30 +901,10 @@ class CoinManager {
 
     // --- DOM & Modals Initialization ---
     initDOM() {
-        // Header coin button
-        const headerBtn = document.getElementById('btn-header-coins');
-        if (headerBtn) {
-            headerBtn.addEventListener('click', () => {
-                this.openShopModal('earn');
-            });
-        }
-
-        // Menu modal SHOP entry button
-        const menuShopBtn = document.getElementById('btn-open-shop-from-menu');
-        if (menuShopBtn) {
-            menuShopBtn.addEventListener('click', () => {
-                if (this.app.menuModal) this.app.menuModal.classList.add('hidden');
-                this.openShopModal('packs');
-            });
-        }
-
-        // Bottom banner ad-free prompt button
-        const btnAdFreePrompt = document.getElementById('btn-ad-free-prompt');
-        if (btnAdFreePrompt) {
-            btnAdFreePrompt.addEventListener('click', () => {
-                this.openShopModal('packs');
-            });
-        }
+        // ショップを開く入口（ヘッダーのコイン／MENUのSHOP／広告バーの「広告を消す」）は
+        // document への委譲で1度だけ登録する。要素が innerHTML 差し替えで作り直されても
+        // リスナーが失われない（「押しても無反応」の再発防止）。
+        this.installShopOpenDelegation();
 
         // Apply saved ad-free state to UI
         if (this.isAdFree()) {
@@ -847,6 +913,48 @@ class CoinManager {
 
         this.initShopModal();
         this.initRewardAdModal();
+    }
+
+    /**
+     * ショップを開く入口のクリックを document に委譲登録する（重複登録なし）。
+     * 入口の見た目や ID を変えても data-tw-open-shop="<tab>" で指定できる。
+     */
+    installShopOpenDelegation() {
+        const doc = (typeof document !== 'undefined') ? document : null;
+        if (!doc || typeof doc.addEventListener !== 'function') return;
+
+        // 常に最新のCoinManagerが処理するように、実処理は別枠で差し替える
+        doc.__twShopOpenHandler = (e) => this.handleShopOpenClick(e);
+        if (doc.__twShopOpenDelegated) return;
+        doc.__twShopOpenDelegated = true;
+        doc.addEventListener('click', (e) => {
+            const handler = doc.__twShopOpenHandler;
+            if (typeof handler === 'function') handler(e);
+        });
+    }
+
+    handleShopOpenClick(e) {
+        const target = e && e.target;
+        if (!target || typeof target.closest !== 'function') return;
+
+        const trigger = target.closest(
+            '[data-tw-open-shop], #btn-header-coins, #btn-open-shop-from-menu, #btn-ad-free-prompt'
+        );
+        if (!trigger) return;
+        if (trigger.disabled) return;
+
+        const explicitTab = (typeof trigger.getAttribute === 'function')
+            ? trigger.getAttribute('data-tw-open-shop')
+            : null;
+        const initialTab = explicitTab || (trigger.id === 'btn-header-coins' ? 'earn' : 'packs');
+
+        if (trigger.id === 'btn-open-shop-from-menu') {
+            const menu = document.getElementById('menu-modal')
+                || (this.app && this.app.menuModal);
+            if (menu) menu.classList.add('hidden');
+        }
+
+        this.openShopModal(initialTab);
     }
 
     initShopModal() {
@@ -937,18 +1045,116 @@ class CoinManager {
         }
     }
 
+    /**
+     * モーダル開閉の前に、タップを奪う残骸を掃除する（自己修復）。
+     * - `hidden` クラスなのに inline display が残っている（＝透明なのに画面を覆い続ける）
+     *   モーダルを完全に閉じる
+     * - body/html に残った pointer-events・overflow ロックを解除する
+     * - 開くモーダル自身の pointer-events を確定させる
+     */
+    ensureOverlayRecovery(keepId) {
+        const ids = [
+            'rules-modal',
+            'menu-modal',
+            'stats-modal',
+            'weekly-result-modal',
+            'team-reset-modal',
+            'team-decision-modal',
+            'pro-modal',
+            'shop-modal'
+        ];
+        ids.forEach((id) => {
+            if (id === keepId) return;
+            const el = document.getElementById(id);
+            if (!el || !el.style) return;
+            const hiddenByClass = el.classList && el.classList.contains('hidden');
+            const stillPainted = el.style.display && el.style.display !== 'none';
+            if (hiddenByClass && stillPainted) {
+                // クラスと inline style の食い違いを解消（透明オーバーレイの残存を除去）
+                el.style.display = '';
+                el.style.pointerEvents = '';
+            }
+        });
+
+        try {
+            const body = document.body;
+            if (body && body.style) {
+                body.style.pointerEvents = '';
+                body.style.overflow = '';
+                if (typeof body.removeAttribute === 'function') body.removeAttribute('inert');
+            }
+            const html = document.documentElement;
+            if (html && html.style) {
+                html.style.pointerEvents = '';
+                html.style.overflow = '';
+            }
+        } catch (e) {
+            console.warn('[Shop] overlay recovery skipped:', e);
+        }
+
+        const modal = document.getElementById(keepId);
+        if (modal && modal.style) modal.style.pointerEvents = 'auto';
+    }
+
+    /**
+     * ショップを開く。
+     * 描画の成否に関わらず「必ず開く」ことを最優先する。
+     * （以前はパネル描画 → hidden 解除の順で、描画中の例外がモーダルを塞いでいた）
+     * @returns {boolean} モーダルを開けたか
+     */
     openShopModal(initialTab = 'earn') {
         const modal = document.getElementById('shop-modal');
-        if (!modal) return;
+        if (!modal) {
+            console.warn('[Shop] #shop-modal not found');
+            return false;
+        }
 
-        this.updateCoinUI();
-        this.switchShopTab(initialTab);
-        modal.classList.remove('hidden');
+        // 連打・二重発火は1回にまとめる。ロックは finally と2秒の監視タイマーで必ず解ける
+        if (this.shopOpening) return true;
+        this.shopOpening = true;
+        if (this.shopOpenWatchdog) clearTimeout(this.shopOpenWatchdog);
+        this.shopOpenWatchdog = setTimeout(() => {
+            // 万一 finally が走らない状況でも固着させない
+            this.shopOpening = false;
+            this.shopOpenWatchdog = null;
+        }, 2000);
+
+        try {
+            this.ensureOverlayRecovery('shop-modal');
+
+            // 1) まず表示を確定させる（CSSの順序やCDN生成の揺れに依存しない）
+            modal.classList.remove('hidden');
+            if (modal.style) modal.style.display = 'flex';
+
+            // 2) 数値とタブ・各パネルは個別に保護（1つの例外で開くのを諦めない）
+            try {
+                this.updateCoinCounts();
+            } catch (e) {
+                console.warn('[Shop] coin counters skipped:', e);
+            }
+            try {
+                this.switchShopTab(initialTab);
+            } catch (e) {
+                console.warn('[Shop] tab render skipped:', e);
+            }
+        } finally {
+            this.shopOpening = false;
+            if (this.shopOpenWatchdog) {
+                clearTimeout(this.shopOpenWatchdog);
+                this.shopOpenWatchdog = null;
+            }
+        }
+        return true;
     }
 
     closeShopModal() {
         const modal = document.getElementById('shop-modal');
-        if (modal) modal.classList.add('hidden');
+        if (!modal) return;
+        modal.classList.add('hidden');
+        if (modal.style) {
+            modal.style.display = '';
+            modal.style.pointerEvents = '';
+        }
     }
 
     switchShopTab(tabKey) {
@@ -979,12 +1185,25 @@ class CoinManager {
     }
 
     renderShopPanels() {
-        this.renderEarnPanel();
-        this.renderPacksPanel();
-        this.renderSkinsPanel();
-        this.renderTitlesPanel();
-        this.renderPerksPanel();
-        this.updateSkinButtonsUI();
+        // 1つのパネルが例外を投げても他が描画し続けられるように個別に保護する
+        // （以前は特典パネルの1行が落ちるだけでショップが開かなくなっていた）
+        const renderers = [
+            'renderEarnPanel',
+            'renderPacksPanel',
+            'renderSkinsPanel',
+            'renderTitlesPanel',
+            'renderPerksPanel',
+            'updateSkinButtonsUI'
+        ];
+        renderers.forEach((name) => {
+            const fn = this[name];
+            if (typeof fn !== 'function') return;
+            try {
+                fn.call(this);
+            } catch (e) {
+                console.warn(`[Shop] ${name} skipped:`, e);
+            }
+        });
     }
 
     renderEarnPanel() {
@@ -1010,7 +1229,7 @@ class CoinManager {
         }
 
         // Update Referral Code Display
-        const code = (this.app && this.app.statsManager) ? this.app.statsManager.getOrCreateReferralCode() : '';
+        const code = this.getInviteCode();
         const codeEl = document.getElementById('display-my-referral-code');
         if (codeEl) codeEl.textContent = code;
 
@@ -1026,6 +1245,31 @@ class CoinManager {
                 `;
             }
         }
+    }
+
+    /**
+     * 価格は必ず日本円で表示する。
+     * StoreKit のローカライズ価格が円建て（¥ / ￥ / 円 / JPY）のときだけそれを採用し、
+     * 外貨建て（$ など）や未取得のときはカタログの円価格にフォールバックする。
+     */
+    formatYenPrice(yen) {
+        const n = Number(yen);
+        if (!Number.isFinite(n) || n <= 0) return '';
+
+        let localized = '';
+        try {
+            const iap = this.app && this.app.iapManager;
+            if (iap && typeof iap.getDisplayPriceForYen === 'function') {
+                localized = iap.getDisplayPriceForYen(n) || '';
+            }
+        } catch (e) {
+            localized = '';
+        }
+
+        if (typeof localized === 'string' && /[¥￥円]|JPY/i.test(localized)) {
+            return localized;
+        }
+        return `¥${n.toLocaleString('ja-JP')}`;
     }
 
     renderPacksPanel() {
@@ -1053,8 +1297,8 @@ class CoinManager {
                             適用中
                         </button>
                     ` : `
-                        <button id="btn-buy-ad-free" class="px-3 py-1.5 rounded bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-black text-xs font-bold font-mono transition-all active:scale-95 shadow">
-                            ${(this.app && this.app.iapManager && this.app.iapManager.getDisplayPrice('ad-free')) || '¥480'}
+                        <button id="btn-buy-ad-free" class="px-3 py-1.5 rounded bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-black text-xs font-bold font-mono transition-all active:scale-95 shadow whitespace-nowrap">
+                            ${this.formatYenPrice(this.AD_FREE_PERK.yen)}
                         </button>
                     `}
                 </div>
@@ -1065,20 +1309,18 @@ class CoinManager {
             const includesAdFree = this.packIncludesAdFree(pack);
             return `
                 <div class="bg-zinc-950/80 border border-zinc-800 p-3 rounded-xl flex items-center justify-between gap-2">
-                    <div>
+                    <div class="min-w-0">
                         <div class="flex items-center gap-1.5 flex-wrap">
                             <span class="font-bold text-xs text-white">${pack.name}</span>
                             ${pack.bonus ? `<span class="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 text-[9px] font-mono font-bold">${pack.bonus}</span>` : ''}
                             ${pack.tag ? `<span class="px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 text-[9px] font-mono font-bold">${pack.tag}</span>` : ''}
                             ${includesAdFree ? '<span class="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[9px] font-mono font-bold">＋広告非表示</span>' : ''}
                         </div>
-                        <div class="shop-desc text-[10px] text-zinc-400 leading-tight mt-0.5">${pack.desc}</div>
-                        ${includesAdFree ? '<div class="text-[9px] text-emerald-400/80 leading-tight mt-0.5">Ad-Freeパス（単体¥480）と動画スキップ込み</div>' : ''}
                         <div class="text-amber-400 font-mono text-xs font-bold mt-1">+${pack.coins.toLocaleString()} COIN</div>
                     </div>
                     <div class="shrink-0">
-                        <button class="btn-buy-pack px-3 py-1.5 rounded bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-black text-xs font-bold font-mono transition-all active:scale-95 shadow" data-pack="${pack.id}">
-                            ${(this.app && this.app.iapManager && this.app.iapManager.getDisplayPriceForYen(pack.yen)) || ('¥' + pack.yen.toLocaleString())}
+                        <button class="btn-buy-pack px-3 py-1.5 rounded bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-black text-xs font-bold font-mono transition-all active:scale-95 shadow whitespace-nowrap" data-pack="${pack.id}">
+                            ${this.formatYenPrice(pack.yen)}
                         </button>
                     </div>
                 </div>
@@ -1311,7 +1553,7 @@ class CoinManager {
         const container = document.getElementById('container-shop-perks');
         if (!container) return;
 
-        const isPro = this.app && this.app.proManager && this.app.proManager.isPro();
+        const isPro = this.isProActive();
         const tickets = parseInt(localStorage.getItem(this.STORAGE_KEY_POSTER_TICKETS) || '0', 10);
         const savedPin = localStorage.getItem('tw_pin_effect') || 'default';
 
@@ -1376,12 +1618,12 @@ class CoinManager {
 
         container.innerHTML += `
             <div class="bg-gradient-to-r from-zinc-950 to-zinc-900 border border-amber-500/50 p-3 rounded-xl flex items-center justify-between gap-2 mt-2">
-                <div>
+                <div class="min-w-0 flex-1">
                     <div class="font-bold text-xs text-amber-400 flex items-center gap-1.5">
                         <span>Proサポーター</span>
                         <span class="px-1.5 py-0.5 rounded ${isPro ? 'bg-amber-400 text-black font-bold' : 'bg-zinc-800 text-zinc-400'} text-[9px] font-mono">${isPro ? '有効' : '未登録'}</span>
                     </div>
-                    <div class="text-[10px] text-zinc-400 leading-tight mt-0.5">全スキン解放・無制限ポスター保存・限定サポーターバッジ</div>
+                    <div class="pro-supporter-desc shop-desc text-[10px] text-zinc-400 leading-tight mt-0.5">全スキン解放・ポスター無制限・限定バッジ</div>
                 </div>
                 <button id="btn-open-pro-from-shop" class="shrink-0 px-3 py-1.5 rounded bg-amber-600 hover:bg-amber-500 active:bg-amber-700 text-white text-[10px] font-bold font-mono transition-all active:scale-95">
                     ${isPro ? '確認' : 'コード入力'}
@@ -1437,27 +1679,68 @@ class CoinManager {
         if (closeBtn && modal) {
             closeBtn.addEventListener('click', () => {
                 if (this.adTimer) clearInterval(this.adTimer);
+                this.adTimer = null;
+                this.rewardAdSuccessCallback = null;
                 modal.classList.add('hidden');
+                if (modal.style) modal.style.display = '';
             });
         }
 
         if (claimBtn) {
             claimBtn.addEventListener('click', () => {
-                this.addCoins(500, '動画広告リワード');
-                if (modal) modal.classList.add('hidden');
-                this.updateCoinUI();
+                this.claimRewardAd();
             });
         }
     }
 
-    startRewardAdSimulation() {
+    /**
+     * AdMob からのフォールバック入口（admob.js が呼ぶ）。
+     * 以前はこのメソッドが存在せず、ネイティブ広告の表示失敗時に
+     * 「動画リワードが無反応」になっていた。
+     */
+    showRewardAdModal(onSuccess) {
+        this.startRewardAdSimulation(onSuccess);
+    }
+
+    /** リワード受け取り（コールバックがあればそれを優先し、二重付与しない） */
+    claimRewardAd() {
+        const callback = this.rewardAdSuccessCallback;
+        this.rewardAdSuccessCallback = null;
+
+        if (typeof callback === 'function') {
+            try {
+                callback();
+            } catch (e) {
+                console.warn('[Ad] reward callback failed, granting locally:', e);
+                this.addCoins(500, '動画広告リワード');
+            }
+        } else {
+            this.addCoins(500, '動画広告リワード');
+        }
+
+        const modal = document.getElementById('reward-ad-modal');
+        if (modal) {
+            modal.classList.add('hidden');
+            if (modal.style) modal.style.display = '';
+        }
+        this.updateCoinUI();
+    }
+
+    startRewardAdSimulation(onSuccess) {
         const modal = document.getElementById('reward-ad-modal');
         const timerText = document.getElementById('reward-ad-timer');
         const progressBar = document.getElementById('reward-ad-progress');
         const claimBtn = document.getElementById('btn-claim-ad-reward');
         const statusText = document.getElementById('reward-ad-status');
 
-        if (!modal) return;
+        this.rewardAdSuccessCallback = (typeof onSuccess === 'function') ? onSuccess : null;
+
+        if (!modal) {
+            // モーダルが無い環境でもリワードを失わない
+            if (typeof onSuccess === 'function') onSuccess();
+            else this.addCoins(500, '動画広告リワード');
+            return;
+        }
 
         if (this.adTimer) clearInterval(this.adTimer);
 
@@ -1471,6 +1754,7 @@ class CoinManager {
         if (statusText) statusText.textContent = 'スポンサー動画を再生中...';
 
         modal.classList.remove('hidden');
+        if (modal.style) modal.style.display = 'flex';
 
         const startTime = Date.now();
         const duration = 5000;
@@ -1496,4 +1780,8 @@ class CoinManager {
             }
         }, 100);
     }
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { CoinManager };
 }
