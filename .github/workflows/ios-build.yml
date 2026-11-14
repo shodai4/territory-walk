@@ -147,6 +147,13 @@ jobs:
         run: |
           cd ios/App
           rm -rf "$RUNNER_TEMP/TerritoryWalk.xcarchive"
+          # The Capacitor template ships CODE_SIGN_IDENTITY = "iPhone Developer" (development).
+          # For a device-less CI archive we need an App Store distribution identity, which needs
+          # no registered devices. Signing style stays Automatic so cloud signing can issue the
+          # distribution certificate and App Store provisioning profile via the API key.
+          echo "[CI] Switching the app target to Apple Distribution (automatic signing)..."
+          /usr/bin/sed -i '' -e 's/CODE_SIGN_IDENTITY = "iPhone Developer";/CODE_SIGN_IDENTITY = "Apple Distribution";/g' -e 's/CODE_SIGN_IDENTITY = "Apple Development";/CODE_SIGN_IDENTITY = "Apple Distribution";/g' App.xcodeproj/project.pbxproj
+          grep -m3 CODE_SIGN_IDENTITY App.xcodeproj/project.pbxproj || true
           xcodebuild -workspace App.xcworkspace \
             -scheme App \
             -configuration Release \
@@ -159,8 +166,7 @@ jobs:
             archive \
             DEVELOPMENT_TEAM="${{ secrets.APPLE_TEAM_ID }}" \
             CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
-            CODE_SIGN_STYLE=Automatic \
-            CODE_SIGN_IDENTITY="Apple Distribution"
+            CODE_SIGN_STYLE=Automatic
 
       - name: "Generate ExportOptions.plist"
         if: steps.check_keys.outputs.has_keys == 'true'
