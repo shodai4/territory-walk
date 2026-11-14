@@ -229,6 +229,22 @@ test('申請資料: 年齢制限の記載が本文全体で矛盾していない
     assert.doesNotMatch(metadata, /12歳以上推奨/, '「12歳以上推奨」と「すべて いいえ（4+）」が併記されていた');
 });
 
+test('法務: アプリ内のローカルページ（terms/privacy/support）は target="_blank" で開かない', () => {
+    // iOS（WKWebView）で target="_blank" のローカルページは Safari 側に流れて開けず、
+    // タップしても何も起きない「死んだリンク」になる（Capacitor の createWebViewWith は
+    // UIApplication.open に渡して nil を返すため）。同じWebView内で開く。
+    ['index.html', 'coins.js'].forEach((file) => {
+        const text = read(file);
+        ['terms.html', 'privacy.html', 'support.html'].forEach((page) => {
+            const pattern = new RegExp(`href="${page.replace('.', '\\.')}"[^>]*target="_blank"`);
+            assert.doesNotMatch(text, pattern, `${file} の ${page} が target="_blank" になっている`);
+        });
+    });
+
+    // 外部サイト（GitHub / Google / OpenStreetMap）は Safari で開くのが正しい
+    assert.match(read('support.html'), /github\.com\/shodai4\/territory-walk\/issues" target="_blank"/);
+});
+
 test('申請資料: 実装していない特典を説明文に書いていない', () => {
     const metadata = read(path.join('docs', 'app-store-metadata.md'));
     const guide = read(path.join('docs', 'app-store-release-guide.md'));

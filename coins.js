@@ -1352,11 +1352,11 @@ class CoinManager {
                 <span>購入の復元 (Restore Purchases)</span>
             </button>
             <div class="flex items-center justify-center gap-3 text-[10px] text-zinc-500 font-mono">
-                <a href="terms.html" target="_blank" class="hover:text-zinc-300 underline">利用規約</a>
+                <a href="terms.html" class="hover:text-zinc-300 underline">利用規約</a>
                 <span>•</span>
-                <a href="privacy.html" target="_blank" class="hover:text-zinc-300 underline">プライバシーポリシー</a>
+                <a href="privacy.html" class="hover:text-zinc-300 underline">プライバシーポリシー</a>
                 <span>•</span>
-                <a href="support.html" target="_blank" class="hover:text-zinc-300 underline">サポート</a>
+                <a href="support.html" class="hover:text-zinc-300 underline">サポート</a>
             </div>
         `;
         container.appendChild(footerEl);
