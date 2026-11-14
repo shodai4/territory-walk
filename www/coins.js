@@ -13,10 +13,12 @@ class CoinManager {
         this.STORAGE_KEY_UNLOCKED_SKINS = 'tw_unlocked_skins';
         this.STORAGE_KEY_UNLOCKED_PERKS = 'tw_unlocked_perks';
         this.STORAGE_KEY_POSTER_TICKETS = 'tw_poster_tickets';
+        this.STORAGE_KEY_MAP_THEMES = 'tw_unlocked_map_themes';
 
         this.coins = this.loadCoins();
         this.unlockedSkins = this.loadUnlockedSkins();
         this.unlockedPerks = this.loadUnlockedPerks();
+        this.unlockedMapThemes = this.loadUnlockedMapThemes();
 
         this.adTimer = null;
         this.adSecondsLeft = 5;
@@ -27,10 +29,31 @@ class CoinManager {
             pixel: { id: 'pixel', name: 'レトロ', cost: 1000, desc: 'ライムグリーンとダーク', class: 'text-lime-400' },
             sakura: { id: 'sakura', name: 'サクラ', cost: 2500, desc: '桜ピンクと翡翠ミント', class: 'text-pink-400' },
             monochrome: { id: 'monochrome', name: 'モノトーン', cost: 4500, desc: '完全白黒の濃淡', class: 'text-slate-300' },
-            crimson: { id: 'crimson', name: '紅蓮', cost: 8000, desc: '深紅とダーク', class: 'text-orange-400' },
+            crimson: { id: 'crimson', name: 'クリムゾン', cost: 8000, desc: '深紅とダーク', class: 'text-orange-400' },
             neon: { id: 'neon', name: 'ネオン', cost: 14000, desc: 'シアンとマゼンタ', class: 'text-cyan-400' },
             gold: { id: 'gold', name: 'ゴールド', cost: 28000, desc: 'シャンパンゴールド', class: 'text-amber-400' },
             cyberpunk: { id: 'cyberpunk', name: 'サイバー', cost: 50000, desc: 'パープルとブルー', class: 'text-purple-400' }
+        };
+
+        // 1.5 マスの色イメージ（自陣・相手陣のカラーチップ表示用）
+        this.SKIN_SWATCHES = {
+            default: { own: '#ffffff', enemy: '#09090b' },
+            pixel: { own: '#bef264', enemy: '#365314' },
+            sakura: { own: '#2dd4bf', enemy: '#f472b6' },
+            monochrome: { own: '#f1f5f9', enemy: '#334155' },
+            crimson: { own: '#fb923c', enemy: '#ef4444' },
+            neon: { own: '#06b6d4', enemy: '#d946ef' },
+            gold: { own: '#fef08a', enemy: '#18181b' },
+            cyberpunk: { own: '#38bdf8', enemy: '#a855f7' }
+        };
+
+        // 1.6 背景地図カラー（コイン購入制）— モノクロと地図非表示は無償・先頭固定
+        this.MAP_THEMES = {
+            mono: { id: 'mono', name: 'モノクロ', cost: 0, order: 0, swatch: '#8b8b91', desc: '白黒の地図' },
+            none: { id: 'none', name: '地図非表示', cost: 0, order: 1, swatch: 'transparent', desc: '地図を隠して陣地に集中' },
+            dark: { id: 'dark', name: 'ダーク', cost: 3000, order: 2, swatch: '#1f2430', desc: '落ち着いた暗色の地図' },
+            street: { id: 'street', name: 'ストリート', cost: 6000, order: 3, swatch: '#9be15d', desc: '明るい標準地図' },
+            sepia: { id: 'sepia', name: 'セピア', cost: 12000, order: 4, swatch: '#b98a56', desc: '古地図風の暖色' }
         };
 
         // 2. Exclusive Shop Titles Catalog (15 Tiers: 1,000 - 50,000 COIN)
@@ -111,6 +134,126 @@ class CoinManager {
         } catch (e) {
             return [];
         }
+    }
+
+    loadUnlockedMapThemes() {
+        let owned = ['mono', 'none'];
+        try {
+            const raw = localStorage.getItem(this.STORAGE_KEY_MAP_THEMES);
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed)) owned = parsed.filter(id => typeof id === 'string');
+            }
+        } catch (e) { /* 既定値を使う */ }
+        ['mono', 'none'].forEach(id => { if (!owned.includes(id)) owned.push(id); });
+        localStorage.setItem(this.STORAGE_KEY_MAP_THEMES, JSON.stringify(owned));
+        return owned;
+    }
+
+    /**
+     * 既存ユーザーの現在の背景地図は無償で引き継ぐ（初期選択が未所持にならないように）。
+     */
+    ensureMapThemeState() {
+        const saved = localStorage.getItem('tw_map_theme');
+        if (saved && this.MAP_THEMES[saved] && !this.unlockedMapThemes.includes(saved)) {
+            this.unlockedMapThemes.push(saved);
+            localStorage.setItem(this.STORAGE_KEY_MAP_THEMES, JSON.stringify(this.unlockedMapThemes));
+        }
+        if (!saved) {
+            localStorage.setItem('tw_map_theme', 'mono');
+        }
+    }
+
+    isMapThemeUnlocked(themeId) {
+        return this.unlockedMapThemes.includes(themeId);
+    }
+
+    /** 背景地図テーマの購入→即適用（未所持時は確認ダイアログ） */
+    selectMapTheme(themeId) {
+        const theme = this.MAP_THEMES[themeId];
+        if (!theme) return false;
+
+        if (!this.isMapThemeUnlocked(themeId)) {
+            const affordable = this.coins >= theme.cost;
+            const message = affordable
+                ? `【ショップ】\n背景地図「${theme.name}」を ${theme.cost.toLocaleString()} コインで解放しますか？`
+                : `【コイン不足】\nあと ${Math.max(0, theme.cost - this.coins).toLocaleString()} コイン足りません。\n\nショップを開いてコイン購入や動画視聴で獲得しますか？`;
+            if (!confirm(message)) return false;
+            if (!affordable) {
+                this.openShopModal('packs');
+                return false;
+            }
+            this.unlockMapTheme(themeId);
+        }
+
+        if (this.app && this.app.setMapTheme) this.app.setMapTheme(themeId, true);
+        this.renderMapThemesPanel();
+        return true;
+    }
+
+    unlockMapTheme(themeId) {
+        const theme = this.MAP_THEMES[themeId];
+        if (!theme) return false;
+        if (this.isMapThemeUnlocked(themeId)) return true;
+        if (!this.spendCoins(theme.cost, `背景地図 [${theme.name}]`)) return false;
+        this.unlockedMapThemes.push(themeId);
+        localStorage.setItem(this.STORAGE_KEY_MAP_THEMES, JSON.stringify(this.unlockedMapThemes));
+        if (this.app && this.app.showToast) this.app.showToast(`背景地図を解放: ${theme.name}`);
+        this.renderMapThemesPanel();
+        return true;
+    }
+
+    /**
+     * 背景地図カラーの一覧描画。
+     * 並び順：モノクロ → 地図非表示 → 価格の安い順（未所持は価格ボタン）。
+     * 状態色：選択中（エメラルド） / 所持済み（ジンク） / 未購入（暗く＋価格）。
+     */
+    renderMapThemesPanel() {
+        const container = document.getElementById('map-theme-buttons-container');
+        if (!container) return;
+
+        const current = localStorage.getItem('tw_map_theme') || 'mono';
+        const themes = Object.values(this.MAP_THEMES).sort((a, b) => {
+            const rank = t => (t.cost === 0 ? 0 : 1);
+            if (rank(a) !== rank(b)) return rank(a) - rank(b);
+            if (a.cost !== b.cost) return a.cost - b.cost;
+            return a.order - b.order;
+        });
+
+        container.innerHTML = themes.map(theme => {
+            const owned = this.isMapThemeUnlocked(theme.id);
+            const selected = current === theme.id;
+
+            const stateClass = selected
+                ? 'border-emerald-400 bg-emerald-500/10 ring-1 ring-emerald-400/60'
+                : owned ? 'border-zinc-600 bg-zinc-900' : 'border-zinc-800 bg-zinc-950';
+            const badge = selected
+                ? '<span class="px-1 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[8px] font-bold">選択中</span>'
+                : owned
+                    ? '<span class="px-1 py-0.5 rounded bg-zinc-700/60 text-zinc-300 text-[8px] font-bold">所持</span>'
+                    : `<span class="px-1 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[8px] font-bold">${theme.cost.toLocaleString()} C</span>`;
+            const swatchStyle = theme.id === 'none'
+                ? 'background: repeating-linear-gradient(45deg, #18181b, #18181b 3px, #3f3f46 3px, #3f3f46 6px)'
+                : `background: ${theme.swatch}`;
+            const nameClass = owned ? 'text-zinc-100' : 'text-zinc-400';
+
+            return `
+                <button class="map-theme-btn w-full ${theme.id === 'none' ? 'col-span-2' : ''} border p-2 rounded-lg text-[11px] transition-all active:scale-95 flex items-center justify-between gap-1.5 ${stateClass}" data-map-theme="${theme.id}">
+                    <span class="flex items-center gap-1.5 min-w-0">
+                        <span class="w-3.5 h-3.5 rounded shrink-0 border border-zinc-600" style="${swatchStyle}"></span>
+                        <span class="truncate font-bold ${nameClass}">${theme.name}</span>
+                    </span>
+                    ${badge}
+                </button>
+            `;
+        }).join('');
+
+        container.querySelectorAll('.map-theme-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const id = e.currentTarget.dataset.mapTheme;
+                this.selectMapTheme(id);
+            });
+        });
     }
 
     getCoins() {
@@ -421,6 +564,13 @@ class CoinManager {
 
         // 3. 広告非表示パス (Ad-Free) 解除
         this.setAdFree(false);
+
+        // 3.5 背景地図カラーの購入状態を初期化（モノクロ・地図非表示のみ所持）
+        this.unlockedMapThemes = ['mono', 'none'];
+        localStorage.setItem(this.STORAGE_KEY_MAP_THEMES, JSON.stringify(this.unlockedMapThemes));
+        localStorage.setItem('tw_map_theme', 'mono');
+        if (this.app && this.app.setMapTheme) this.app.setMapTheme('mono', false);
+        this.renderMapThemesPanel();
 
         // 4. Proアンロック情報初期化
         localStorage.removeItem('tw_pro_unlocked');
@@ -983,29 +1133,58 @@ class CoinManager {
         if (!container) return;
 
         const currentSkin = document.body.dataset.skin || 'default';
+        // 並び順：標準（0C）を先頭に、以降は価格の安い順
+        const skins = Object.values(this.SKINS).sort((a, b) => {
+            if (a.cost !== b.cost) return a.cost - b.cost;
+            return (a.id === 'default' ? -1 : 1);
+        });
 
-        container.innerHTML = Object.values(this.SKINS).map(skin => {
+        container.innerHTML = skins.map(skin => {
             const isUnlocked = this.isSkinUnlocked(skin.id);
             const isEquipped = currentSkin === skin.id;
+            const swatch = this.SKIN_SWATCHES[skin.id] || { own: '#ffffff', enemy: '#09090b' };
+
+            // 状態3色：選択中／所持済み／未購入
+            const stateClass = isEquipped
+                ? 'border-emerald-400 bg-emerald-500/10 ring-1 ring-emerald-400/60'
+                : isUnlocked ? 'border-zinc-600 bg-zinc-900' : 'border-zinc-800 bg-zinc-950';
+            const badge = isEquipped
+                ? '<span class="px-1 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[8px] font-bold">選択中</span>'
+                : isUnlocked
+                    ? '<span class="px-1 py-0.5 rounded bg-zinc-700/60 text-zinc-300 text-[8px] font-bold">所持</span>'
+                    : '';
+
+            // マスの色イメージ（自陣／相手陣のカラーチップ）
+            const chips = `
+                <span class="flex items-center gap-1 shrink-0">
+                    <span class="w-3.5 h-3.5 rounded-sm border border-zinc-600" style="background:${swatch.own}" title="自陣マス"></span>
+                    <span class="w-3.5 h-3.5 rounded-sm border border-zinc-600" style="background:${swatch.enemy}" title="相手陣マス"></span>
+                </span>
+            `;
 
             let actionButton = '';
             if (isEquipped) {
-                actionButton = `<span class="px-2.5 py-1 rounded bg-zinc-800 text-zinc-400 text-[10px] font-bold font-mono">適用中</span>`;
+                actionButton = `<span class="px-2.5 py-1 rounded bg-zinc-800 text-emerald-300 text-[10px] font-bold font-mono">適用中</span>`;
             } else if (isUnlocked) {
                 actionButton = `<button class="btn-equip-skin px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-white text-[10px] font-bold font-mono transition-all active:scale-95" data-skin="${skin.id}">適用する</button>`;
             } else {
                 const canAfford = this.coins >= skin.cost;
-                const btnStyle = canAfford 
-                    ? 'bg-amber-600 hover:bg-amber-500 text-white' 
-                    : 'bg-zinc-800 text-zinc-500 cursor-not-allowed';
-                actionButton = `<button class="btn-buy-skin px-2.5 py-1 rounded ${btnStyle} text-[10px] font-bold font-mono transition-all active:scale-95" data-skin="${skin.id}" ${canAfford ? '' : 'disabled'}>${skin.cost} COIN</button>`;
+                const btnStyle = canAfford
+                    ? 'bg-amber-600 hover:bg-amber-500 text-white'
+                    : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700';
+                const priceLabel = `${skin.cost.toLocaleString()} COIN`;
+                actionButton = `<button class="btn-buy-skin px-2 py-1 rounded ${btnStyle} ${priceLabel.length > 11 ? 'text-[9px]' : 'text-[10px]'} font-bold font-mono transition-all active:scale-95 whitespace-nowrap tabular-nums" data-skin="${skin.id}">${priceLabel}</button>`;
             }
 
             return `
-                <div class="bg-zinc-950/80 border border-zinc-800 p-2.5 rounded-xl flex items-center justify-between gap-2">
-                    <div>
-                        <div class="font-bold text-xs ${skin.class}">${skin.name}</div>
-                        <div class="text-[10px] text-zinc-400 leading-tight mt-0.5">${skin.desc}</div>
+                <div class="border ${stateClass} p-2.5 rounded-xl flex items-center justify-between gap-2">
+                    <div class="min-w-0 flex-1">
+                        <div class="flex items-center gap-1.5 min-w-0">
+                            ${chips}
+                            <span class="font-bold text-xs ${skin.class} truncate">${skin.name}</span>
+                            ${badge}
+                        </div>
+                        <div class="text-[10px] text-zinc-400 leading-tight mt-0.5 line-clamp-2">${skin.desc}</div>
                     </div>
                     <div class="shrink-0">
                         ${actionButton}

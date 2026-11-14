@@ -284,13 +284,10 @@
                     <div class="space-y-1.5 pt-2 border-t border-zinc-900/60">
                         <div class="flex items-center justify-between">
                             <span class="text-[11px] font-bold text-zinc-300">背景地図カラー</span>
+                            <span class="text-[9px] text-zinc-500 font-mono">モノクロ・地図非表示は無償</span>
                         </div>
                         <div class="grid grid-cols-2 gap-2" id="map-theme-buttons-container">
-                            <button class="map-theme-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[11px] hover:border-white transition-all active:scale-95 text-zinc-200" data-map-theme="dark">ダーク</button>
-                            <button class="map-theme-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[11px] hover:border-white transition-all active:scale-95 text-zinc-300" data-map-theme="mono">モノクロ</button>
-                            <button class="map-theme-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[11px] hover:border-white transition-all active:scale-95 text-emerald-400" data-map-theme="street">ストリート</button>
-                            <button class="map-theme-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[11px] hover:border-white transition-all active:scale-95 text-amber-300" data-map-theme="sepia">セピア</button>
-                            <button class="map-theme-btn col-span-2 bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[11px] hover:border-white transition-all active:scale-95 text-zinc-400" data-map-theme="none">地図非表示</button>
+                            <!-- 白黒陣取り：JS（coins.js）で状態色・価格付きで描画 -->
                         </div>
                     </div>
                 </div>
@@ -953,7 +950,7 @@
     <script src="poster.js?v=20261113v24"></script>
     <script src="pro.js?v=20261113v24"></script>
     <script src="search.js?v=20261113v24"></script>
-    <script src="coins.js?v=20261114v26"></script>
+    <script src="coins.js?v=20261114v27"></script>
     <script src="admob.js?v=20261114v26"></script>
     <script src="iap.js?v=20261114v26"></script>
     <script src="stats.js?v=20261114v26"></script>
@@ -961,6 +958,6 @@
     <script src="grid.js?v=20261114v26"></script>
     <script src="outbox.js?v=20261114v26"></script>
     <!-- Main Application Logic -->
-    <script src="app.js?v=20261114v26"></script>
+    <script src="app.js?v=20261114v27"></script>
 </body>
 </html>

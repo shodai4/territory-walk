@@ -577,16 +577,15 @@ class TerritoryWalkApp {
     }
 
     initMapThemeSelector() {
-        const savedTheme = localStorage.getItem('tw_map_theme') || 'dark';
+        // 既存ユーザーの選択中の地図を引き継ぎ、未所持の初期状態を回避
+        if (this.coinManager && this.coinManager.ensureMapThemeState) {
+            this.coinManager.ensureMapThemeState();
+        }
+        const savedTheme = localStorage.getItem('tw_map_theme') || 'mono';
         this.setMapTheme(savedTheme, false);
-
-        const themeButtons = document.querySelectorAll('.map-theme-btn');
-        themeButtons.forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const targetTheme = e.currentTarget.dataset.mapTheme;
-                this.setMapTheme(targetTheme, true);
-            });
-        });
+        if (this.coinManager && this.coinManager.renderMapThemesPanel) {
+            this.coinManager.renderMapThemesPanel();
+        }
     }
 
     setupSwipeUpToClose(modalId, closeFn) {
@@ -594,6 +593,12 @@ class TerritoryWalkApp {
     }
 
     setMapTheme(theme, notify = false) {
+        // 未購入の背景地図は購入導線へ（購入後に自動適用）
+        if (this.coinManager && this.coinManager.isMapThemeUnlocked && !this.coinManager.isMapThemeUnlocked(theme)) {
+            this.coinManager.selectMapTheme(theme);
+            return false;
+        }
+
         const mapContainer = document.getElementById('map');
         const tilePanes = document.querySelectorAll('.leaflet-tile-pane');
 
@@ -633,6 +638,11 @@ class TerritoryWalkApp {
     }
 
     updateMapThemeBadge(theme) {
+        // 並び順・状態3色（選択中 / 所持済み / 未購入）を含めて一覧を描画し直す
+        if (this.coinManager && this.coinManager.renderMapThemesPanel) {
+            this.coinManager.renderMapThemesPanel();
+            return;
+        }
         const themeButtons = document.querySelectorAll('.map-theme-btn');
         themeButtons.forEach(btn => {
             const isSelected = btn.dataset.mapTheme === theme;
