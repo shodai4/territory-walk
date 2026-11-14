@@ -505,6 +505,15 @@ button, a, input, select, .btn-action {
     letter-spacing: 0.01em;
 }
 
+/* 陣営決定画面の説明文：明示した <br> の位置だけで折り返し、375px幅でも単語の途中で切らない */
+.team-assignment-copy {
+    line-break: strict;
+    text-wrap: pretty;
+    overflow-wrap: normal;
+    word-break: normal;
+    letter-spacing: 0.01em;
+}
+
 /* 位置情報拒否バナー：ヘッダー直下に控えめに固定表示
    （モーダル z-[2000]・トースト z-[1500] より背面、コントロール z-[1000] より前面） */
 #location-permission-banner {

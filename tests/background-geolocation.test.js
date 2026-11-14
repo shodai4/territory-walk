@@ -57,7 +57,6 @@ function createStubElement(id, { hidden = false } = {}) {
 function createStubDocument() {
     const elements = {
         'location-permission-banner': createStubElement('location-permission-banner', { hidden: true }),
-        'btn-location-banner-close': createStubElement('btn-location-banner-close'),
         'btn-location-banner-retry': createStubElement('btn-location-banner-retry')
     };
     const docListeners = {};
