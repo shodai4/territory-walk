@@ -85,10 +85,10 @@ class CoinManager {
 
         // 4. In-App Purchase Coin Packs Catalog (5,000 Yen = 50,000 COIN Standard)
         this.PACKS = {
-            'beginner': { id: 'beginner', name: 'ビギナーパック', yen: 120, coins: 1000, bonus: '8.33 C/円', desc: '入門スキンや入門称号を即座に購入可能' },
-            'standard': { id: 'standard', name: 'スタンダードパック', yen: 500, coins: 4500, bonus: '9.00 C/円', desc: 'サクラ・モノトーンスキンや中級称号を購入可能' },
-            'premium': { id: 'premium', name: 'プレミアムパック', yen: 1500, coins: 14000, bonus: '9.33 C/円 (1番人気)', desc: 'ネオンスキンや上位称号を一気に獲得可能' },
-            'ultimate': { id: 'ultimate', name: 'アルティメットパック', yen: 5000, coins: 50000, bonus: '10.00 C/円 (最高効率)', desc: '最上位サイバーや最高峰称号テラ・コンクエスターを即座に獲得' }
+            'beginner': { id: 'beginner', name: 'ビギナーパック', yen: 120, coins: 1000, bonus: '8.33 C/円', tag: '', desc: '入門スキンや入門称号を即座に購入可能' },
+            'standard': { id: 'standard', name: 'スタンダードパック', yen: 500, coins: 4500, bonus: '9.00 C/円', tag: '', desc: 'サクラ・モノトーンスキンや中級称号を購入可能' },
+            'premium': { id: 'premium', name: 'プレミアムパック', yen: 1500, coins: 14000, bonus: '9.33 C/円', tag: '1番人気', desc: 'ネオンスキンや上位称号を一気に獲得可能' },
+            'ultimate': { id: 'ultimate', name: 'アルティメットパック', yen: 5000, coins: 50000, bonus: '10.00 C/円', tag: '最高効率', desc: '最上位サイバースキンや上位称号を一気に獲得できる超大容量パック！' }
         };
 
         // 5. Ad-Free Permanent Pass
@@ -1035,7 +1035,7 @@ class CoinManager {
         const isPackAdFree = isAdFree && adFreeSource.indexOf('pack') === 0;
         const adFreeBadge = isAdFree ? (isPackAdFree ? 'パック特典で有効' : '有効化済み') : '買い切りパス';
         const adFreeCard = `
-            <div class="bg-gradient-to-br from-zinc-950 to-zinc-900 border ${isAdFree ? 'border-emerald-500/80' : 'border-amber-500/80 ring-1 ring-amber-500/50'} p-3 rounded-xl flex items-center justify-between gap-2">
+            <div class="bg-zinc-950/80 border border-zinc-800 p-3 rounded-xl flex items-center justify-between gap-2">
                 <div>
                     <div class="flex items-center gap-1.5 flex-wrap">
                         <span class="font-bold text-xs text-white">広告完全非表示パス (Ad-Free Pro)</span>
@@ -1062,11 +1062,12 @@ class CoinManager {
         const packsCards = Object.values(this.PACKS).map(pack => {
             const includesAdFree = this.packIncludesAdFree(pack);
             return `
-                <div class="bg-zinc-950/80 border ${pack.id === 'premium' ? 'border-amber-500/80 ring-1 ring-amber-500/50' : 'border-zinc-800'} p-3 rounded-xl flex items-center justify-between gap-2">
+                <div class="bg-zinc-950/80 border border-zinc-800 p-3 rounded-xl flex items-center justify-between gap-2">
                     <div>
                         <div class="flex items-center gap-1.5 flex-wrap">
                             <span class="font-bold text-xs text-white">${pack.name}</span>
                             ${pack.bonus ? `<span class="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 text-[9px] font-mono font-bold">${pack.bonus}</span>` : ''}
+                            ${pack.tag ? `<span class="px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 text-[9px] font-mono font-bold">${pack.tag}</span>` : ''}
                             ${includesAdFree ? '<span class="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[9px] font-mono font-bold">＋広告非表示</span>' : ''}
                         </div>
                         <div class="text-[10px] text-zinc-400 leading-tight mt-0.5">${pack.desc}</div>
