@@ -270,13 +270,13 @@
                         </div>
                         <div class="grid grid-cols-2 gap-2" id="skin-buttons-container">
                             <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[11px] hover:border-white transition-all active:scale-95 text-zinc-200" data-skin="default">標準</button>
+                            <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[11px] hover:border-white transition-all active:scale-95 text-lime-400" data-skin="pixel">レトロ</button>
+                            <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[11px] hover:border-white transition-all active:scale-95 text-pink-400" data-skin="sakura">サクラ</button>
+                            <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[11px] hover:border-white transition-all active:scale-95 text-slate-300" data-skin="monochrome">モノトーン</button>
+                            <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[11px] hover:border-white transition-all active:scale-95 text-orange-400" data-skin="crimson">クリムゾン</button>
                             <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[11px] hover:border-white transition-all active:scale-95 text-cyan-400" data-skin="neon">ネオン</button>
                             <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[11px] hover:border-white transition-all active:scale-95 text-amber-400" data-skin="gold">ゴールド</button>
-                            <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[11px] hover:border-white transition-all active:scale-95 text-orange-400" data-skin="crimson">紅蓮</button>
-                            <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[11px] hover:border-white transition-all active:scale-95 text-pink-400" data-skin="sakura">サクラ</button>
-                            <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[11px] hover:border-white transition-all active:scale-95 text-lime-400" data-skin="pixel">レトロ</button>
                             <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[11px] hover:border-white transition-all active:scale-95 text-purple-400" data-skin="cyberpunk">サイバー</button>
-                            <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[11px] hover:border-white transition-all active:scale-95 text-slate-300" data-skin="monochrome">モノトーン</button>
                         </div>
                     </div>
 
@@ -293,8 +293,8 @@
                 </div>
             </details>
 
-            <!-- 3. デバッグモード (開発・検証用機能の集約管理) -->
-            <details class="group bg-zinc-950/80 border border-zinc-800 rounded-xl shrink-0">
+            <!-- 3. デバッグモード (開発・検証用機能の集約管理 / CONFIG.ENABLE_DEBUG_TOOLS で一括無効化) -->
+            <details id="debug-mode-section" class="group bg-zinc-950/80 border border-zinc-800 rounded-xl shrink-0">
                 <summary class="flex items-center justify-between p-2.5 cursor-pointer text-xs font-bold text-zinc-300 select-none list-none">
                     <span class="flex items-center gap-2">
                         <span class="w-2 h-2 rounded-full bg-zinc-500"></span>
@@ -950,7 +950,7 @@
     <script src="poster.js?v=20261113v24"></script>
     <script src="pro.js?v=20261113v24"></script>
     <script src="search.js?v=20261113v24"></script>
-    <script src="coins.js?v=20261114v27"></script>
+    <script src="coins.js?v=20261114v29"></script>
     <script src="admob.js?v=20261114v26"></script>
     <script src="iap.js?v=20261114v26"></script>
     <script src="stats.js?v=20261114v26"></script>
@@ -958,6 +958,6 @@
     <script src="grid.js?v=20261114v28"></script>
     <script src="outbox.js?v=20261114v26"></script>
     <!-- Main Application Logic -->
-    <script src="app.js?v=20261114v28"></script>
+    <script src="app.js?v=20261114v29"></script>
 </body>
 </html>

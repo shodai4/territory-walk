@@ -11,7 +11,10 @@ const CONFIG = {
     // 広域表示（低ズーム）時のDB取得・描画を抑制するしきい値
     REMOTE_FETCH_MIN_ZOOM: 12,
     TILE_RENDER_MIN_ZOOM: 5,
-    MAX_TILES_PER_RENDER: 1200
+    MAX_TILES_PER_RENDER: 1200,
+    // デバッグ機能（D-PAD・コイン操作・プレビュー・チーム切替等）のマスタースイッチ
+    // App Store 本番リリース時は false に切り替えてください（UIごと非表示になります）
+    ENABLE_DEBUG_TOOLS: true
 };
 
 class TerritoryWalkApp {
@@ -30,6 +33,7 @@ class TerritoryWalkApp {
         this.virtualPos = [...CONFIG.DEFAULT_CENTER];
         this.isMapVisible = true;
         this.isDebugMode = false;
+        this.debugEnabled = CONFIG.ENABLE_DEBUG_TOOLS !== false;
 
         // Background location & iOS optimization state
         this.lastProcessedLat = null;
@@ -66,6 +70,7 @@ class TerritoryWalkApp {
         this.initExportButton();
         this.initGeolocation();
         this.initLifecycleListeners();
+        this.applyDebugToolsVisibility();
         this.initDPad();
         this.initEvents();
         this.initResetCountdown();
@@ -537,8 +542,11 @@ class TerritoryWalkApp {
                     this.gridManager.redrawTiles();
                 }
                 this.showToast(`テーマを変更しました`);
+                if (this.coinManager) this.coinManager.updateSkinButtonsUI();
             });
         });
+
+        if (this.coinManager) this.coinManager.updateSkinButtonsUI();
     }
 
     cycleSkin() {
@@ -556,6 +564,7 @@ class TerritoryWalkApp {
         if (this.gridManager) {
             this.gridManager.redrawTiles();
         }
+        if (this.coinManager) this.coinManager.updateSkinButtonsUI();
     }
 
     updateCycleSkinButtonUI() {
@@ -566,7 +575,7 @@ class TerritoryWalkApp {
             default: 'SKIN: 標準',
             neon: 'SKIN: ネオン',
             gold: 'SKIN: ゴールド',
-            crimson: 'SKIN: 紅蓮',
+            crimson: 'SKIN: クリムゾン',
             sakura: 'SKIN: サクラ',
             pixel: 'SKIN: レトロ',
             cyberpunk: 'SKIN: サイバー',
@@ -1190,7 +1199,7 @@ class TerritoryWalkApp {
     }
 
     checkProAccess(actionName) {
-        if (this.isDebugMode) {
+        if (this.debugEnabled && this.isDebugMode) {
             console.log(`[Debug Mode] Pro restriction bypassed for: ${actionName}`);
             return true;
         }
@@ -1269,7 +1278,21 @@ class TerritoryWalkApp {
         this.updateDebugModeUI();
     }
 
+    /**
+     * デバッグ機能のマスタースイッチ。
+     * CONFIG.ENABLE_DEBUG_TOOLS = false で、MENUのデバッグ欄・D-PAD・全デバッグ操作が
+     * UIから消え、各ハンドラも早期リターンで無効化される。
+     */
+    applyDebugToolsVisibility() {
+        const enabled = this.debugEnabled !== false;
+        const section = document.getElementById('debug-mode-section');
+        if (section) section.classList.toggle('hidden', !enabled);
+        const dpad = document.getElementById('dpad-container');
+        if (dpad && !enabled) dpad.classList.add('hidden');
+    }
+
     toggleDebugMode() {
+        if (!this.debugEnabled) return;
         this.isDebugMode = !this.isDebugMode;
         this.updateDebugModeUI();
     }
@@ -1277,6 +1300,11 @@ class TerritoryWalkApp {
     updateDebugModeUI() {
         if (!this.btnToggleDebug || !this.debugToggleDot || !this.debugToggleText || !this.dpadContainer) return;
 
+        if (!this.debugEnabled) {
+            this.isDebugMode = false;
+            this.dpadContainer.classList.add('hidden');
+            return;
+        }
         if (this.isDebugMode) {
             this.debugToggleDot.className = 'w-2 h-2 rounded-full bg-amber-400';
             this.debugToggleText.textContent = 'DEBUG: ON';
@@ -1663,6 +1691,12 @@ class TerritoryWalkApp {
     }
 
     initDPad() {
+        // デバッグ無効時は仮想十字キー自体を出さず、操作イベントも縫らない
+        if (!this.debugEnabled) {
+            const dpad = document.getElementById('dpad-container');
+            if (dpad) dpad.classList.add('hidden');
+            return;
+        }
         const stepLat = 0.0009; // 1 mesh north/south
         const stepLng = this.gridManager ? this.gridManager.LNG_GRID : 0.00109868; // 1 mesh east/west
 
@@ -1768,6 +1802,7 @@ class TerritoryWalkApp {
         const btnDebugResult = document.getElementById('btn-debug-preview-result');
         if (btnDebugResult) {
             btnDebugResult.addEventListener('click', () => {
+                if (!this.debugEnabled) return;
                 if (this.menuModal) this.menuModal.classList.add('hidden');
                 this.showWeeklyResultModal(true);
             });
@@ -1776,6 +1811,7 @@ class TerritoryWalkApp {
         const btnDebugTeam = document.getElementById('btn-debug-preview-team');
         if (btnDebugTeam) {
             btnDebugTeam.addEventListener('click', () => {
+                if (!this.debugEnabled) return;
                 if (this.menuModal) this.menuModal.classList.add('hidden');
                 this.showTeamResetPreviewModal();
             });
@@ -1798,6 +1834,7 @@ class TerritoryWalkApp {
         const btnDebugResetCoins = document.getElementById('btn-debug-reset-coins');
         if (btnDebugResetCoins) {
             btnDebugResetCoins.addEventListener('click', () => {
+                if (!this.debugEnabled) return;
                 if (this.coinManager) {
                     this.coinManager.coins = 0;
                     localStorage.setItem(this.coinManager.STORAGE_KEY_COINS, '0');
@@ -1811,6 +1848,7 @@ class TerritoryWalkApp {
         const btnDebugAdd1000 = document.getElementById('btn-debug-add-1000-coins');
         if (btnDebugAdd1000) {
             btnDebugAdd1000.addEventListener('click', () => {
+                if (!this.debugEnabled) return;
                 if (this.coinManager) {
                     this.coinManager.addCoins(1000, 'デバッグ付与');
                     this.showToast('【デバッグ】+1000 C を付与しました');
@@ -1822,6 +1860,7 @@ class TerritoryWalkApp {
         const btnDebugSetBlack = document.getElementById('btn-debug-set-black');
         if (btnDebugSetBlack) {
             btnDebugSetBlack.addEventListener('click', () => {
+                if (!this.debugEnabled) return;
                 this.currentTeam = 'black';
                 localStorage.setItem('player_team', 'black');
                 this.applyTheme();
@@ -1835,6 +1874,7 @@ class TerritoryWalkApp {
         const btnDebugSetWhite = document.getElementById('btn-debug-set-white');
         if (btnDebugSetWhite) {
             btnDebugSetWhite.addEventListener('click', () => {
+                if (!this.debugEnabled) return;
                 this.currentTeam = 'white';
                 localStorage.setItem('player_team', 'white');
                 this.applyTheme();
@@ -1849,6 +1889,7 @@ class TerritoryWalkApp {
         const btnDebugResetPurchases = document.getElementById('btn-debug-reset-purchases');
         if (btnDebugResetPurchases) {
             btnDebugResetPurchases.addEventListener('click', () => {
+                if (!this.debugEnabled) return;
                 if (this.coinManager && typeof this.coinManager.resetPurchasedItems === 'function') {
                     this.coinManager.resetPurchasedItems();
                 }

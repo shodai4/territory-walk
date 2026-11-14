@@ -982,6 +982,7 @@ class CoinManager {
         this.renderSkinsPanel();
         this.renderTitlesPanel();
         this.renderPerksPanel();
+        this.updateSkinButtonsUI();
     }
 
     renderEarnPanel() {
@@ -1128,6 +1129,28 @@ class CoinManager {
         }
     }
 
+    /**
+     * MENUのマステーマ早見ボタンに状態（選択中／所持／未購入）を反映する
+     */
+    updateSkinButtonsUI() {
+        const current = document.body.dataset.skin || 'default';
+        document.querySelectorAll('.skin-btn').forEach(btn => {
+            const skin = this.SKINS[btn.dataset.skin];
+            if (!skin) return;
+            const owned = this.isSkinUnlocked(skin.id);
+            const selected = current === skin.id;
+            const base = 'skin-btn border p-2 rounded-lg text-[11px] transition-all active:scale-95 text-center truncate ';
+            const state = selected
+                ? 'border-emerald-400 bg-emerald-500/10 text-white font-bold'
+                : owned ? 'border-zinc-600 bg-zinc-900 text-zinc-200'
+                    : 'border-zinc-800 bg-zinc-950 text-zinc-500';
+            btn.className = base + state;
+            btn.textContent = (!owned && !selected)
+                ? `${skin.name}・${skin.cost.toLocaleString()}C`
+                : skin.name;
+        });
+    }
+
     renderSkinsPanel() {
         const container = document.getElementById('container-shop-skins');
         if (!container) return;
@@ -1203,6 +1226,7 @@ class CoinManager {
                 if (this.app.gridManager) this.app.gridManager.redrawTiles();
                 this.app.showToast(`テーマ適用: ${this.SKINS[s].name}`);
                 this.renderSkinsPanel();
+                this.updateSkinButtonsUI();
             });
         });
 
