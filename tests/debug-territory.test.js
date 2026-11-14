@@ -105,8 +105,8 @@ function createApp(overrides = {}) {
         syncQueue: queue,
         supabaseManager: supabase,
         currentMeshId: 'tile_102_200',
-        lastProcessedLat: 34.6,
-        lastProcessedLng: 135.6,
+        lastProcessedLat: 35.658,
+        lastProcessedLng: 139.7016,
         scoreUpdates: 0,
         updateScoreUI() {
             this.scoreUpdates += 1;
@@ -145,7 +145,7 @@ test('遮断: DEBUG: OFF のあいだは D-Pad の仮想移動を無効とする
  * 2. D-Pad 1歩の座標計算（グリッド1マス分＝index が必ず1つ進む）
  * ------------------------------------------------------------------ */
 test('D-Pad: 1歩でマスのindexがちょうど1つ進み、緯度経度は5桁に丸まる', () => {
-    const start = [34.6662, 135.6276];
+    const start = [35.6580, 139.7016];
 
     [[LAT_GRID, 0], [-LAT_GRID, 0], [0, LNG_GRID], [0, -LNG_GRID]].forEach(([dLat, dLng]) => {
         const next = DebugTools.stepPosition(start, dLat, dLng);
@@ -168,7 +168,7 @@ test('D-Pad: 1歩でマスのindexがちょうど1つ進み、緯度経度は5�
 });
 
 test('D-Pad: 4歩進めても1歩ずつ別マスを塗れる（丸め誤差で同じマスに留まらない）', () => {
-    let pos = [34.6662, 135.6276];
+    let pos = [35.6580, 139.7016];
     const meshes = new Set();
     const meshId = (p) => `${Math.floor(p[0] / LAT_GRID)}_${Math.floor(p[1] / LNG_GRID)}`;
     meshes.add(meshId(pos));

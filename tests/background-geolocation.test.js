@@ -116,7 +116,7 @@ function createApp(loaded, overrides = {}) {
         backgroundWatcherId: null,
         backgroundWatcherStarted: false,
         nativeWatchId: null,
-        virtualPos: [34.6662, 135.6276],
+        virtualPos: [35.6580, 139.7016],
         lastRealPosition: null,
         lastProcessedLat: null,
         lastProcessedLng: null,
@@ -221,11 +221,11 @@ test('ネイティブ: addWatcher でバックグラウンド測位を開始し�
     assert.ok(plugin.options.distanceFilter > 0 && plugin.options.distanceFilter < 100, '100mマスを取りこぼさない距離');
 
     // プラグイン形式（coords 無し）の位置更新が、通常の測位処理に乗る
-    plugin.callback({ latitude: 34.666212, longitude: 135.627618, accuracy: 8, time: 1760000000000 }, undefined);
+    plugin.callback({ latitude: 35.658212, longitude: 139.701618, accuracy: 8, time: 1760000000000 }, undefined);
     await tick();
 
-    assert.deepEqual(plain(app.claims), [[34.66621, 135.62762]], '5桁丸めで processMeshAndClaim へ渡す');
-    assert.deepEqual(plain(app.lastRealPosition), [34.66621, 135.62762]);
+    assert.deepEqual(plain(app.claims), [[35.65821, 139.70162]], '5桁丸めで processMeshAndClaim へ渡す');
+    assert.deepEqual(plain(app.lastRealPosition), [35.65821, 139.70162]);
     assert.equal(app.markerUpdates, 1, '前景ならマーカーも更新する');
 });
 
@@ -270,7 +270,7 @@ test('ネイティブ: プラグインでは画面消灯中でも保存・同期
 
     app.initGeolocation();
     await tick();
-    plugin.callback({ latitude: 34.667, longitude: 135.628, accuracy: 6 });
+    plugin.callback({ latitude: 35.6583, longitude: 139.7021, accuracy: 6 });
     await tick();
 
     assert.equal(app.claims.length, 1, 'バックグラウンドでも陣地処理は止めない');
@@ -495,15 +495,15 @@ test('D-Pad: 仮想散歩中の実GPS更新は仮想座標・塗りを上書き�
         }
     });
     const app = createApp(loaded, { isDebugMode: true });
-    app.virtualPos = [34.6700, 135.6300];
+    app.virtualPos = [35.6600, 139.7050];
 
     app.initGeolocation();
     await tick();
-    plugin.callback({ latitude: 34.6662, longitude: 135.6276, accuracy: 9 });
+    plugin.callback({ latitude: 35.6580, longitude: 139.7016, accuracy: 9 });
     await tick();
 
-    assert.deepEqual(plain(app.virtualPos), [34.6700, 135.6300], '仮想散歩の座標を守る');
-    assert.deepEqual(plain(app.lastRealPosition), [34.6662, 135.6276], '実GPSはデバッグ終了時の戻り先として保持');
+    assert.deepEqual(plain(app.virtualPos), [35.6600, 139.7050], '仮想散歩の座標を守る');
+    assert.deepEqual(plain(app.lastRealPosition), [35.6580, 139.7016], '実GPSはデバッグ終了時の戻り先として保持');
     assert.equal(app.claims.length, 0, '実GPSでマスを塗らない');
     assert.ok(app.gpsStatuses.includes('GPS: 仮想散歩中'));
 });
