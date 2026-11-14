@@ -491,3 +491,25 @@ button, a, input, select, .btn-action {
     word-break: normal;
     letter-spacing: 0.01em;
 }
+
+/* 位置情報拒否バナー：ヘッダー直下に控えめに固定表示
+   （モーダル z-[2000]・トースト z-[1500] より背面、コントロール z-[1000] より前面） */
+#location-permission-banner {
+    position: fixed;
+    left: 50%;
+    top: 168px; /* JSがヘッダー実測で上書き */
+    transform: translateX(-50%);
+    width: calc(100% - 1.5rem);
+    max-width: 25rem;
+    z-index: 1400;
+    pointer-events: none;
+    box-sizing: border-box;
+}
+
+#location-permission-banner.hidden {
+    display: none !important;
+}
+
+#location-permission-banner > div {
+    pointer-events: auto;
+}

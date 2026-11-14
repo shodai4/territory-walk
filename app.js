@@ -283,8 +283,22 @@ class TerritoryWalkApp {
                 const rect = header.getBoundingClientRect();
                 top = Math.round(rect.bottom + 12);
             }
+            // 位置情報拒否バナーが表示中なら、その下にトーストを回す（重なり防止）
+            const banner = document.getElementById('location-permission-banner');
+            if (banner && !banner.classList.contains('hidden')) {
+                const bannerRect = banner.getBoundingClientRect();
+                if (bannerRect && bannerRect.height > 0) {
+                    top = Math.max(top, Math.round(bannerRect.bottom + 10));
+                }
+            }
         } catch (e) { /* fallback */ }
         container.style.top = `${Math.max(top, 96)}px`;
+    }
+
+    /** バナー表示・非表示の切替時にトースト位置を追従させる */
+    repositionToastContainer() {
+        const container = document.getElementById('toast-container');
+        if (container) this.positionToastContainer(container);
     }
 
     flushToastQueue() {
@@ -1126,6 +1140,10 @@ class TerritoryWalkApp {
             document.getElementById('result-winner-subtitle').textContent = `${weekToShow} の対戦データはありません`;
             document.getElementById('result-score-black').textContent = '-';
             document.getElementById('result-score-white').textContent = '-';
+            const blackTiles = document.getElementById('result-black-tiles');
+            const whiteTiles = document.getElementById('result-white-tiles');
+            if (blackTiles) blackTiles.textContent = '-';
+            if (whiteTiles) whiteTiles.textContent = '-';
             if (barBlack) barBlack.style.width = '50%';
             if (barWhite) barWhite.style.width = '50%';
             document.getElementById('result-my-team').textContent = this.currentTeam === 'black' ? 'Black' : 'White';
@@ -1148,8 +1166,14 @@ class TerritoryWalkApp {
             banner.innerHTML = '<span class="text-amber-400 font-bold">DRAW (引き分け)</span>';
         }
 
-        document.getElementById('result-score-black').innerHTML = `<span class="text-white font-bold">${result.blackPct}%</span> <span class="text-[10px] text-zinc-400 font-normal">(${result.blackTotal}マス)</span>`;
-        document.getElementById('result-score-white').innerHTML = `<span class="text-[10px] text-zinc-400 font-normal">(${result.whiteTotal}マス)</span> <span class="text-white font-bold">${result.whitePct}%</span>`;
+        document.getElementById('result-score-black').innerHTML = `<span class="text-white font-bold">${result.blackPct}%</span>`;
+        document.getElementById('result-score-white').innerHTML = `<span class="text-white font-bold">${result.whitePct}%</span>`;
+
+        // 獲得総マス数は勢力ゲージではなく下の詳細テーブルに表示（文字溢れ防止）
+        const blackTiles = document.getElementById('result-black-tiles');
+        const whiteTiles = document.getElementById('result-white-tiles');
+        if (blackTiles) blackTiles.textContent = `${Number(result.blackTotal || 0).toLocaleString()} マス`;
+        if (whiteTiles) whiteTiles.textContent = `${Number(result.whiteTotal || 0).toLocaleString()} マス`;
 
         // 対戦比率ゲージバーの更新（アニメーション伸縮）
         if (barBlack) barBlack.style.width = `${Math.max(5, Math.min(95, result.blackPct))}%`;
@@ -1398,6 +1422,14 @@ class TerritoryWalkApp {
     }
 
     initGeolocation() {
+        // 位置情報拒否時の常設案内バナー（×で一時非表示／許可されたら自動で消える）
+        if (typeof LocationPermissionBanner !== 'undefined') {
+            this.locationBanner = new LocationPermissionBanner(document, {
+                onChange: () => this.repositionToastContainer(),
+                retryHandler: () => this.recheckLocationPermission()
+            });
+        }
+
         if (!('geolocation' in navigator)) {
             this.updateGPSStatus('GPS: 非対応', 'bg-red-500', 'text-red-400');
             return;
@@ -1405,11 +1437,19 @@ class TerritoryWalkApp {
 
         this.updateGPSStatus('GPS: 測位中...', 'bg-amber-400', 'text-amber-400');
 
+        // 起動時点ですでに拒否済みなら、最初のエラーを待たずにバナーを出す
+        if (this.locationBanner) this.locationBanner.refreshPermissionState();
+
         const options = {
             enableHighAccuracy: true,
             timeout: 10000,
             maximumAge: 0
         };
+
+        // ネイティブ（Capacitor Geolocation）が使える場合はそちらを優先し、
+        // 権限拒否は同じ handlePositionError で一元処理する
+        const nativeGeo = this.getNativeGeolocation();
+        if (nativeGeo && this.startNativeGeolocation(nativeGeo, options)) return;
 
         navigator.geolocation.getCurrentPosition(
             (position) => this.handlePositionUpdate(position, true),
@@ -1422,6 +1462,54 @@ class TerritoryWalkApp {
             (error) => this.handlePositionError(error),
             options
         );
+    }
+
+    /** Capacitor Geolocation プラグインがネイティブで利用可能か（Webでは null） */
+    getNativeGeolocation() {
+        try {
+            const cap = window.Capacitor;
+            if (!cap || !cap.Plugins || !cap.Plugins.Geolocation) return null;
+            if (typeof cap.isNativePlatform === 'function' && !cap.isNativePlatform()) return null;
+            return cap.Plugins.Geolocation;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    startNativeGeolocation(plugin, options) {
+        try {
+            Promise.resolve(plugin.getCurrentPosition(options))
+                .then((position) => this.handlePositionUpdate(position, true))
+                .catch((error) => this.handlePositionError(error));
+
+            const watching = plugin.watchPosition(options, (position, error) => {
+                if (error) {
+                    this.handlePositionError(error);
+                    return;
+                }
+                if (position) this.handlePositionUpdate(position, false);
+            });
+            if (watching && typeof watching.then === 'function') {
+                watching
+                    .then((id) => { this.nativeWatchId = id; })
+                    .catch((error) => this.handlePositionError(error));
+            }
+            return true;
+        } catch (e) {
+            console.warn('Capacitor Geolocation unavailable, falling back to Web API:', e);
+            return false;
+        }
+    }
+
+    /** バナーの「再確認」：拒否が解消されていればバナーが自動で消える */
+    recheckLocationPermission() {
+        if (!('geolocation' in navigator)) return;
+        navigator.geolocation.getCurrentPosition(
+            (position) => this.handlePositionUpdate(position, false),
+            (error) => this.handlePositionError(error),
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        );
+        if (this.locationBanner) this.locationBanner.refreshPermissionState();
     }
 
     // --- Lifecycle & Background State Handler for iOS / Screen Sleep ---
@@ -1440,6 +1528,8 @@ class TerritoryWalkApp {
                         this.gridManager.fetchAndRenderTilesInBounds();
                     }
                 }
+                // 設定アプリで位置情報をオンにして戻ってきた場合にバナーを自動で消す
+                if (this.locationBanner) this.locationBanner.refreshPermissionState();
                 // フォアグラウンド復帰時に未送信分をまとめて同期
                 if (this.syncQueue) this.syncQueue.flush('foreground');
             }
@@ -1482,6 +1572,9 @@ class TerritoryWalkApp {
     }
 
     handlePositionUpdate(position, isFirst = false) {
+        // 位置情報が取得できた＝許可されている。拒否バナーは自動で消す
+        if (this.locationBanner) this.locationBanner.handlePermissionGranted();
+
         const rawLat = position.coords.latitude;
         const rawLng = position.coords.longitude;
         const latitude = parseFloat(rawLat.toFixed(5));
@@ -1518,15 +1611,34 @@ class TerritoryWalkApp {
 
     handlePositionError(error) {
         console.warn('Geolocation error:', error);
-        switch (error.code) {
-            case error.PERMISSION_DENIED:
-                this.updateGPSStatus('GPS: 拒否', 'bg-red-500', 'text-red-400');
+
+        // Web Geolocation(code=1) と Capacitor Geolocation の双方の拒否を拾う
+        const isDenied = (typeof LocationPermissionBanner !== 'undefined'
+            && LocationPermissionBanner.isPermissionDeniedError(error))
+            || (error && (error.code === 1 || error.code === '1'));
+
+        if (isDenied) {
+            this.updateGPSStatus('GPS: 拒否', 'bg-red-500', 'text-red-400');
+            if (!this.locationBanner) {
                 this.showToast('位置情報の利用が許可されていません（端末の設定をご確認ください）');
-                break;
-            case error.POSITION_UNAVAILABLE:
+                return;
+            }
+            const becameVisible = this.locationBanner.show();
+            // 常設バナーが出ている間はトーストを重ねない（×で閉じた後も静かに保つ）
+            if (becameVisible) {
+                this.showToast('位置情報の利用が許可されていません（端末の設定をご確認ください）');
+            }
+            return;
+        }
+
+        const code = error ? error.code : undefined;
+        switch (code) {
+            case 2:
+            case 'POSITION_UNAVAILABLE':
                 this.updateGPSStatus('GPS: 圏外', 'bg-amber-500', 'text-amber-400');
                 break;
-            case error.TIMEOUT:
+            case 3:
+            case 'TIMEOUT':
                 this.updateGPSStatus('GPS: タイムアウト', 'bg-amber-500', 'text-amber-400');
                 break;
             default:

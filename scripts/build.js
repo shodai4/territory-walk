@@ -15,6 +15,7 @@ const ASSETS_TO_COPY = [
     'terms.html',
     'support.html',
     'style.css',
+    'permission.js',
     'app.js',
     'admob.js',
     'iap.js',
