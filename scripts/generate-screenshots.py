@@ -262,7 +262,7 @@ def compose_season_screen(screen_img, inner_box):
         ("今週のあなたの開拓マス", "148 マス"),
         ("逆転奪還マス", "32 マス"),
         ("週間ランキング", "第 4 位"),
-        ("シーズン勝利ボーナス", "+1,000 COIN")
+        ("シーズン勝敗判定", "VICTORY")
     ]
     for label, val in stats:
         draw.rounded_rectangle([(mx + 30, sy), (mx + mw - 30, sy + 70)], radius=14, fill=(24, 24, 27), outline=(39, 39, 42), width=1)

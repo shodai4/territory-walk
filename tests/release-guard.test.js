@@ -229,6 +229,18 @@ test('申請資料: 年齢制限の記載が本文全体で矛盾していない
     assert.doesNotMatch(metadata, /12歳以上推奨/, '「12歳以上推奨」と「すべて いいえ（4+）」が併記されていた');
 });
 
+test('申請資料: 実装していない特典を説明文に書いていない', () => {
+    const metadata = read(path.join('docs', 'app-store-metadata.md'));
+    const guide = read(path.join('docs', 'app-store-release-guide.md'));
+    const code = read('stats.js') + read('app.js') + read('coins.js');
+
+    // シーズン勝利のコインボーナスは未実装（実装されたらこのガードを外す）
+    if (!/シーズン勝利ボーナス|winnerBonus/.test(code)) {
+        assert.doesNotMatch(metadata, /シーズン勝利ボーナス/, '説明文が未実装のボーナスを約束している');
+        assert.doesNotMatch(guide, /勝利陣営にはボーナスコインが付与/, '説明文が未実装のボーナスを約束している');
+    }
+});
+
 test('申請資料: 最低対応OS（iOS 15.0）が申請資料とサポートページで一致している', () => {
     const { MINIMUM_IOS_VERSION } = require(path.join(ROOT, 'scripts', 'configure-ios.js'));
     const support = read('support.html');
