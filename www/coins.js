@@ -59,36 +59,36 @@ class CoinManager {
         // 2. Exclusive Shop Titles Catalog (15 Tiers: 1,000 - 50,000 COIN)
         this.TITLES = {
             '深夜の徘徊者': { name: '深夜の徘徊者', cost: 1000, desc: '月明かりの街を静寂に歩く者' },
-            '路地裏の案内人': { name: '路地裏の案内人', cost: 1300, desc: '大通りを外れ、未知の小径を行く者' },
-            '朝露のウォーカー': { name: '朝露のウォーカー', cost: 1700, desc: '早朝の澄んだ空気を胸に一歩を踏み出す者' },
+            '路地裏の案内人': { name: '路地裏の案内人', cost: 1300, desc: '大通りを外れ未知の小径を行く者' },
+            '朝露のウォーカー': { name: '朝露のウォーカー', cost: 1700, desc: '早朝の澄んだ空気で歩き出す者' },
             '地図の魔術師': { name: '地図の魔術師', cost: 2200, desc: '幾何学の境界を操る達人' },
-            'コンパスの導き手': { name: 'コンパスの導き手', cost: 2800, desc: '羅針盤の示すままに未知のエリアへ踏み出す者' },
+            'コンパスの導き手': { name: 'コンパスの導き手', cost: 2800, desc: '羅針盤のままに未知の街へ歩く者' },
             '境界線の支配者': { name: '境界線の支配者', cost: 3500, desc: '隣り合う陣地の狭間を巧みに制する者' },
             'ストリートファイター': { name: 'ストリートファイター', cost: 4300, desc: '幾多の奪還戦を制した猛者' },
-            '市街地の戦術家': { name: '市街地の戦術家', cost: 5200, desc: '街の構造を読み解き効率よく陣地を広げる者' },
+            '市街地の戦術家': { name: '市街地の戦術家', cost: 5200, desc: '街の構造を読み効率よく広げる者' },
             '戦術の立案者': { name: '戦術の立案者', cost: 6500, desc: '盤面全体を見渡し最適解を導く頭脳' },
             'コイン長者': { name: 'コイン長者', cost: 8000, desc: '歩きとリワードで莫大な富を築いた者' },
-            '孤高の開拓王': { name: '孤高の開拓王', cost: 11000, desc: '誰にも頼らず己の足跡だけで帝国を築く者' },
+            '孤高の開拓王': { name: '孤高の開拓王', cost: 11000, desc: '己の足跡だけで帝国を築く者' },
             'ナスカの末裔': { name: 'ナスカの末裔', cost: 15000, desc: '大地に壮大な紋様を刻む者' },
-            '天駆ける旅人': { name: '天駆ける旅人', cost: 22000, desc: '果てなき地平を追い求める永遠の冒険者' },
+            '天駆ける旅人': { name: '天駆ける旅人', cost: 22000, desc: '果てなき地平を追う永遠の冒険者' },
             'ウォーキングレジェンド': { name: 'ウォーキングレジェンド', cost: 35000, desc: '歩行陣取りの頂点を極めし伝説' },
             'テラ・コンクエスター': { name: 'テラ・コンクエスター', cost: 9999999999, desc: 'すべての大地を塗り替える絶対的覇者（最上位）' }
         };
 
         // 3. Special Perks Catalog (Rebalanced Price Hierarchy)
         this.PERKS = {
-            'poster_ticket': { id: 'poster_ticket', name: '週間ポスター書き出し (1回分)', cost: 500, desc: '今週の陣地をA4アートポスターPNG保存' },
-            'pin_neon': { id: 'pin_neon', name: '現在地ピン: シアン光彩パルス', cost: 5000, desc: '現在地マーカーに強いネオン発光エフェクト' },
-            'pin_gold': { id: 'pin_gold', name: '現在地ピン: 黄金オーラ', cost: 15000, desc: '現在地マーカーが黄金の輝きを放つ' },
-            'poster_permanent': { id: 'poster_permanent', name: 'ポスター書き出し無制限パス', cost: 30000, desc: 'いつでも何度でもポスター保存が可能に' }
+            'poster_ticket': { id: 'poster_ticket', name: '週間ポスター書き出し (1回分)', cost: 500, desc: '今週の陣地をA4ポスターで保存' },
+            'pin_neon': { id: 'pin_neon', name: '現在地ピン: シアン光彩パルス', cost: 5000, desc: '現在地ピンにネオン光彩' },
+            'pin_gold': { id: 'pin_gold', name: '現在地ピン: 黄金オーラ', cost: 15000, desc: '現在地ピンが黄金に輝く' },
+            'poster_permanent': { id: 'poster_permanent', name: 'ポスター書き出し無制限パス', cost: 30000, desc: 'ポスター保存がいつでも無制限' }
         };
 
         // 4. In-App Purchase Coin Packs Catalog (5,000 Yen = 50,000 COIN Standard)
         this.PACKS = {
-            'beginner': { id: 'beginner', name: 'ビギナーパック', yen: 120, coins: 1000, bonus: '8.33 C/円', tag: '', desc: '入門スキンや入門称号を即座に購入可能' },
-            'standard': { id: 'standard', name: 'スタンダードパック', yen: 500, coins: 4500, bonus: '9.00 C/円', tag: '', desc: 'サクラ・モノトーンスキンや中級称号を購入可能' },
-            'premium': { id: 'premium', name: 'プレミアムパック', yen: 1500, coins: 14000, bonus: '9.33 C/円', tag: '1番人気', desc: 'ネオンスキンや上位称号を一気に獲得可能' },
-            'ultimate': { id: 'ultimate', name: 'アルティメットパック', yen: 5000, coins: 50000, bonus: '10.00 C/円', tag: '最高効率', desc: '最上位サイバースキンや上位称号を一気に獲得できる超大容量パック！' }
+            'beginner': { id: 'beginner', name: 'ビギナーパック', yen: 120, coins: 1000, bonus: '8.33 コイン/円', tag: '', desc: '入門スキンや入門称号をすぐに購入' },
+            'standard': { id: 'standard', name: 'スタンダードパック', yen: 500, coins: 4500, bonus: '9.00 コイン/円', tag: '', desc: 'サクラ・モノトーンと中級称号向け' },
+            'premium': { id: 'premium', name: 'プレミアムパック', yen: 1500, coins: 14000, bonus: '9.33 コイン/円', tag: '1番人気', desc: 'ネオンスキンや上位称号を一気に' },
+            'ultimate': { id: 'ultimate', name: 'アルティメットパック', yen: 5000, coins: 50000, bonus: '10.00 コイン/円', tag: '最高効率', desc: '最上位サイバーと上位称号を一気に獲得できる超大容量パック！' }
         };
 
         // 5. Ad-Free Permanent Pass
@@ -231,7 +231,7 @@ class CoinManager {
                 ? '<span class="px-1 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[8px] font-bold">選択中</span>'
                 : owned
                     ? '<span class="px-1 py-0.5 rounded bg-zinc-700/60 text-zinc-300 text-[8px] font-bold">所持</span>'
-                    : `<span class="px-1 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[8px] font-bold">${theme.cost.toLocaleString()} C</span>`;
+                    : `<span class="px-1 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[8px] font-bold">${theme.cost.toLocaleString()} COIN</span>`;
             const swatchStyle = theme.id === 'none'
                 ? 'background: repeating-linear-gradient(45deg, #18181b, #18181b 3px, #3f3f46 3px, #3f3f46 6px)'
                 : `background: ${theme.swatch}`;
@@ -619,17 +619,17 @@ class CoinManager {
         if (todayCount >= 50) {
             tier = 4;
             bonusCoins = 30;
-            tierName = '歩行レジェンド (+30C)';
+            tierName = '歩行レジェンド (+30 COIN)';
             nextTarget = null;
         } else if (todayCount >= 30) {
             tier = 3;
             bonusCoins = 20;
-            tierName = '散歩マスター (+20C)';
+            tierName = '散歩マスター (+20 COIN)';
             nextTarget = 50;
         } else if (todayCount >= 10) {
             tier = 2;
             bonusCoins = 10;
-            tierName = '歩行ブースト (+10C)';
+            tierName = '歩行ブースト (+10 COIN)';
             nextTarget = 30;
         }
 
@@ -683,7 +683,7 @@ class CoinManager {
 
         if (this.app && this.app.showToast) {
             if (isComeback) {
-                const sub = stepBonus > 0 ? `劣勢2倍 (+40C) ＋ 歩行ブースト (+${stepBonus}C)` : '獲得コイン2倍 (+40 COIN)';
+                const sub = stepBonus > 0 ? `劣勢2倍 (+40 COIN) ＋ 歩行ブースト (+${stepBonus} COIN)` : '獲得コイン2倍 (+40 COIN)';
                 this.app.showToast('劣勢逆転ボーナス発動！', sub);
             } else if (stepBonus > 0) {
                 this.app.showToast(
@@ -1041,7 +1041,7 @@ class CoinManager {
                         <span class="font-bold text-xs text-white">広告完全非表示パス (Ad-Free Pro)</span>
                         <span class="px-1.5 py-0.5 rounded ${isAdFree ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'} text-[9px] font-mono font-bold">${adFreeBadge}</span>
                     </div>
-                    <div class="text-[10px] text-zinc-400 leading-tight mt-0.5 break-keep">画面下部バナー広告を完全消去 ＆ 動画リワード待ち時間なし即時受取</div>
+                    <div class="shop-desc text-[10px] text-zinc-400 leading-tight mt-0.5">画面下部バナー広告を完全消去 ＆ 動画リワード待ち受け不要</div>
                     <div class="text-[9px] text-emerald-400/80 leading-tight mt-0.5">スタンダードパック（¥500）以上の購入でも自動付帯</div>
                     <div class="text-amber-400 font-mono text-xs font-bold mt-1">永久Ad-Free特典</div>
                 </div>
@@ -1070,7 +1070,7 @@ class CoinManager {
                             ${pack.tag ? `<span class="px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 text-[9px] font-mono font-bold">${pack.tag}</span>` : ''}
                             ${includesAdFree ? '<span class="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[9px] font-mono font-bold">＋広告非表示</span>' : ''}
                         </div>
-                        <div class="text-[10px] text-zinc-400 leading-tight mt-0.5">${pack.desc}</div>
+                        <div class="shop-desc text-[10px] text-zinc-400 leading-tight mt-0.5">${pack.desc}</div>
                         ${includesAdFree ? '<div class="text-[9px] text-emerald-400/80 leading-tight mt-0.5">Ad-Freeパス（単体¥480）と動画スキップ込み</div>' : ''}
                         <div class="text-amber-400 font-mono text-xs font-bold mt-1">+${pack.coins.toLocaleString()} COIN</div>
                     </div>
@@ -1147,7 +1147,7 @@ class CoinManager {
                     : 'border-zinc-800 bg-zinc-950 text-zinc-500';
             btn.className = base + state;
             btn.textContent = (!owned && !selected)
-                ? `${skin.name}・${skin.cost.toLocaleString()}C`
+                ? `${skin.name}・${skin.cost.toLocaleString()} COIN`
                 : skin.name;
         });
     }
@@ -1208,7 +1208,7 @@ class CoinManager {
                             <span class="font-bold text-xs ${skin.class} truncate">${skin.name}</span>
                             ${badge}
                         </div>
-                        <div class="text-[10px] text-zinc-400 leading-tight mt-0.5 line-clamp-2">${skin.desc}</div>
+                        <div class="shop-desc text-[10px] text-zinc-400 leading-tight mt-0.5 line-clamp-2">${skin.desc}</div>
                     </div>
                     <div class="shrink-0">
                         ${actionButton}
@@ -1268,7 +1268,7 @@ class CoinManager {
                 <div class="bg-zinc-950/80 border border-zinc-800 p-2.5 rounded-xl flex items-center justify-between gap-2">
                     <div class="min-w-0 flex-1">
                         <div class="font-bold text-xs text-amber-300 font-mono truncate">[${title.name}]</div>
-                        <div class="text-[10px] text-zinc-400 leading-tight mt-0.5 line-clamp-2">${title.desc}</div>
+                        <div class="shop-desc text-[10px] text-zinc-400 leading-tight mt-0.5 line-clamp-2">${title.desc}</div>
                     </div>
                     <div class="shrink-0">
                         ${actionButton}
@@ -1311,7 +1311,7 @@ class CoinManager {
                 actionButton = `
                     <div class="flex items-center gap-1.5">
                         <span class="text-[10px] font-mono text-zinc-400">所持: ${tickets}枚</span>
-                        <button class="btn-buy-perk px-2 py-1 rounded bg-amber-600 hover:bg-amber-500 text-white text-[10px] font-bold font-mono transition-all active:scale-95" data-perk="${perk.id}">購入 (${perk.cost}C)</button>
+                        <button class="btn-buy-perk px-2 py-1 rounded bg-amber-600 hover:bg-amber-500 text-white text-[10px] font-bold font-mono transition-all active:scale-95" data-perk="${perk.id}">${perk.cost.toLocaleString()} COIN</button>
                     </div>
                 `;
             } else if (perk.id === 'poster_permanent') {

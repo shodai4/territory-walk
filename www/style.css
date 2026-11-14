@@ -483,6 +483,11 @@ button, a, input, select, .btn-action {
     font-variant-numeric: tabular-nums;
 }
 
-
-
-
+/* SHOP内の説明文・注意書き：末尾1〜2文字だけが次行に落ちる不自然な折り返しを防ぐ */
+.shop-desc {
+    text-wrap: pretty;
+    line-break: strict;
+    overflow-wrap: break-word;
+    word-break: normal;
+    letter-spacing: 0.01em;
+}
