@@ -17,11 +17,29 @@ const PLIST_PATH = process.env.IOS_PLIST_PATH
     : path.join(ROOT_DIR, 'ios', 'App', 'App', 'Info.plist');
 
 /**
+ * ホーム画面（アイコンの下）に表示するアプリ名。
+ * Xcode の PRODUCT_NAME（英語）とは別に、この日本語表示名を Info.plist に固定する。
+ */
+const APP_DISPLAY_NAME = 'テリトリーウォーク';
+
+/**
  * Info.plist に入れるべきキー一覧。
  *   mode: 'value'    … 値まで一致させる（違えば書き換える）
  *   mode: 'presence' … キーの存在だけ確認する（ユーザー側の追記を壊さない）
  */
 const CONFIG_ENTRIES = [
+    {
+        // ホーム画面のアイコン下に出るアプリ名（値が違えば書き換える）
+        key: 'CFBundleDisplayName',
+        value: `<string>${APP_DISPLAY_NAME}</string>`,
+        mode: 'value'
+    },
+    {
+        // 内部表示名。16文字以内が推奨のため、同じ日本語名で揃える
+        key: 'CFBundleName',
+        value: `<string>${APP_DISPLAY_NAME}</string>`,
+        mode: 'value'
+    },
     {
         key: 'NSLocationWhenInUseUsageDescription',
         value: '<string>街を歩いて白黒の陣地を塗り替えるために位置情報を使用します。</string>',
@@ -251,6 +269,75 @@ function verifyContent(content) {
 }
 
 /* ------------------------------------------------------------------ *
+ * 表示名（InfoPlist.strings）ヘルパー
+ * ------------------------------------------------------------------ */
+
+/**
+ * 言語別の InfoPlist.strings（CFBundleDisplayName を上書きする）の内容を整える。
+ * 既存の行があれば値だけを差し替え、なければ追記する。純粋関数。
+ * @returns {{content: string, modified: boolean}}
+ */
+function configureStringsContent(input, displayName = APP_DISPLAY_NAME) {
+    const source = String(input == null ? '' : input);
+    const line = `"CFBundleDisplayName" = "${displayName}";`;
+    const pattern = /^[ \t]*"CFBundleDisplayName"[ \t]*=[ \t]*"[^"]*"[ \t]*;[ \t]*$/m;
+
+    if (pattern.test(source)) {
+        const content = source.replace(pattern, line);
+        return { content, modified: content !== source };
+    }
+
+    const trimmed = source.replace(/\s*$/, '');
+    const content = (trimmed ? `${trimmed}\n` : '') + line + '\n';
+    return { content, modified: true };
+}
+
+/** InfoPlist.strings が期待どおりの表示名になっているか点検する */
+function verifyStringsContent(content, displayName = APP_DISPLAY_NAME) {
+    const expected = /^[ \t]*"CFBundleDisplayName"[ \t]*=[ \t]*"([^"]*)"[ \t]*;[ \t]*$/m.exec(String(content == null ? '' : content));
+    if (!expected) return ['InfoPlist.strings に "CFBundleDisplayName" がありません'];
+    if (expected[1] !== displayName) {
+        return [`InfoPlist.strings の表示名が「${expected[1]}」になっています（「${displayName}」であるべき）`];
+    }
+    return [];
+}
+
+/**
+ * Info.plist と同じフォルダにある \*.lproj/InfoPlist.strings の表示名を揃える。
+ * 存在しない場合は何もしない（Capacitor のテンプレートには無い）。
+ * @returns {string[]} 実際に書き換えたファイルのパス
+ */
+function applyLocalizedDisplayName(plistPath, displayName = APP_DISPLAY_NAME) {
+    const dir = path.dirname(plistPath);
+    const updated = [];
+    let entries = [];
+    try {
+        entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch (e) {
+        return updated;
+    }
+
+    entries
+        .filter((entry) => entry.isDirectory() && /\.lproj$/.test(entry.name))
+        .forEach((entry) => {
+            const stringsPath = path.join(dir, entry.name, 'InfoPlist.strings');
+            if (!fs.existsSync(stringsPath)) return;
+            try {
+                const before = fs.readFileSync(stringsPath, 'utf8');
+                const { content, modified } = configureStringsContent(before, displayName);
+                if (modified) {
+                    fs.writeFileSync(stringsPath, content, 'utf8');
+                    updated.push(stringsPath);
+                }
+            } catch (e) {
+                console.warn(`[iOS Config] Failed to update ${stringsPath}:`, e.message);
+            }
+        });
+
+    return updated;
+}
+
+/* ------------------------------------------------------------------ *
  * CLI
  * ------------------------------------------------------------------ */
 
@@ -296,6 +383,14 @@ function main() {
             console.log('[iOS Config] Info.plist is already fully configured.');
         }
 
+        // 言語別の InfoPlist.strings があれば、そちらの表示名も揃える（上書き負けを防ぐ）
+        const updatedStrings = applyLocalizedDisplayName(PLIST_PATH);
+        updatedStrings.forEach((stringsPath) => {
+            console.log(`[iOS Config] Updated display name in ${path.basename(path.dirname(stringsPath))}/InfoPlist.strings`);
+        });
+
+        console.log(`[iOS Config] Home screen name: ${APP_DISPLAY_NAME}`);
+
         const problems = verifyContent(fs.readFileSync(PLIST_PATH, 'utf8'));
         if (problems.length > 0) {
             problems.forEach((problem) => console.error(`[iOS Config] Verification failed: ${problem}`));
@@ -315,9 +410,13 @@ if (require.main === module) {
 
 module.exports = {
     CONFIG_ENTRIES,
+    APP_DISPLAY_NAME,
     PLIST_PATH,
     configureContent,
+    configureStringsContent,
+    verifyStringsContent,
     verifyContent,
+    applyLocalizedDisplayName,
     findValueEnd,
     dedupeKey,
     normalizeXml,

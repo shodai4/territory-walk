@@ -16,7 +16,7 @@ const { execFileSync } = require('node:child_process');
 
 const ROOT = path.resolve(__dirname, '..');
 const SCRIPT = path.join(ROOT, 'scripts', 'configure-ios.js');
-const { configureContent, verifyContent, CONFIG_ENTRIES } = require(SCRIPT);
+const { configureContent, verifyContent, CONFIG_ENTRIES, APP_DISPLAY_NAME } = require(SCRIPT);
 
 const KEY = 'ITSAppUsesNonExemptEncryption';
 
@@ -222,7 +222,7 @@ test('CLI: Info.plist を書き換え、plistlib で読んでも false になっ
         const parsed = readPlistWithPython(plistPath);
         if (parsed) {
             assert.equal(parsed[KEY], false, 'plist として読んで false');
-            assert.equal(parsed.CFBundleDisplayName, 'Territory Walk');
+            assert.equal(parsed.CFBundleDisplayName, APP_DISPLAY_NAME, 'ホーム画面のアプリ名は日本語');
             assert.ok(parsed.UIApplicationSceneManifest, '入れ子 dict も保たれている');
         }
     } finally {
