@@ -17,6 +17,19 @@ const CONFIG = {
     ENABLE_DEBUG_TOOLS: true
 };
 
+// 画面消灯・ロック中も測位を続けるネイティブプラグイン（Capacitor 6 互換）
+const BACKGROUND_GEOLOCATION_PLUGIN_NAME = 'BackgroundGeolocation';
+const BACKGROUND_GEOLOCATION_OPTIONS = {
+    // backgroundMessage を定義すると、画面消灯・バックグラウンド中も位置更新が届く
+    backgroundMessage: '画面を消灯しても陣地を塗り続けます',
+    backgroundTitle: 'テリトリーウォーク',
+    requestPermissions: true,
+    // 古い測位結果で別のマスを塗らないようにする
+    stale: false,
+    // 100mマスを取りこぼさず、電池消費も抑える距離フィルタ（m）
+    distanceFilter: 20
+};
+
 class TerritoryWalkApp {
     constructor() {
         this.map = null;
@@ -40,6 +53,10 @@ class TerritoryWalkApp {
         this.debugEnabled = CONFIG.ENABLE_DEBUG_TOOLS !== false;
 
         // Background location & iOS optimization state
+        // ネイティブのバックグラウンド位置情報（watcher は常に1本だけ）
+        this.backgroundGeolocationPlugin = null;
+        this.backgroundWatcherId = null;
+        this.backgroundWatcherStarted = false;
         this.lastProcessedLat = null;
         this.lastProcessedLng = null;
         this.backgroundClaimCount = 0;
@@ -624,14 +641,18 @@ class TerritoryWalkApp {
         textEl.textContent = labels[skin] || 'SKIN: ' + skin;
     }
 
+    /**
+     * 選択中スキンの状態をボタンへ印す。
+     * 見た目（枠色・バッジ）は CoinManager.updateSkinButtonsUI が一元で描くので、
+     * ここではレイアウト用のクラスを壊さず、選択状態の属性だけを更新する。
+     */
     updateSkinBadge(skin) {
         const skinButtons = document.querySelectorAll('.skin-btn');
         skinButtons.forEach(btn => {
             const isSelected = btn.dataset.skin === skin;
-            if (isSelected) {
-                btn.className = 'skin-btn bg-white text-black font-bold border-2 border-white p-2 rounded-lg text-[11px] shadow-xl transition-all active:scale-95 flex items-center justify-center';
-            } else {
-                btn.className = 'skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[11px] hover:border-white transition-all active:scale-95 text-zinc-300 flex items-center justify-center';
+            btn.dataset.selected = isSelected ? 'true' : 'false';
+            if (typeof btn.setAttribute === 'function') {
+                btn.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
             }
         });
     }
@@ -1595,12 +1616,30 @@ class TerritoryWalkApp {
             });
         }
 
-        if (!('geolocation' in navigator)) {
-            this.updateGPSStatus('GPS: 非対応', 'bg-red-500', 'text-red-400');
+        this.updateGPSStatus('GPS: 測位中...', 'bg-amber-400', 'text-amber-400');
+
+        // ネイティブのバックグラウンド位置情報を最優先する。
+        // 画面消灯・ロック中も addWatcher のコールバックが届き、そのまま
+        // handlePositionUpdate → processMeshAndClaim（ローカル保存＋Outbox同期）へ流れる。
+        const backgroundPlugin = this.getBackgroundGeolocationPlugin();
+        if (backgroundPlugin && this.startBackgroundGeolocation(backgroundPlugin)) {
             return;
         }
 
-        this.updateGPSStatus('GPS: 測位中...', 'bg-amber-400', 'text-amber-400');
+        this.startWebGeolocation();
+    }
+
+    /**
+     * Web（navigator.geolocation）での測位。ネイティブのバックグラウンド測位が
+     * 使えない場合のフォールバックで、二重起動は watchId で防ぐ。
+     * @returns {boolean} 測位を開始できたか
+     */
+    startWebGeolocation() {
+        if (this.watchId != null) return true;
+        if (typeof navigator === 'undefined' || !('geolocation' in navigator)) {
+            this.updateGPSStatus('GPS: 非対応', 'bg-red-500', 'text-red-400');
+            return false;
+        }
 
         // 起動時点ですでに拒否済みなら、最初のエラーを待たずにバナーを出す
         if (this.locationBanner) this.locationBanner.refreshPermissionState();
@@ -1614,7 +1653,7 @@ class TerritoryWalkApp {
         // ネイティブ（Capacitor Geolocation）が使える場合はそちらを優先し、
         // 権限拒否は同じ handlePositionError で一元処理する
         const nativeGeo = this.getNativeGeolocation();
-        if (nativeGeo && this.startNativeGeolocation(nativeGeo, options)) return;
+        if (nativeGeo && this.startNativeGeolocation(nativeGeo, options)) return true;
 
         navigator.geolocation.getCurrentPosition(
             (position) => this.handlePositionUpdate(position, true),
@@ -1627,6 +1666,126 @@ class TerritoryWalkApp {
             (error) => this.handlePositionError(error),
             options
         );
+
+        return true;
+    }
+
+    /**
+     * ネイティブのバックグラウンド位置情報プラグインを取得する（Webでは null）。
+     * バンドルを持たない <script> 読み込み構成なので、window.Capacitor だけを頼りにし、
+     * 未登録のときは registerPlugin('BackgroundGeolocation') でプロキシを作る。
+     */
+    getBackgroundGeolocationPlugin() {
+        if (this.backgroundGeolocationPlugin) return this.backgroundGeolocationPlugin;
+        try {
+            const cap = typeof window !== 'undefined' ? window.Capacitor : null;
+            if (!cap) return null;
+            // ブラウザ実行（Web）ではネイティブ測位を使わない
+            if (typeof cap.isNativePlatform === 'function' && !cap.isNativePlatform()) return null;
+            // cap sync 前やプラグイン未組込のビルドでは PluginHeaders が無いので使わない
+            if (typeof cap.isPluginAvailable === 'function'
+                && !cap.isPluginAvailable(BACKGROUND_GEOLOCATION_PLUGIN_NAME)) {
+                return null;
+            }
+
+            let plugin = cap.Plugins ? cap.Plugins[BACKGROUND_GEOLOCATION_PLUGIN_NAME] : null;
+            if (!plugin && typeof cap.registerPlugin === 'function') {
+                plugin = cap.registerPlugin(BACKGROUND_GEOLOCATION_PLUGIN_NAME);
+            }
+            if (!plugin || typeof plugin.addWatcher !== 'function') return null;
+
+            this.backgroundGeolocationPlugin = plugin;
+            return plugin;
+        } catch (e) {
+            console.warn('BackgroundGeolocation unavailable, using Web API:', e);
+            return null;
+        }
+    }
+
+    /**
+     * バックグラウンド測位を開始する（watcher の二重起動を防ぐ）。
+     * @returns {boolean} ネイティブ経路で開始できたか（false なら Web フォールバックへ）
+     */
+    startBackgroundGeolocation(plugin) {
+        if (this.backgroundWatcherStarted) return true;
+        if (!plugin || typeof plugin.addWatcher !== 'function') return false;
+
+        this.backgroundWatcherStarted = true;
+
+        let watching;
+        try {
+            watching = plugin.addWatcher(BACKGROUND_GEOLOCATION_OPTIONS, (location, error) => {
+                if (error) {
+                    // NOT_AUTHORIZED 等の拒否も handlePositionError でバナーへ繋ぐ
+                    this.handlePositionError(error);
+                    return;
+                }
+                if (location) this.handleBackgroundLocation(location);
+            });
+        } catch (e) {
+            console.warn('BackgroundGeolocation addWatcher failed, falling back to Web API:', e);
+            this.backgroundWatcherStarted = false;
+            return false;
+        }
+
+        // addWatcher は watcher ID を返す Promise（removeWatcher 用に保持する）
+        if (watching && typeof watching.then === 'function') {
+            watching
+                .then((watcherId) => { this.backgroundWatcherId = watcherId; })
+                .catch((error) => {
+                    console.warn('BackgroundGeolocation watcher unavailable:', error);
+                    this.backgroundWatcherStarted = false;
+                    this.handlePositionError(error);
+                    // ネイティブが使えないビルドでも遊べるよう Web 測位へ戻す
+                    this.startWebGeolocation();
+                });
+        } else if (watching != null) {
+            this.backgroundWatcherId = watching;
+        }
+
+        return true;
+    }
+
+    /** バックグラウンド測位を停止する（watcher の残留・二重起動の防止） */
+    stopBackgroundGeolocation() {
+        const plugin = this.backgroundGeolocationPlugin;
+        const watcherId = this.backgroundWatcherId;
+
+        this.backgroundWatcherStarted = false;
+        this.backgroundWatcherId = null;
+
+        if (!plugin || watcherId == null || typeof plugin.removeWatcher !== 'function') return false;
+        try {
+            Promise.resolve(plugin.removeWatcher({ id: watcherId })).catch(() => {});
+            return true;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    /**
+     * バックグラウンドプラグインの位置（{latitude, longitude, ...}）を
+     * navigator.geolocation と同じ形に直し、通常の測位処理へ流す。
+     * 仮想散歩中（D-Pad）は handlePositionUpdate 側が実GPSで上書きしない。
+     */
+    handleBackgroundLocation(location) {
+        const latitude = Number(location.latitude);
+        const longitude = Number(location.longitude);
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return false;
+
+        this.handlePositionUpdate({
+            coords: {
+                latitude,
+                longitude,
+                accuracy: typeof location.accuracy === 'number' ? location.accuracy : null,
+                altitude: typeof location.altitude === 'number' ? location.altitude : null,
+                heading: typeof location.bearing === 'number' ? location.bearing : null,
+                speed: typeof location.speed === 'number' ? location.speed : null
+            },
+            timestamp: typeof location.time === 'number' ? location.time : Date.now()
+        }, false);
+
+        return true;
     }
 
     /** Capacitor Geolocation プラグインがネイティブで利用可能か（Webでは null） */
@@ -1668,6 +1827,14 @@ class TerritoryWalkApp {
 
     /** バナーの「再確認」：拒否が解消されていればバナーが自動で消える */
     recheckLocationPermission() {
+        // ネイティブのバックグラウンド測位中なら watcher を張り直して測位を再開する
+        const backgroundPlugin = this.getBackgroundGeolocationPlugin();
+        if (backgroundPlugin && this.backgroundWatcherStarted) {
+            this.stopBackgroundGeolocation();
+            this.startBackgroundGeolocation(backgroundPlugin);
+            return;
+        }
+
         if (!('geolocation' in navigator)) return;
         navigator.geolocation.getCurrentPosition(
             (position) => this.handlePositionUpdate(position, false),

@@ -235,6 +235,18 @@ function verifyContent(content) {
     const opens = (content.match(/<dict>/g) || []).length;
     const closes = (content.match(/<\/dict>/g) || []).length;
     if (opens !== closes) problems.push(`<dict> と </dict> の数が一致しません (${opens}/${closes})`);
+
+    // @capacitor-community/background-geolocation の要件：UIBackgroundModes に location が必要。
+    // 手動で他のモードだけを足している Info.plist を見逃さないための点検。
+    const modesStart = content.indexOf('<key>UIBackgroundModes</key>');
+    if (modesStart !== -1) {
+        const modesEnd = content.indexOf('</array>', modesStart);
+        const modesBlock = modesEnd === -1 ? '' : content.slice(modesStart, modesEnd);
+        if (!/<string>\s*location\s*<\/string>/.test(modesBlock)) {
+            problems.push('UIBackgroundModes に location が入っていません（画面消灯中の測位に必須）');
+        }
+    }
+
     return problems;
 }
 

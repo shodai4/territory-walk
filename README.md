@@ -91,6 +91,15 @@ npx cap open ios
 - `UIBackgroundModes: ["location"]`（バックグラウンドGPS位置情報更新）
 - `UIViewControllerBasedStatusBarAppearance: false`（ダークテーマステータスバー）
 
+### バックグラウンド位置情報（画面消灯・ロック中も陣地を獲得）
+`@capacitor-community/background-geolocation`（v1.3系 / Capacitor 6 対応）を導入しています。画面を消してポケットに入れたままでも、100mマスの獲得とSupabase同期が続きます。
+
+- ネイティブ: `app.js` の `initGeolocation()` が `registerPlugin('BackgroundGeolocation')` の `addWatcher()` を1本だけ張り、位置更新を `handlePositionUpdate()` → `processMeshAndClaim()`（ローカル保存＋Outbox同期）へ流します。`backgroundMessage` を渡すことでバックグラウンド更新が有効になり、`stale: false` と `distanceFilter: 20`（100mマスを取りこぼさず電池も抑える）で動きます。
+- 権限拒否（`NOT_AUTHORIZED`）は `permission.js` の `LocationPermissionBanner` に繋がり、常設バナーと「再確認」（watcher の張り直し）で復帰できます。iOS では位置情報を「常に許可」にする必要があります。
+- 許可要求のタイミングは従来どおり `startup-gate.js`（ルール説明 → チーム決定 → 「ゲーム開始」）に従います。
+- Web（ブラウザ）やプラグイン未組込ビルドでは、従来どおり `navigator.geolocation.watchPosition` にフォールバックします。
+- D-Pad の仮想散歩中は実GPSで仮想座標・塗りを上書きしません（`isVirtualWalkActive()` ガード）。
+
 ---
 
 ## 課金（IAP）の仕組み

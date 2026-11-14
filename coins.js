@@ -227,23 +227,25 @@ class CoinManager {
             const stateClass = selected
                 ? 'border-emerald-400 bg-emerald-500/10 ring-1 ring-emerald-400/60'
                 : owned ? 'border-zinc-600 bg-zinc-900' : 'border-zinc-800 bg-zinc-950';
-            const badge = selected
-                ? '<span class="px-1 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[8px] font-bold">選択中</span>'
-                : owned
-                    ? '<span class="px-1 py-0.5 rounded bg-zinc-700/60 text-zinc-300 text-[8px] font-bold">所持</span>'
-                    : `<span class="px-1 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[8px] font-bold">${theme.cost.toLocaleString()} COIN</span>`;
+            // バッジは必ず1行（whitespace-nowrap）。名前と別行にして文字切れを防ぐ。
+            const badgeClass = selected
+                ? 'bg-emerald-500/20 text-emerald-300'
+                : owned ? 'bg-zinc-700/60 text-zinc-300' : 'bg-amber-500/20 text-amber-300';
+            const badgeText = selected
+                ? '選択中'
+                : owned ? '所持' : `${theme.cost.toLocaleString()} COIN`;
             const swatchStyle = theme.id === 'none'
                 ? 'background: repeating-linear-gradient(45deg, #18181b, #18181b 3px, #3f3f46 3px, #3f3f46 6px)'
                 : `background: ${theme.swatch}`;
             const nameClass = owned ? 'text-zinc-100' : 'text-zinc-400';
 
             return `
-                <button class="map-theme-btn w-full ${theme.id === 'none' ? 'col-span-2' : ''} border p-2 rounded-lg text-[11px] transition-all active:scale-95 flex items-center justify-between gap-1.5 ${stateClass}" data-map-theme="${theme.id}">
-                    <span class="flex items-center gap-1.5 min-w-0">
+                <button class="map-theme-btn h-full w-full flex flex-col items-stretch justify-between gap-1.5 border p-2 rounded-lg text-[11px] text-left transition-all active:scale-95 ${stateClass}" data-map-theme="${theme.id}">
+                    <span class="flex items-center gap-1.5 w-full min-w-0">
                         <span class="w-3.5 h-3.5 rounded shrink-0 border border-zinc-600" style="${swatchStyle}"></span>
-                        <span class="truncate font-bold ${nameClass}">${theme.name}</span>
+                        <span class="map-theme-name font-bold leading-tight whitespace-nowrap ${nameClass}">${theme.name}</span>
                     </span>
-                    ${badge}
+                    <span class="map-theme-badge self-start px-1 py-0.5 rounded text-[8px] font-bold leading-none whitespace-nowrap ${badgeClass}">${badgeText}</span>
                 </button>
             `;
         }).join('');
@@ -1140,15 +1142,24 @@ class CoinManager {
             if (!skin) return;
             const owned = this.isSkinUnlocked(skin.id);
             const selected = current === skin.id;
-            const base = 'skin-btn border p-2 rounded-lg text-[11px] transition-all active:scale-95 text-center truncate ';
+            // 背景地図カラーと同じ2段（名前＋バッジ）の統一レイアウト。
+            // truncate は使わず、名前も価格も1行（whitespace-nowrap）で出す。
+            const base = 'skin-btn h-full w-full flex flex-col items-stretch justify-between gap-1.5 border p-2 rounded-lg text-[11px] text-left transition-all active:scale-95 ';
             const state = selected
-                ? 'border-emerald-400 bg-emerald-500/10 text-white font-bold'
+                ? 'border-emerald-400 bg-emerald-500/10 text-white font-bold ring-1 ring-emerald-400/60'
                 : owned ? 'border-zinc-600 bg-zinc-900 text-zinc-200'
                     : 'border-zinc-800 bg-zinc-950 text-zinc-500';
+            const badgeClass = selected
+                ? 'bg-emerald-500/20 text-emerald-300'
+                : owned ? 'bg-zinc-700/60 text-zinc-300' : 'bg-amber-500/20 text-amber-300';
+            const badgeText = selected
+                ? '選択中'
+                : owned ? '所持' : `${skin.cost.toLocaleString()} COIN`;
             btn.className = base + state;
-            btn.textContent = (!owned && !selected)
-                ? `${skin.name}・${skin.cost.toLocaleString()} COIN`
-                : skin.name;
+            btn.innerHTML = `
+                <span class="skin-name font-bold leading-tight whitespace-nowrap">${skin.name}</span>
+                <span class="skin-badge self-start px-1 py-0.5 rounded text-[8px] font-bold leading-none whitespace-nowrap ${badgeClass}">${badgeText}</span>
+            `;
         });
     }
 

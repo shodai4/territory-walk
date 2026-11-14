@@ -108,7 +108,7 @@
             </svg>
             <div class="flex-1 min-w-0 text-left">
                 <div class="text-[11px] font-bold text-amber-300 leading-snug">位置情報がオフになっています</div>
-                <div class="text-[10px] text-zinc-300 leading-snug mt-0.5">端末の「設定 ＞ テリトリーウォーク ＞ 位置情報」をオンにすると陣地を獲得できます</div>
+                <div class="text-[10px] text-zinc-300 leading-snug mt-0.5">端末の「設定 ＞ テリトリーウォーク ＞ 位置情報」を「常に許可」にすると、画面を消しても陣地を獲得できます</div>
             </div>
             <button id="btn-location-banner-retry" class="shrink-0 px-2 py-1 rounded-lg bg-amber-500/15 border border-amber-500/40 text-amber-300 text-[10px] font-bold active:scale-95 transition-all">再確認</button>
             <button id="btn-location-banner-close" aria-label="案内を閉じる" title="閉じる" class="shrink-0 p-1 -mr-1 text-zinc-400 hover:text-white active:scale-95 transition-all">
@@ -326,15 +326,15 @@
                         <div class="flex items-center justify-between">
                             <span class="text-[11px] font-bold text-zinc-300">マステーマ</span>
                         </div>
-                        <div class="grid grid-cols-2 gap-2" id="skin-buttons-container">
-                            <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[11px] hover:border-white transition-all active:scale-95 text-zinc-200" data-skin="default">標準</button>
-                            <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[11px] hover:border-white transition-all active:scale-95 text-lime-400" data-skin="pixel">レトロ</button>
-                            <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[11px] hover:border-white transition-all active:scale-95 text-pink-400" data-skin="sakura">サクラ</button>
-                            <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[11px] hover:border-white transition-all active:scale-95 text-slate-300" data-skin="monochrome">モノトーン</button>
-                            <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[11px] hover:border-white transition-all active:scale-95 text-orange-400" data-skin="crimson">クリムゾン</button>
-                            <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[11px] hover:border-white transition-all active:scale-95 text-cyan-400" data-skin="neon">ネオン</button>
-                            <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[11px] hover:border-white transition-all active:scale-95 text-amber-400" data-skin="gold">ゴールド</button>
-                            <button class="skin-btn bg-zinc-900 border border-zinc-700 p-2 rounded-lg text-[11px] hover:border-white transition-all active:scale-95 text-purple-400" data-skin="cyberpunk">サイバー</button>
+                        <div class="grid grid-cols-2 gap-2 auto-rows-fr" id="skin-buttons-container">
+                            <button class="skin-btn h-full w-full flex flex-col items-stretch justify-between gap-1.5 border border-zinc-600 bg-zinc-900 text-zinc-200 p-2 rounded-lg text-[11px] text-left transition-all active:scale-95" data-skin="default" aria-pressed="false" data-selected="false"><span class="skin-name font-bold leading-tight whitespace-nowrap">標準</span><span class="skin-badge self-start px-1 py-0.5 rounded bg-zinc-700/60 text-zinc-300 text-[8px] font-bold leading-none whitespace-nowrap">所持</span></button>
+                            <button class="skin-btn h-full w-full flex flex-col items-stretch justify-between gap-1.5 border border-zinc-600 bg-zinc-900 text-zinc-200 p-2 rounded-lg text-[11px] text-left transition-all active:scale-95" data-skin="pixel" aria-pressed="false" data-selected="false"><span class="skin-name font-bold leading-tight whitespace-nowrap">レトロ</span><span class="skin-badge self-start px-1 py-0.5 rounded bg-zinc-700/60 text-zinc-300 text-[8px] font-bold leading-none whitespace-nowrap">所持</span></button>
+                            <button class="skin-btn h-full w-full flex flex-col items-stretch justify-between gap-1.5 border border-zinc-600 bg-zinc-900 text-zinc-200 p-2 rounded-lg text-[11px] text-left transition-all active:scale-95" data-skin="sakura" aria-pressed="false" data-selected="false"><span class="skin-name font-bold leading-tight whitespace-nowrap">サクラ</span><span class="skin-badge self-start px-1 py-0.5 rounded bg-zinc-700/60 text-zinc-300 text-[8px] font-bold leading-none whitespace-nowrap">所持</span></button>
+                            <button class="skin-btn h-full w-full flex flex-col items-stretch justify-between gap-1.5 border border-zinc-600 bg-zinc-900 text-zinc-200 p-2 rounded-lg text-[11px] text-left transition-all active:scale-95" data-skin="monochrome" aria-pressed="false" data-selected="false"><span class="skin-name font-bold leading-tight whitespace-nowrap">モノトーン</span><span class="skin-badge self-start px-1 py-0.5 rounded bg-zinc-700/60 text-zinc-300 text-[8px] font-bold leading-none whitespace-nowrap">所持</span></button>
+                            <button class="skin-btn h-full w-full flex flex-col items-stretch justify-between gap-1.5 border border-zinc-600 bg-zinc-900 text-zinc-200 p-2 rounded-lg text-[11px] text-left transition-all active:scale-95" data-skin="crimson" aria-pressed="false" data-selected="false"><span class="skin-name font-bold leading-tight whitespace-nowrap">クリムゾン</span><span class="skin-badge self-start px-1 py-0.5 rounded bg-zinc-700/60 text-zinc-300 text-[8px] font-bold leading-none whitespace-nowrap">所持</span></button>
+                            <button class="skin-btn h-full w-full flex flex-col items-stretch justify-between gap-1.5 border border-zinc-600 bg-zinc-900 text-zinc-200 p-2 rounded-lg text-[11px] text-left transition-all active:scale-95" data-skin="neon" aria-pressed="false" data-selected="false"><span class="skin-name font-bold leading-tight whitespace-nowrap">ネオン</span><span class="skin-badge self-start px-1 py-0.5 rounded bg-zinc-700/60 text-zinc-300 text-[8px] font-bold leading-none whitespace-nowrap">所持</span></button>
+                            <button class="skin-btn h-full w-full flex flex-col items-stretch justify-between gap-1.5 border border-zinc-600 bg-zinc-900 text-zinc-200 p-2 rounded-lg text-[11px] text-left transition-all active:scale-95" data-skin="gold" aria-pressed="false" data-selected="false"><span class="skin-name font-bold leading-tight whitespace-nowrap">ゴールド</span><span class="skin-badge self-start px-1 py-0.5 rounded bg-zinc-700/60 text-zinc-300 text-[8px] font-bold leading-none whitespace-nowrap">所持</span></button>
+                            <button class="skin-btn h-full w-full flex flex-col items-stretch justify-between gap-1.5 border border-zinc-600 bg-zinc-900 text-zinc-200 p-2 rounded-lg text-[11px] text-left transition-all active:scale-95" data-skin="cyberpunk" aria-pressed="false" data-selected="false"><span class="skin-name font-bold leading-tight whitespace-nowrap">サイバー</span><span class="skin-badge self-start px-1 py-0.5 rounded bg-zinc-700/60 text-zinc-300 text-[8px] font-bold leading-none whitespace-nowrap">所持</span></button>
                         </div>
                     </div>
 
@@ -344,7 +344,7 @@
                             <span class="text-[11px] font-bold text-zinc-300">背景地図カラー</span>
                             <span class="text-[9px] text-zinc-500 font-mono">モノクロ・地図非表示は無償</span>
                         </div>
-                        <div class="grid grid-cols-2 gap-2" id="map-theme-buttons-container">
+                        <div class="grid grid-cols-2 gap-2 auto-rows-fr" id="map-theme-buttons-container">
                             <!-- 白黒陣取り：JS（coins.js）で状態色・価格付きで描画 -->
                         </div>
                     </div>
@@ -1025,7 +1025,7 @@
     <script src="poster.js?v=20261113v24"></script>
     <script src="pro.js?v=20261113v24"></script>
     <script src="search.js?v=20261113v24"></script>
-    <script src="coins.js?v=20261114v33"></script>
+    <script src="coins.js?v=20261114v42"></script>
     <script src="admob.js?v=20261114v41"></script>
     <script src="iap.js?v=20261114v26"></script>
     <script src="stats.js?v=20261114v26"></script>
@@ -1034,8 +1034,8 @@
     <script src="outbox.js?v=20261114v36"></script>
     <!-- Main Application Logic -->
     <script src="startup-gate.js?v=20261114v41"></script>
-    <script src="permission.js?v=20261114v34"></script>
+    <script src="permission.js?v=20261114v42"></script>
     <script src="debug-tools.js?v=20261114v39"></script>
-    <script src="app.js?v=20261114v41"></script>
+    <script src="app.js?v=20261114v42"></script>
 </body>
 </html>

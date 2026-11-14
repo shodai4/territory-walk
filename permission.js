@@ -35,25 +35,28 @@ class LocationPermissionBanner {
      * Web GeolocationPositionError: code === 1 (PERMISSION_DENIED).
      * Capacitor Geolocation rejects with other shapes: { code: 'PERMISSION_DENIED' },
      * { message: 'User denied Geolocation' }, 'Location permission was denied', etc.
+     * BackgroundGeolocation プラグインは { code: 'NOT_AUTHORIZED' } で拒否を返す。
      */
     static isPermissionDeniedError(error) {
         if (!error) return false;
 
         const code = error.code;
         if (code === 1 || code === '1') return true;
-        if (typeof code === 'string' && /PERMISSION[_\s-]?DENIED/i.test(code)) return true;
+        // PERMISSION_DENIED / NOT_AUTHORIZED（BackgroundGeolocation の拒否コード）
+        if (typeof code === 'string' && /PERMISSION[_\s-]?DENIED|NOT[_\s-]?AUTHORI[ZS]ED/i.test(code)) return true;
 
         let message = '';
         if (typeof error === 'string') {
             message = error;
         } else {
-            message = [error.message, error.errorMessage, error.name]
+            message = [error.message, error.errorMessage, error.name, typeof code === 'string' ? code : null]
                 .filter((value) => typeof value === 'string')
                 .join(' ');
         }
         if (!message) return false;
 
         if (/PERMISSION[_\s-]?DENIED/i.test(message)) return true;
+        if (/NOT[_\s-]?AUTHORI[ZS]ED/i.test(message)) return true;
         if (/not\s+authori[sz]ed/i.test(message)) return true;
         if (/user\s+denied/i.test(message)) return true;
         if (/location\s+(permission|access|services?).{0,32}(denied|disabled|turned\s+off)/i.test(message)) return true;
