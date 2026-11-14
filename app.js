@@ -13,8 +13,8 @@ const CONFIG = {
     TILE_RENDER_MIN_ZOOM: 5,
     MAX_TILES_PER_RENDER: 1200,
     // デバッグ機能（D-PAD・コイン操作・プレビュー・チーム切替等）のマスタースイッチ
-    // App Store 本番リリース時は false に切り替えてください（UIごと非表示になります）
-    ENABLE_DEBUG_TOOLS: true
+    // App Store 提出ビルドのため false（UIごと非表示になり、AdMob も本番IDへ自動切替）
+    ENABLE_DEBUG_TOOLS: false
 };
 
 // 画面消灯・ロック中も測位を続けるネイティブプラグイン（Capacitor 6 互換）
@@ -1140,7 +1140,7 @@ class TerritoryWalkApp {
                     tiles,
                     inviteCode
                 });
-                const shareUrl = 'https://shodai4.github.io/territory-walk/';
+                const shareUrl = 'https://shodai4.com/territory-walk/';
 
                 if (navigator.share) {
                     navigator.share({

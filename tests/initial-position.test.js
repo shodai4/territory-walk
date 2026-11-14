@@ -139,9 +139,9 @@ test('初期位置: ズームは従来どおり 17（100mマスが見える倍�
     assert.equal(CONFIG.DEFAULT_ZOOM, 17);
 });
 
-test('初期位置: デバッグ機能のマスタースイッチは true のまま', () => {
+test('初期位置: デバッグ機能のマスタースイッチは提出ビルド向けに false', () => {
     const { CONFIG } = loadApp();
-    assert.equal(CONFIG.ENABLE_DEBUG_TOOLS, true);
+    assert.equal(CONFIG.ENABLE_DEBUG_TOOLS, false);
 });
 
 /* ------------------------------------------------------------------ *

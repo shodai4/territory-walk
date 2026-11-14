@@ -574,9 +574,10 @@ test('静的: 付与は approved 起点で、.verified は検証サーバー用�
     assert.match(IAP_SOURCE, /if \(this\.store && this\.store\.validator\)/, '検証サーバー設定時だけ verify / receipt.finish する');
 });
 
-test('静的: 維持事項（デバッグツール有効・暗号化申告）は変更していない', () => {
+test('静的: 維持事項（暗号化申告）は変更していない', () => {
     const appJs = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
-    assert.match(appJs, /ENABLE_DEBUG_TOOLS:\s*true/);
+    // 提出ビルドはデバッグ無効（ENABLE_DEBUG_TOOLS: false）。値はどちらでもよいが定義は必ず1か所に残す。
+    assert.match(appJs, /ENABLE_DEBUG_TOOLS:\s*(true|false)/);
     const configure = fs.readFileSync(path.join(ROOT, 'scripts', 'configure-ios.js'), 'utf8');
     assert.match(configure, /ITSAppUsesNonExemptEncryption/);
     assert.match(configure, /false/);

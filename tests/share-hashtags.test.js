@@ -27,7 +27,7 @@ const read = (file) => fs.readFileSync(path.join(ROOT, file), 'utf8');
 
 const NEW_TAG = '#テリウォーク';
 const EXPECTED_TAGS = [NEW_TAG, '#テリトリーウォーク', '#TerritoryWalk'];
-const SHARE_URL = 'https://shodai4.github.io/territory-walk/';
+const SHARE_URL = 'https://shodai4.com/territory-walk/';
 
 /** 文言中のハッシュタグを出現順に取り出す（重複もそのまま残す） */
 function hashtagsIn(text) {

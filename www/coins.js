@@ -900,7 +900,7 @@ class CoinManager {
         const code = this.getInviteCode() || 'WALK';
 
         const tweetText = CoinManager.buildDailyShareText({ tiles, myTeam, code });
-        const tweetUrl = 'https://shodai4.github.io/territory-walk/';
+        const tweetUrl = 'https://shodai4.com/territory-walk/';
         const xUrl = `https://x.com/intent/tweet?text=${encodeURIComponent(tweetText)}&url=${encodeURIComponent(tweetUrl)}`;
 
         window.open(xUrl, '_blank');
@@ -939,7 +939,7 @@ class CoinManager {
 
     shareReferralNative() {
         const code = this.getInviteCode();
-        const url = 'https://shodai4.github.io/territory-walk/';
+        const url = 'https://shodai4.com/territory-walk/';
         const text = CoinManager.buildReferralShareText({ code });
 
         if (navigator.share) {

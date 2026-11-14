@@ -581,7 +581,7 @@ test('CSS: 375px幅で崩れない固定サイズと状態別の配色がある'
 });
 
 test('キャッシュバスター: 変更した app.js は v53、未変更の style.css は v49 を参照する', () => {
-    assert.match(HTML, /app\.js\?v=20261115v54/);
+    assert.match(HTML, /app\.js\?v=20261115v55/);
     assert.match(HTML, /style\.css\?v=20261115v49/);
 });
 
@@ -593,8 +593,8 @@ test('ビルド: www/ の index.html / style.css / app.js がルートと一致�
     });
 });
 
-test('維持: デバッグ機能は有効のまま（ENABLE_DEBUG_TOOLS: true）', () => {
-    assert.match(APP, /ENABLE_DEBUG_TOOLS: true/);
+test('提出ビルド: デバッグ機能は無効（ENABLE_DEBUG_TOOLS: false）で、D-Pad の経路は残っている', () => {
+    assert.match(APP, /ENABLE_DEBUG_TOOLS: false/);
     assert.match(APP, /isVirtualWalkActive\(\)/, 'D-Pad の判定は残っている');
     assert.match(APP, /this\.manualMarkingInProgress = true;/, 'D-Pad は停止中でも塗れる経路を持つ');
 });

@@ -97,13 +97,13 @@ TERRITORY WALK の 6大特徴
 
 ### 【サポートURL (Support URL)】
 ```text
-https://shodai4.github.io/territory-walk/support.html
+https://shodai4.com/territory-walk/support.html
 ```
 （問い合わせ先: `shodai121ueda+territorywalk@gmail.com` / GitHub Issues）
 
 ### 【マーケティングURL (Marketing URL)】
 ```text
-https://shodai4.github.io/territory-walk/
+https://shodai4.com/territory-walk/
 ```
 
 ---
@@ -121,7 +121,7 @@ https://shodai4.github.io/territory-walk/
 
 ### 【プライバシーポリシーURL (Privacy Policy URL)】
 ```text
-https://shodai4.github.io/territory-walk/privacy.html
+https://shodai4.com/territory-walk/privacy.html
 ```
 
 ---
@@ -205,11 +205,11 @@ App Store Connect ＞ 「App内課金」 ＞ 「管理」 から、以下の5商
 - **最低対応OS**: iOS 15.0（`scripts/configure-ios.js` が Podfile と `IPHONEOS_DEPLOYMENT_TARGET` を 15.0 に揃える）
   - Capacitor のテンプレートは 13.0 だが、TestFlight アップロード時に警告 **code 90068**
     （「2027年4月以降は iOS 15.0 以上が必須」）が出ていたため 15.0 に引き上げ済み。
-- **App Store Connect の「デベロッパWebサイト」**: 任意項目。設定する場合は `https://shodai4.github.io/territory-walk/`
-  を入れ、`app-ads.txt` を**そのドメインのルート**（`https://shodai4.github.io/app-ads.txt`）に置く。
+- **App Store Connect の「デベロッパWebサイト」**: 任意項目。設定する場合は `https://shodai4.com/territory-walk/`
+  を入れ、`app-ads.txt` を**そのドメインのルート**（`https://shodai4.com/app-ads.txt`）に置く。
   - リポジトリ直下の `app-ads.txt` は `google.com, pub-5739782559889389, DIRECT, f08c47fec0942fa0`。
     GitHub Pages のプロジェクトサイトでは `/territory-walk/app-ads.txt` にしかならないため、
-    ルートに置くには `shodai4.github.io` リポジトリの作成（または `shodai4.com` 取得後のカスタムドメイン）が必要。
+    ルート（`shodai4.com/app-ads.txt`）には `shodai4.github.io` リポジトリ（カスタムドメイン `shodai4.com`）側に同じ内容を置く。
   - 未設置でも審査は通るが、Google 側の販売者確認が完了せず広告収益が制限されることがある。
 - **SKAdNetworkItems**: `cstr6suwn9.skadnetwork`（Google）を Info.plist に設定済み。
   AdMob 管理画面の「SKAdNetwork」一覧を追加すると更に充填率が上がる（任意）。

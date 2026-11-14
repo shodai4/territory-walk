@@ -156,9 +156,9 @@ App Store Connectでアプリ情報を登録する際、以下の内容をその
 - **SKU**：`territory-walk-ios`
 
 ### プロモーション用URL（審査必須・すでに公開済み）
-- **プライバシーポリシーURL**：`https://shodai4.github.io/territory-walk/privacy.html`
-- **利用規約URL**：`https://shodai4.github.io/territory-walk/terms.html`
-- **サポートURL**：`https://shodai4.github.io/territory-walk/support.html`
+- **プライバシーポリシーURL**：`https://shodai4.com/territory-walk/privacy.html`
+- **利用規約URL**：`https://shodai4.com/territory-walk/terms.html`
+- **サポートURL**：`https://shodai4.com/territory-walk/support.html`
 
 ### 説明文（Description）
 ```text
@@ -279,7 +279,7 @@ App Store Connectでアプリ情報を登録する際、以下の内容をその
 - [ ] スクリーンショット4枚（`resources/screenshots/`）・説明文・キーワード・サポートURL・プライバシーポリシーURLを登録
 - [ ] 審査メモを `docs/app-store-metadata.md` の7節の文面に差し替え（デバッグモード前提の旧文面は使わない）
 - [ ] AdMob: お支払いプロファイル・税務情報の完了、PIN（住所確認）の受領
-- [ ] `app-ads.txt` をドメインルートに公開（`shodai4.github.io` リポジトリ作成、または `shodai4.com` 取得後にカスタムドメイン設定）
+- [ ] `app-ads.txt` をドメインルートに公開（`https://shodai4.com/app-ads.txt`）
 - [ ] CIジョブサマリーの「iOS Deployment Target: iOS 14.0+」を `iOS 15.0+` に修正
       （`.github/workflows/ios-build.yml` は workflows 権限が必要なため手元で1行）
 - [ ] App Store Connect へビルドを選択し「審査へ提出」
