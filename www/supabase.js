@@ -156,6 +156,13 @@ class SupabaseManager {
         const minLngIdx = Math.floor(minLng / LNG_GRID) - 2;
         const maxLngIdx = Math.floor(maxLng / LNG_GRID) + 2;
 
+        // 広域すぎる範囲（ズームアウト時）はDB負荷を避けるため取得しない
+        const MAX_INDEX_SPAN = 150; // 約150メッシュ四方（≒15km）まで
+        const MAX_ROWS = 2000;
+        if ((maxLatIdx - minLatIdx) > MAX_INDEX_SPAN || (maxLngIdx - minLngIdx) > MAX_INDEX_SPAN) {
+            return [];
+        }
+
         try {
             const { data, error } = await this.client
                 .from('territory_tiles')
@@ -164,7 +171,8 @@ class SupabaseManager {
                 .gte('lat_idx', minLatIdx)
                 .lte('lat_idx', maxLatIdx)
                 .gte('lng_idx', minLngIdx)
-                .lte('lng_idx', maxLngIdx);
+                .lte('lng_idx', maxLngIdx)
+                .limit(MAX_ROWS);
 
             if (error) {
                 console.error('Error fetching tiles from Supabase:', error);

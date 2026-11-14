@@ -113,6 +113,11 @@ class GridManager {
     async fetchAndSyncTiles() {
         if (!this.app || !this.app.supabaseManager) return;
 
+        // 広域表示（低ズーム）では取得しない：大範囲クエリによるDB負荷・描画負荷を防ぐ
+        const zoom = this.map ? this.map.getZoom() : 0;
+        const minZoom = (typeof CONFIG !== 'undefined' && CONFIG.REMOTE_FETCH_MIN_ZOOM) ? CONFIG.REMOTE_FETCH_MIN_ZOOM : 12;
+        if (zoom < minZoom) return;
+
         try {
             const bounds = this.map.getBounds();
             const tiles = await this.app.supabaseManager.fetchTilesInBounds(
@@ -233,19 +238,26 @@ class GridManager {
         const maxLngIdx = Math.floor(east / this.LNG_GRID);
 
         const currentVisibleMeshes = new Set();
+        const maxRender = (typeof CONFIG !== 'undefined' && CONFIG.MAX_TILES_PER_RENDER) ? CONFIG.MAX_TILES_PER_RENDER : 1200;
+        const renderMinZoom = (typeof CONFIG !== 'undefined' && CONFIG.TILE_RENDER_MIN_ZOOM) ? CONFIG.TILE_RENDER_MIN_ZOOM : 5;
+        let renderedCount = 0;
 
         // 1. Render all claimed tiles (even if zoomed out)
-        for (const [meshId, team] of this.claimedTilesCache.entries()) {
-            const parts = meshId.split('_');
-            if (parts.length === 3) {
-                const latIdx = parseInt(parts[1], 10);
-                const lngIdx = parseInt(parts[2], 10);
+        if (currentZoom >= renderMinZoom) {
+            for (const [meshId, team] of this.claimedTilesCache.entries()) {
+                if (renderedCount >= maxRender) break; // 広域時の描画負荷を上限で抑える
+                const parts = meshId.split('_');
+                if (parts.length === 3) {
+                    const latIdx = parseInt(parts[1], 10);
+                    const lngIdx = parseInt(parts[2], 10);
 
-                if (latIdx >= minLatIdx - 1 && latIdx <= maxLatIdx + 1 &&
-                    lngIdx >= minLngIdx - 1 && lngIdx <= maxLngIdx + 1) {
-                    
-                    currentVisibleMeshes.add(meshId);
-                    this.renderSingleTile(meshId, latIdx, lngIdx, team);
+                    if (latIdx >= minLatIdx - 1 && latIdx <= maxLatIdx + 1 &&
+                        lngIdx >= minLngIdx - 1 && lngIdx <= maxLngIdx + 1) {
+
+                        currentVisibleMeshes.add(meshId);
+                        this.renderSingleTile(meshId, latIdx, lngIdx, team);
+                        renderedCount++;
+                    }
                 }
             }
         }

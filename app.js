@@ -6,8 +6,12 @@
 const CONFIG = {
     DEFAULT_CENTER: [34.6662, 135.6276], // 東大阪・近鉄瓢箪山駅〜東花園エリア
     DEFAULT_ZOOM: 17,
-    MIN_ZOOM: 10,
-    MAX_ZOOM: 20
+    MIN_ZOOM: 2,
+    MAX_ZOOM: 20,
+    // 広域表示（低ズーム）時のDB取得・描画を抑制するしきい値
+    REMOTE_FETCH_MIN_ZOOM: 12,
+    TILE_RENDER_MIN_ZOOM: 5,
+    MAX_TILES_PER_RENDER: 1200
 };
 
 class TerritoryWalkApp {
@@ -459,12 +463,19 @@ class TerritoryWalkApp {
             minZoom: CONFIG.MIN_ZOOM,
             maxZoom: CONFIG.MAX_ZOOM,
             zoomControl: false,
-            attributionControl: false
+            attributionControl: false,
+            // ズームアウト時に世界地図が横方向に繰り返さないように1枚で収める
+            worldCopyJump: false,
+            maxBounds: [[-85, -180], [85, 180]],
+            maxBoundsViscosity: 1.0,
+            bounceAtZoomLimits: false
         });
 
         // Dark-inverted OpenStreetMap tile layer (100% free, no API key required)
         this.tileLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 19,
+            noWrap: true,
+            bounds: [[-85, -180], [85, 180]],
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         }).addTo(this.map);
 
