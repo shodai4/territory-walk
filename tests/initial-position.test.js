@@ -3,7 +3,7 @@
  * アプリ起動時の地図初期位置（渋谷）:
  *   1) CONFIG.DEFAULT_CENTER が渋谷駅の座標になっている
  *   2) 地図の center / プレイヤーマーカー / D-Pad（仮想散歩）の出発点が同じ定数を使う
- *   3) 旧・東大阪の初期座標が残っていない
+ *   3) 旧フォールバック座標が残っていない
  *   4) 実GPSの初回測位では実座標へ移動する（初期位置は取得前のフォールバックのみ）
  *
  * 実行: npm test （node --test tests/）
@@ -20,8 +20,8 @@ const APP_SOURCE = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
 
 /** 渋谷駅（ハチ公口付近）の座標 */
 const SHIBUYA = { lat: 35.658034, lng: 139.701636 };
-/** 変更前の初期位置（東大阪・近鉄瓢箪山駅〜東花園エリア） */
-const OLD_OSAKA = { lat: 34.6662, lng: 135.6276 };
+/** 変更前のフォールバック座標（比較用の固定値） */
+const LEGACY_FALLBACK = { lat: 34.6662, lng: 135.6276 };
 
 /* ------------------------------------------------------------------ *
  * app.js を vm で読み込み、CONFIG と TerritoryWalkApp を取り出す
@@ -119,9 +119,9 @@ test('初期表示: ハードコードされた座標リテラルは DEFAULT_CEN
     );
 });
 
-test('初期位置: 旧・東大阪の初期座標（34.6662 / 135.6276）が残っていない', () => {
-    assert.ok(!APP_SOURCE.includes(String(OLD_OSAKA.lat)), '旧緯度が残っていない');
-    assert.ok(!APP_SOURCE.includes(String(OLD_OSAKA.lng)), '旧経度が残っていない');
+test('初期位置: 旧フォールバック座標（34.6662 / 135.6276）が残っていない', () => {
+    assert.ok(!APP_SOURCE.includes(String(LEGACY_FALLBACK.lat)), '旧緯度が残っていない');
+    assert.ok(!APP_SOURCE.includes(String(LEGACY_FALLBACK.lng)), '旧経度が残っていない');
 });
 
 /* ------------------------------------------------------------------ *
@@ -168,16 +168,16 @@ test('実GPS: 初回測位で実座標へ setView（初期位置のまま固定�
     const loaded = loadApp();
     const app = createApp(loaded);
 
-    // 渋谷とは別の場所（東大阪）で測位できたケース＝実データを壊さない
+    // 渋谷とは別の場所で測位できたケース＝実データを壊さない
     app.handlePositionUpdate(
-        { coords: { latitude: OLD_OSAKA.lat, longitude: OLD_OSAKA.lng } },
+        { coords: { latitude: LEGACY_FALLBACK.lat, longitude: LEGACY_FALLBACK.lng } },
         true
     );
     await new Promise((resolve) => setImmediate(resolve));
 
-    assert.deepEqual(app.markerPositions[0], [OLD_OSAKA.lat, OLD_OSAKA.lng], 'マーカーは実座標');
-    assert.deepEqual(app.mapCalls[0], [[OLD_OSAKA.lat, OLD_OSAKA.lng], 17], '初回測位で実座標へ寄る');
-    assert.deepEqual(toPlain(app.virtualPos), [OLD_OSAKA.lat, OLD_OSAKA.lng], '以降の基準点も実座標');
+    assert.deepEqual(app.markerPositions[0], [LEGACY_FALLBACK.lat, LEGACY_FALLBACK.lng], 'マーカーは実座標');
+    assert.deepEqual(app.mapCalls[0], [[LEGACY_FALLBACK.lat, LEGACY_FALLBACK.lng], 17], '初回測位で実座標へ寄る');
+    assert.deepEqual(toPlain(app.virtualPos), [LEGACY_FALLBACK.lat, LEGACY_FALLBACK.lng], '以降の基準点も実座標');
 });
 
 test('実GPS: 測位前は渋谷が初期表示（フォールバック）', () => {

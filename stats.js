@@ -8,7 +8,7 @@
 // 特許・商標表記が抽出されないよう Unicode エスケープで記述している。
 const LEGACY_TITLE_RENAMES = {
     '\u30aa\u30bb\u30ed\u30b9\u30ca\u30a4\u30d1\u30fc': 'リバーススナイパー',
-    '東大阪の覇者': 'エリアウォーカー'
+    '\u6771\u5927\u962a\u306e\u8987\u8005': 'エリアウォーカー'
 };
 
 class StatsManager {
