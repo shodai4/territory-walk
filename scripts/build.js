@@ -30,6 +30,7 @@ const ASSETS_TO_COPY = [
     'stats.js',
     'supabase.js',
     'favicon.png',
+    'favicon.ico',
     'icon-192.png',
     'icon-512.png',
     'apple-touch-icon.png'

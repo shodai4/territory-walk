@@ -108,6 +108,7 @@ https://shodai4.github.io/territory-walk/
 
 ### 【アプリアイコン (App Icon)】
 - `resources/icon.png` をアップロード（1024x1024px、透過なしRGB、HIG完全準拠）
+- この1024画像はマスター `resources/icon-source.png`（確定案A：黒背景にオレンジのGPSピン＋白黒タイル）のバイトコピーで、`python3 scripts/generate-assets.py` が全サイズを再生成する
 
 ### 【著作権 (Copyright)】
 ```text

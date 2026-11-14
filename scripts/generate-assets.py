@@ -1,182 +1,183 @@
 #!/usr/bin/env python3
 """
 TERRITORY WALK - generate-assets.py
-Generates Apple HIG compliant App Store icons (1024x1024, no alpha),
-splash screen (2732x2732), web favicons, and iOS AppIcon.appiconset.
+Builds every icon asset from ONE master image:
+
+    resources/icon-source.png   <- 確定アプリアイコン「案A」 (1024x1024, RGB, no alpha)
+
+Outputs (all derived from the master, so CI can never fall back to an older design):
+  * resources/icon.png                        1024x1024 (byte-identical copy of the master)
+  * resources/AppIcon.appiconset/*.png        every iOS size + Contents.json
+  * favicon.png / favicon.ico                 32x32 / multi-size browser favicon
+  * icon-192.png / icon-512.png               PWA icons
+  * apple-touch-icon.png                      180x180
+  * www/<same web icons>                      when www/ exists
+  * resources/splash.png                      2732x2732 splash centred on the master
+
+The old procedurally-drawn placeholder icon (dark grid + amber ring) is gone on purpose:
+it used to overwrite the real artwork on every CI run.
 """
 
-import os
+import hashlib
 import json
-from PIL import Image, ImageDraw, ImageFont
+import os
+import shutil
+
+from PIL import Image
 
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 RESOURCES_DIR = os.path.join(ROOT_DIR, "resources")
-IOS_ASSETS_DIR = os.path.join(ROOT_DIR, "ios", "App", "App", "Assets.xcassets", "AppIcon.appiconset")
 WWW_DIR = os.path.join(ROOT_DIR, "www")
 
-os.makedirs(RESOURCES_DIR, exist_ok=True)
-os.makedirs(WWW_DIR, exist_ok=True)
+MASTER_ICON = os.path.join(RESOURCES_DIR, "icon-source.png")
+ICON_SIZE = 1024
+IOS_MARKETING_ICON = "AppIcon-512@2x.png"
 
-def create_app_icon(size=1024):
-    """
-    Creates a 1024x1024 square icon with NO ALPHA channel (required by App Store).
-    Dark obsidian theme (#09090b) with subtle territory grid lines,
-    a contrasting Black/White territory core, and an amber GPS pulse circle.
-    """
-    img = Image.new("RGB", (size, size), color=(9, 9, 11)) # #09090b
-    draw = ImageDraw.Draw(img)
+# (filename, pixels) - kept in sync with Contents.json below and with tests/app-icon.test.js
+IOS_SIZES = [
+    ("AppIcon-20x20@2x.png", 40),
+    ("AppIcon-20x20@3x.png", 60),
+    ("AppIcon-29x29@2x.png", 58),
+    ("AppIcon-29x29@3x.png", 87),
+    ("AppIcon-40x40@2x.png", 80),
+    ("AppIcon-40x40@3x.png", 120),
+    ("AppIcon-60x60@2x.png", 120),
+    ("AppIcon-60x60@3x.png", 180),
+    ("AppIcon-76x76@2x.png", 152),
+    ("AppIcon-83.5x83.5@2x.png", 167),
+    (IOS_MARKETING_ICON, 1024),
+]
 
-    # 1. Subtle orthogonal territory grid lines (100m chess grid feel)
-    grid_color = (24, 24, 27) # #18181b
-    step = size // 8
-    for i in range(step, size, step):
-        draw.line([(i, 0), (i, size)], fill=grid_color, width=2)
-        draw.line([(0, i), (size, i)], fill=grid_color, width=2)
+# (filename, pixels) - web / PWA icons read from the repository root
+WEB_PNGS = [
+    ("favicon.png", 32),
+    ("icon-192.png", 192),
+    ("icon-512.png", 512),
+    ("apple-touch-icon.png", 180),
+]
 
-    # 2. Outer golden/amber GPS range ring
-    center = size // 2
-    ring_radius = int(size * 0.38)
-    amber_ring = (245, 158, 11) # #f59e0b
-    draw.ellipse(
-        [center - ring_radius, center - ring_radius, center + ring_radius, center + ring_radius],
-        outline=amber_ring,
-        width=int(size * 0.015)
-    )
+FAVICON_ICO_SIZES = [(16, 16), (32, 32), (48, 48)]
 
-    # 3. Outer subtle cyan territory radar sweep
-    inner_ring = int(size * 0.31)
-    cyan_dim = (6, 78, 59) # dark emerald/cyan
-    draw.ellipse(
-        [center - inner_ring, center - inner_ring, center + inner_ring, center + inner_ring],
-        outline=cyan_dim,
-        width=int(size * 0.008)
-    )
+CONTENTS_JSON = {
+    "images": [
+        {"size": "20x20", "idiom": "iphone", "filename": "AppIcon-20x20@2x.png", "scale": "2x"},
+        {"size": "20x20", "idiom": "iphone", "filename": "AppIcon-20x20@3x.png", "scale": "3x"},
+        {"size": "29x29", "idiom": "iphone", "filename": "AppIcon-29x29@2x.png", "scale": "2x"},
+        {"size": "29x29", "idiom": "iphone", "filename": "AppIcon-29x29@3x.png", "scale": "3x"},
+        {"size": "40x40", "idiom": "iphone", "filename": "AppIcon-40x40@2x.png", "scale": "2x"},
+        {"size": "40x40", "idiom": "iphone", "filename": "AppIcon-40x40@3x.png", "scale": "3x"},
+        {"size": "60x60", "idiom": "iphone", "filename": "AppIcon-60x60@2x.png", "scale": "2x"},
+        {"size": "60x60", "idiom": "iphone", "filename": "AppIcon-60x60@3x.png", "scale": "3x"},
+        {"size": "20x20", "idiom": "ipad", "filename": "AppIcon-20x20@2x.png", "scale": "2x"},
+        {"size": "29x29", "idiom": "ipad", "filename": "AppIcon-29x29@2x.png", "scale": "2x"},
+        {"size": "40x40", "idiom": "ipad", "filename": "AppIcon-40x40@2x.png", "scale": "2x"},
+        {"size": "76x76", "idiom": "ipad", "filename": "AppIcon-76x76@2x.png", "scale": "2x"},
+        {"size": "83.5x83.5", "idiom": "ipad", "filename": "AppIcon-83.5x83.5@2x.png", "scale": "2x"},
+        {"size": "1024x1024", "idiom": "ios-marketing", "filename": IOS_MARKETING_ICON, "scale": "1x"},
+    ],
+    "info": {"version": 1, "author": "xcode"},
+}
 
-    # 4. Central Black/White split disc (The essence of Territory Walk)
-    core_radius = int(size * 0.24)
-    # Right half: White territory (#fafafa)
-    draw.pieslice(
-        [center - core_radius, center - core_radius, center + core_radius, center + core_radius],
-        start=270, end=90,
-        fill=(250, 250, 250)
-    )
-    # Left half: Black territory (#18181b) with crisp border
-    draw.pieslice(
-        [center - core_radius, center - core_radius, center + core_radius, center + core_radius],
-        start=90, end=270,
-        fill=(18, 18, 20)
-    )
 
-    # Outer border for the disc
-    draw.ellipse(
-        [center - core_radius, center - core_radius, center + core_radius, center + core_radius],
-        outline=(212, 212, 216),
-        width=int(size * 0.01)
-    )
+def sha256(path):
+    with open(path, "rb") as f:
+        return hashlib.sha256(f.read()).hexdigest()
 
-    # Dividing central vertical line
-    draw.line([(center, center - core_radius), (center, center + core_radius)], fill=(245, 158, 11), width=int(size * 0.012))
 
-    # Center GPS marker pin dot (Solid Amber)
-    dot_radius = int(size * 0.04)
-    draw.ellipse(
-        [center - dot_radius, center - dot_radius, center + dot_radius, center + dot_radius],
-        fill=(245, 158, 11),
-        outline=(255, 255, 255),
-        width=int(size * 0.006)
-    )
+def load_master():
+    """Loads the confirmed app icon and refuses anything App Store would reject."""
+    if not os.path.exists(MASTER_ICON):
+        raise SystemExit(
+            f"[Assets] FATAL: master icon not found: {MASTER_ICON}\n"
+            "[Assets] Place the confirmed 1024x1024 RGB PNG there and re-run."
+        )
 
+    img = Image.open(MASTER_ICON)
+    if img.size != (ICON_SIZE, ICON_SIZE):
+        raise SystemExit(f"[Assets] FATAL: {MASTER_ICON} is {img.size}, expected ({ICON_SIZE}, {ICON_SIZE}).")
+    if img.mode != "RGB" or "A" in img.getbands():
+        raise SystemExit(
+            f"[Assets] FATAL: {MASTER_ICON} is mode {img.mode}; App Store icons must be RGB with no alpha channel."
+        )
     return img
 
-def create_splash_screen(size=2732):
-    """
-    Creates a 2732x2732 launch splash screen.
-    Minimalist dark background with central app emblem and brand styling.
-    """
-    splash = Image.new("RGB", (size, size), color=(9, 9, 11))
-    draw = ImageDraw.Draw(splash)
 
-    # Center icon stamp
-    icon_stamp = create_app_icon(size=512)
-    offset = (size - 512) // 2
-    splash.paste(icon_stamp, (offset, offset - 100))
+def resized(img, px):
+    return img.resize((px, px), Image.Resampling.LANCZOS)
 
-    return splash
 
 def main():
-    print("[Assets] Generating App Store icon (1024x1024 RGB)...")
-    icon1024 = create_app_icon(1024)
-    icon_path = os.path.join(RESOURCES_DIR, "icon.png")
-    icon1024.save(icon_path, "PNG")
-    print(f"[Assets] Saved base icon: {icon_path}")
+    master = load_master()
+    os.makedirs(RESOURCES_DIR, exist_ok=True)
 
-    # Web favicons
-    icon1024.resize((192, 192), Image.Resampling.LANCZOS).save(os.path.join(ROOT_DIR, "icon-192.png"), "PNG")
-    icon1024.resize((512, 512), Image.Resampling.LANCZOS).save(os.path.join(ROOT_DIR, "icon-512.png"), "PNG")
-    icon1024.resize((180, 180), Image.Resampling.LANCZOS).save(os.path.join(ROOT_DIR, "apple-touch-icon.png"), "PNG")
-    icon1024.resize((32, 32), Image.Resampling.LANCZOS).save(os.path.join(ROOT_DIR, "favicon.png"), "PNG")
+    # 1. 1024x1024 base icon: exact byte copy so the confirmed artwork is never re-encoded.
+    base_icon_path = os.path.join(RESOURCES_DIR, "icon.png")
+    shutil.copyfile(MASTER_ICON, base_icon_path)
+    print(f"[Assets] Master icon  : {MASTER_ICON} sha256={sha256(MASTER_ICON)}")
+    print(f"[Assets] Base icon    : {base_icon_path} sha256={sha256(base_icon_path)}")
 
-    # Sync web icons to www/
-    for fname in ["icon-192.png", "icon-512.png", "apple-touch-icon.png", "favicon.png"]:
-        src = os.path.join(ROOT_DIR, fname)
-        dst = os.path.join(WWW_DIR, fname)
-        if os.path.exists(src):
-            Image.open(src).save(dst)
-
-    print("[Assets] Generating Splash Screen (2732x2732 RGB)...")
-    splash2732 = create_splash_screen(2732)
-    splash_path = os.path.join(RESOURCES_DIR, "splash.png")
-    splash2732.save(splash_path, "PNG")
-    print(f"[Assets] Saved splash screen: {splash_path}")
-
-    # Generate iOS AppIcon.appiconset if ios/ directory exists or create template in resources
+    # 2. iOS AppIcon.appiconset (1024 marketing icon is also a byte-identical copy)
     ios_set_dir = os.path.join(RESOURCES_DIR, "AppIcon.appiconset")
     os.makedirs(ios_set_dir, exist_ok=True)
-
-    # iOS icon sizes map (filename, size in px)
-    ios_sizes = [
-        ("AppIcon-20x20@2x.png", 40),
-        ("AppIcon-20x20@3x.png", 60),
-        ("AppIcon-29x29@2x.png", 58),
-        ("AppIcon-29x29@3x.png", 87),
-        ("AppIcon-40x40@2x.png", 80),
-        ("AppIcon-40x40@3x.png", 120),
-        ("AppIcon-60x60@2x.png", 120),
-        ("AppIcon-60x60@3x.png", 180),
-        ("AppIcon-76x76@2x.png", 152),
-        ("AppIcon-83.5x83.5@2x.png", 167),
-        ("AppIcon-512@2x.png", 1024),
-    ]
-
-    for fname, px in ios_sizes:
-        resized = icon1024.resize((px, px), Image.Resampling.LANCZOS)
-        resized.save(os.path.join(ios_set_dir, fname), "PNG")
-
-    # Contents.json for Xcode asset catalog
-    contents_data = {
-        "images": [
-            {"size": "20x20", "idiom": "iphone", "filename": "AppIcon-20x20@2x.png", "scale": "2x"},
-            {"size": "20x20", "idiom": "iphone", "filename": "AppIcon-20x20@3x.png", "scale": "3x"},
-            {"size": "29x29", "idiom": "iphone", "filename": "AppIcon-29x29@2x.png", "scale": "2x"},
-            {"size": "29x29", "idiom": "iphone", "filename": "AppIcon-29x29@3x.png", "scale": "3x"},
-            {"size": "40x40", "idiom": "iphone", "filename": "AppIcon-40x40@2x.png", "scale": "2x"},
-            {"size": "40x40", "idiom": "iphone", "filename": "AppIcon-40x40@3x.png", "scale": "3x"},
-            {"size": "60x60", "idiom": "iphone", "filename": "AppIcon-60x60@2x.png", "scale": "2x"},
-            {"size": "60x60", "idiom": "iphone", "filename": "AppIcon-60x60@3x.png", "scale": "3x"},
-            {"size": "20x20", "idiom": "ipad", "filename": "AppIcon-20x20@2x.png", "scale": "2x"},
-            {"size": "29x29", "idiom": "ipad", "filename": "AppIcon-29x29@2x.png", "scale": "2x"},
-            {"size": "40x40", "idiom": "ipad", "filename": "AppIcon-40x40@2x.png", "scale": "2x"},
-            {"size": "76x76", "idiom": "ipad", "filename": "AppIcon-76x76@2x.png", "scale": "2x"},
-            {"size": "83.5x83.5", "idiom": "ipad", "filename": "AppIcon-83.5x83.5@2x.png", "scale": "2x"},
-            {"size": "1024x1024", "idiom": "ios-marketing", "filename": "AppIcon-512@2x.png", "scale": "1x"}
-        ],
-        "info": {"version": 1, "author": "xcode"}
-    }
+    for fname, px in IOS_SIZES:
+        out = os.path.join(ios_set_dir, fname)
+        if px == ICON_SIZE:
+            shutil.copyfile(MASTER_ICON, out)
+        else:
+            resized(master, px).save(out, "PNG")
+        print(f"[Assets] iOS icon     : {fname} ({px}x{px})")
 
     with open(os.path.join(ios_set_dir, "Contents.json"), "w", encoding="utf-8") as f:
-        json.dump(contents_data, f, indent=2)
+        json.dump(CONTENTS_JSON, f, indent=2, ensure_ascii=False)
+        f.write("\n")
 
-    print(f"[Assets] Generated complete iOS AppIcon.appiconset in: {ios_set_dir}")
+    # 3. Web / PWA icons
+    web_targets = []
+    for fname, px in WEB_PNGS:
+        out = os.path.join(ROOT_DIR, fname)
+        resized(master, px).save(out, "PNG")
+        web_targets.append(fname)
+        print(f"[Assets] Web icon     : {fname} ({px}x{px})")
+
+    # Browser favicon in .ico form (multi-size), served from the Pages root.
+    ico_path = os.path.join(ROOT_DIR, "favicon.ico")
+    master.save(ico_path, format="ICO", sizes=FAVICON_ICO_SIZES)
+    web_targets.append("favicon.ico")
+    print(f"[Assets] Web favicon  : favicon.ico {FAVICON_ICO_SIZES}")
+
+    # 4. Splash screen: master icon centred on the app's obsidian background.
+    splash_size = 2732
+    splash = Image.new("RGB", (splash_size, splash_size), color=(9, 9, 11))
+    stamp = resized(master, 512)
+    offset = (splash_size - 512) // 2
+    splash.paste(stamp, (offset, offset - 100))
+    splash_path = os.path.join(RESOURCES_DIR, "splash.png")
+    splash.save(splash_path, "PNG")
+    print(f"[Assets] Splash       : {splash_path} ({splash_size}x{splash_size})")
+
+    # 5. Mirror web icons into www/ when the Capacitor web dir already exists.
+    if os.path.isdir(WWW_DIR):
+        for fname in web_targets:
+            shutil.copyfile(os.path.join(ROOT_DIR, fname), os.path.join(WWW_DIR, fname))
+            print(f"[Assets] www sync     : {fname}")
+    else:
+        print("[Assets] www/ not present yet - npm run build copies the web icons later.")
+
+    # 6. Self-check so a broken run can never reach the App Store step silently.
+    problems = []
+    if sha256(base_icon_path) != sha256(MASTER_ICON):
+        problems.append("resources/icon.png differs from resources/icon-source.png")
+    for fname, px in IOS_SIZES:
+        with Image.open(os.path.join(ios_set_dir, fname)) as im:
+            if im.size != (px, px):
+                problems.append(f"{fname} is {im.size}, expected ({px}, {px})")
+            if im.mode != "RGB":
+                problems.append(f"{fname} is mode {im.mode}, expected RGB")
+    if problems:
+        raise SystemExit("[Assets] FATAL: verification failed -> " + "; ".join(problems))
+
+    print(f"[Assets] Done. {len(IOS_SIZES)} iOS icon(s) + {len(web_targets)} web asset(s) generated from the master icon.")
+
 
 if __name__ == "__main__":
     main()
