@@ -11,7 +11,7 @@ permissions:
 jobs:
   build-ios:
     name: "Build iOS App with Latest Xcode (macOS)"
-    runs-on: macos-14
+    runs-on: macos-15
 
     steps:
       - name: "Checkout repository"
@@ -261,7 +261,7 @@ jobs:
           {
             echo "### Territory Walk - iOS CI/CD Report"
             echo ""
-            echo "- **Clean Build**: iOS build verified on macos-14 (Apple Silicon, Xcode 16)"
+            echo "- **Clean Build**: iOS build verified on macos-15 (Apple Silicon, Xcode 16)"
             echo "- **Capacitor Core**: v6.2.0"
             echo "- **iOS Deployment Target**: iOS 14.0+"
             echo "- **GPS Permissions**: NSLocationWhenInUse & NSLocationAlways configured"
