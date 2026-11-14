@@ -124,7 +124,12 @@ class GridManager {
 
             if (tiles && tiles.length > 0) {
                 let updated = false;
+                // 未送信（Outbox待ち）のローカル陣地はリモート値で上書きしない
+                const pendingMeshes = (this.app && this.app.syncQueue)
+                    ? this.app.syncQueue.pendingMeshIds()
+                    : new Set();
                 tiles.forEach(tile => {
+                    if (pendingMeshes.has(tile.tile_id)) return;
                     if (this.claimedTilesCache.get(tile.tile_id) !== tile.team) {
                         this.claimedTilesCache.set(tile.tile_id, tile.team);
                         updated = true;

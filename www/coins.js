@@ -23,7 +23,7 @@ class CoinManager {
 
         // 1. Tile & Grid Skins Catalog (Graduated Pricing by Rarity & Vibrant Colors)
         this.SKINS = {
-            default: { id: 'default', name: '標準', cost: 0, desc: '白と黒のオセロカラー', class: 'text-zinc-200' },
+            default: { id: 'default', name: '標準', cost: 0, desc: '白と黒のクラシックカラー', class: 'text-zinc-200' },
             pixel: { id: 'pixel', name: 'レトロ', cost: 1000, desc: 'ライムグリーンとダーク', class: 'text-lime-400' },
             sakura: { id: 'sakura', name: 'サクラ', cost: 2500, desc: '桜ピンクと翡翠ミント', class: 'text-pink-400' },
             monochrome: { id: 'monochrome', name: 'モノトーン', cost: 4500, desc: '完全白黒の濃淡', class: 'text-slate-300' },
@@ -49,7 +49,7 @@ class CoinManager {
             'ナスカの末裔': { name: 'ナスカの末裔', cost: 15000, desc: '大地に壮大な紋様を刻む者' },
             '天駆ける旅人': { name: '天駆ける旅人', cost: 22000, desc: '果てなき地平を追い求める永遠の冒険者' },
             'ウォーキングレジェンド': { name: 'ウォーキングレジェンド', cost: 35000, desc: '歩行陣取りの頂点を極めし伝説' },
-            'テラ・コンクエスター': { name: 'テラ・コンクエスター', cost: 50000, desc: 'すべての大地を塗り替える絶対的覇者（最上位）' }
+            'テラ・コンクエスター': { name: 'テラ・コンクエスター', cost: 9999999999, desc: 'すべての大地を塗り替える絶対的覇者（最上位）' }
         };
 
         // 3. Special Perks Catalog (Rebalanced Price Hierarchy)
@@ -139,7 +139,8 @@ class CoinManager {
 
         if (this.coins < n) {
             if (this.app && this.app.showToast) {
-                this.app.showToast(`コインが不足しています (所持: ${this.coins} COIN / 必要: ${n} COIN)`);
+                const shortfall = Math.max(0, n - this.coins);
+                this.app.showToast(`あと ${shortfall.toLocaleString()} コイン足りません`, 'コイン購入や動画視聴で獲得できます');
             }
             return false;
         }
@@ -234,12 +235,13 @@ class CoinManager {
         if (!skin) return;
 
         if (this.coins >= skin.cost) {
-            const ok = confirm(`【ショップ】\n「${skin.name}」を ${skin.cost} COIN で解放しますか？\n（現在所持: ${this.coins} COIN）`);
+            const ok = confirm(`【ショップ】\n「${skin.name}」を ${skin.cost.toLocaleString()} コインで解放しますか？`);
             if (ok) {
                 this.unlockSkin(skinId);
             }
         } else {
-            const ok = confirm(`【コイン不足】\n「${skin.name}」の解放には ${skin.cost} COIN 必要です。\n（現在所持: ${this.coins} COIN）\n\nショップを開いてリワード広告やコイン購入で獲得しますか？`);
+            const shortfall = Math.max(0, skin.cost - this.coins);
+            const ok = confirm(`【コイン不足】\nあと ${shortfall.toLocaleString()} コイン足りません。\n\nショップを開いてコイン購入や動画視聴で獲得しますか？`);
             if (ok) {
                 this.openShopModal('packs');
             }
@@ -345,8 +347,34 @@ class CoinManager {
         return localStorage.getItem('tw_is_ad_free') === 'true';
     }
 
-    setAdFree(enabled = true) {
+    getAdFreeSource() {
+        return localStorage.getItem('tw_ad_free_source') || '';
+    }
+
+    /**
+     * 500円以上のコインパックは広告完全非表示（Ad-Free）を付帯する
+     */
+    packIncludesAdFree(pack) {
+        return !!pack && Number(pack.yen) >= 500;
+    }
+
+    unlockAdFreeFromPack(pack) {
+        if (!this.packIncludesAdFree(pack)) return false;
+        const wasAdFree = this.isAdFree();
+        this.setAdFree(true, `pack:${pack.id}`);
+        if (!wasAdFree && this.app && this.app.showToast) {
+            this.app.showToast('広告非表示を解放しました', `${pack.name}の購入特典としてバナー広告と動画待ちを解除`);
+        }
+        return !wasAdFree;
+    }
+
+    setAdFree(enabled = true, source = '') {
         localStorage.setItem('tw_is_ad_free', enabled ? 'true' : 'false');
+        if (enabled) {
+            localStorage.setItem('tw_ad_free_source', source || this.getAdFreeSource() || 'manual');
+        } else {
+            localStorage.removeItem('tw_ad_free_source');
+        }
         document.body.setAttribute('data-ad-free', enabled ? 'true' : 'false');
         const banner = document.getElementById('banner-ad-container');
         if (banner) {
@@ -367,7 +395,7 @@ class CoinManager {
             return;
         }
 
-        this.setAdFree(true);
+        this.setAdFree(true, 'ad-free-pass');
         if (this.app && this.app.showToast) {
             this.app.showToast('【購入完了】広告完全非表示パス', '下部バナー広告を消去し動画スキップを適用しました');
         }
@@ -533,6 +561,9 @@ class CoinManager {
             this.app.showToast(`【購入完了】+${pack.coins.toLocaleString()} COIN を獲得しました (${pack.name})`);
         }
 
+        // スタンダードパック（500円）以上は広告完全非表示を自動解放
+        this.unlockAdFreeFromPack(pack);
+
         if (window.onCoinPackPurchased) {
             window.onCoinPackPurchased(packId, pack.coins, pack.yen);
         }
@@ -602,7 +633,7 @@ class CoinManager {
 
         if (navigator.share) {
             navigator.share({
-                title: 'TERRITORY WALK - 白黒歩行オセロ陣取り',
+                title: 'TERRITORY WALK - 白黒歩行陣取り',
                 text: text,
                 url: url
             }).catch((err) => {
@@ -849,14 +880,18 @@ class CoinManager {
         if (!container) return;
 
         const isAdFree = this.isAdFree();
+        const adFreeSource = this.getAdFreeSource();
+        const isPackAdFree = isAdFree && adFreeSource.indexOf('pack') === 0;
+        const adFreeBadge = isAdFree ? (isPackAdFree ? 'パック特典で有効' : '有効化済み') : '買い切りパス';
         const adFreeCard = `
             <div class="bg-gradient-to-br from-zinc-950 to-zinc-900 border ${isAdFree ? 'border-emerald-500/80' : 'border-amber-500/80 ring-1 ring-amber-500/50'} p-3 rounded-xl flex items-center justify-between gap-2">
                 <div>
                     <div class="flex items-center gap-1.5 flex-wrap">
                         <span class="font-bold text-xs text-white">広告完全非表示パス (Ad-Free Pro)</span>
-                        <span class="px-1.5 py-0.5 rounded ${isAdFree ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'} text-[9px] font-mono font-bold">${isAdFree ? '有効化済み' : '買い切りパス'}</span>
+                        <span class="px-1.5 py-0.5 rounded ${isAdFree ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'} text-[9px] font-mono font-bold">${adFreeBadge}</span>
                     </div>
                     <div class="text-[10px] text-zinc-400 leading-tight mt-0.5 break-keep">画面下部バナー広告を完全消去 ＆ 動画リワード待ち時間なし即時受取</div>
+                    <div class="text-[9px] text-emerald-400/80 leading-tight mt-0.5">スタンダードパック（¥500）以上の購入でも自動付帯</div>
                     <div class="text-amber-400 font-mono text-xs font-bold mt-1">永久Ad-Free特典</div>
                 </div>
                 <div class="shrink-0">
@@ -874,14 +909,17 @@ class CoinManager {
         `;
 
         const packsCards = Object.values(this.PACKS).map(pack => {
+            const includesAdFree = this.packIncludesAdFree(pack);
             return `
                 <div class="bg-zinc-950/80 border ${pack.id === 'premium' ? 'border-amber-500/80 ring-1 ring-amber-500/50' : 'border-zinc-800'} p-3 rounded-xl flex items-center justify-between gap-2">
                     <div>
-                        <div class="flex items-center gap-1.5">
+                        <div class="flex items-center gap-1.5 flex-wrap">
                             <span class="font-bold text-xs text-white">${pack.name}</span>
                             ${pack.bonus ? `<span class="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 text-[9px] font-mono font-bold">${pack.bonus}</span>` : ''}
+                            ${includesAdFree ? '<span class="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[9px] font-mono font-bold">＋広告非表示</span>' : ''}
                         </div>
                         <div class="text-[10px] text-zinc-400 leading-tight mt-0.5">${pack.desc}</div>
+                        ${includesAdFree ? '<div class="text-[9px] text-emerald-400/80 leading-tight mt-0.5">Ad-Freeパス（単体¥480）と動画スキップ込み</div>' : ''}
                         <div class="text-amber-400 font-mono text-xs font-bold mt-1">+${pack.coins.toLocaleString()} COIN</div>
                     </div>
                     <div class="shrink-0">
@@ -1014,17 +1052,19 @@ class CoinManager {
                 actionButton = `<button class="btn-equip-title px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[10px] font-bold font-mono transition-all active:scale-95" data-title="${title.name}">セット</button>`;
             } else {
                 const canAfford = this.coins >= title.cost;
-                const btnStyle = canAfford 
-                    ? 'bg-amber-600 hover:bg-amber-500 text-white' 
-                    : 'bg-zinc-800 text-zinc-500 cursor-not-allowed';
-                actionButton = `<button class="btn-buy-title px-2.5 py-1 rounded ${btnStyle} text-[10px] font-bold font-mono transition-all active:scale-95" data-title="${title.name}" ${canAfford ? '' : 'disabled'}>${title.cost} COIN</button>`;
+                const btnStyle = canAfford
+                    ? 'bg-amber-600 hover:bg-amber-500 text-white'
+                    : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700';
+                const priceLabel = `${title.cost.toLocaleString()} COIN`;
+                const longPrice = priceLabel.length > 11;
+                actionButton = `<button class="btn-buy-title px-2 py-1 rounded ${btnStyle} ${longPrice ? 'text-[9px]' : 'text-[10px]'} font-bold font-mono transition-all active:scale-95 whitespace-nowrap tabular-nums" data-title="${title.name}">${priceLabel}</button>`;
             }
 
             return `
                 <div class="bg-zinc-950/80 border border-zinc-800 p-2.5 rounded-xl flex items-center justify-between gap-2">
-                    <div>
-                        <div class="font-bold text-xs text-amber-300 font-mono">[${title.name}]</div>
-                        <div class="text-[10px] text-zinc-400 leading-tight mt-0.5">${title.desc}</div>
+                    <div class="min-w-0 flex-1">
+                        <div class="font-bold text-xs text-amber-300 font-mono truncate">[${title.name}]</div>
+                        <div class="text-[10px] text-zinc-400 leading-tight mt-0.5 line-clamp-2">${title.desc}</div>
                     </div>
                     <div class="shrink-0">
                         ${actionButton}

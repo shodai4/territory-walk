@@ -35,7 +35,7 @@ html, body {
     transition: background-color 0.3s ease;
 }
 
-/* Map tiles hidden (Black/White Othello Mode) */
+/* Map tiles hidden (Black/White Territory Mode) */
 #map.map-tiles-hidden, #map.map-tiles-hidden .leaflet-container {
     background-color: #262a34 !important; /* 未開拓エリア: 落ち着いたダークグレー (黒マスとの同化防止) */
 }
@@ -66,6 +66,33 @@ body[data-ad-free="true"] #map-controls-container {
 #dpad-container {
     bottom: calc(14rem + env(safe-area-inset-bottom)) !important;
     right: calc(1rem + env(safe-area-inset-right)) !important;
+}
+
+/* iOSネイティブのAdMobバナー表示中は、下部のボタン類が隠れないよう余白を確保 */
+body[data-native-banner="true"] #map-controls-container {
+    bottom: calc(var(--admob-banner-height, 56px) + 0.75rem + env(safe-area-inset-bottom)) !important;
+}
+
+body[data-native-banner="true"] #dpad-container {
+    bottom: calc(var(--admob-banner-height, 56px) + 7rem + env(safe-area-inset-bottom)) !important;
+}
+
+body[data-native-banner="true"] #app-footer-note {
+    bottom: calc(var(--admob-banner-height, 56px) + 0.5rem + env(safe-area-inset-bottom)) !important;
+}
+
+/* ネイティブ実行時はWeb用ダミー広告枠を常に非表示（AdMobとの二重表示防止） */
+body[data-platform="native"] #banner-ad-container {
+    display: none !important;
+}
+
+/* AdMobバナー分のスペーサー（Ad-Free時やWebでは高さ0） */
+#admob-banner-spacer {
+    height: 0;
+}
+
+body[data-native-banner="true"] #admob-banner-spacer {
+    height: calc(var(--admob-banner-height, 56px) + env(safe-area-inset-bottom));
 }
 
 /* Position Leaflet controls below 2-row header */

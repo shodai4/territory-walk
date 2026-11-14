@@ -52,8 +52,7 @@ class SupabaseManager {
     /**
      * Claim or update a tile in Supabase (UPSERT)
      */
-    async claimTile(tileId, latIdx, lngIdx, team, weekId = this.getCurrentWeekId()) {
-        if (!this.client) {
+    async claimTile(tileId, latIdx, lngIdx, team, weekId = this.getCurrentWeekId()) {        if (!this.client) {
             console.warn('[Mock] claimTile called offline:', { tileId, weekId, team, latIdx, lngIdx });
             return { success: false, mode: 'offline' };
         }
@@ -80,6 +79,64 @@ class SupabaseManager {
             return { success: true, data };
         } catch (err) {
             console.error('Exception in claimTile:', err);
+            return { success: false, error: err };
+        }
+    }
+
+    /**
+     * 単一タイル送信の互換エントリポイント（app.js から従来どおり呼ばれる）。
+     */
+    async upsertTile(meshId, latIdx, lngIdx, team, weekId = this.getCurrentWeekId()) {
+        if (!this.client) {
+            return { success: false, mode: 'offline' };
+        }
+        return this.claimTile(meshId, latIdx, lngIdx, team, weekId);
+    }
+
+    /**
+     * 複数タイルの一括UPSERT（オフラインキューからまとめて再送する）。
+     * 失敗時は success:false を返し、呼び出し側がキューを保持できるようにする。
+     */
+    async upsertTilesBatch(entries) {
+        if (!this.client) {
+            return { success: false, mode: 'offline' };
+        }
+        if (!Array.isArray(entries) || entries.length === 0) {
+            return { success: true, count: 0 };
+        }
+
+        const now = new Date().toISOString();
+        const rows = [];
+        const seen = new Set();
+        for (const e of entries) {
+            if (!e || !e.meshId) continue;
+            const weekId = e.weekId || this.getCurrentWeekId();
+            const key = `${weekId}|${e.meshId}`;
+            if (seen.has(key)) continue; // 同一UPSERT内の重複行はPostgresエラーになるため排除
+            seen.add(key);
+            rows.push({
+                tile_id: e.meshId,
+                week_id: weekId,
+                team: e.team === 'white' ? 'white' : 'black',
+                lat_idx: Number(e.latIdx),
+                lng_idx: Number(e.lngIdx),
+                updated_at: e.updatedAt || now
+            });
+        }
+        if (rows.length === 0) return { success: true, count: 0 };
+
+        try {
+            const { data, error } = await this.client
+                .from('territory_tiles')
+                .upsert(rows, { onConflict: 'tile_id,week_id' });
+
+            if (error) {
+                console.error('[Supabase] Batch tile upsert error:', error);
+                return { success: false, error: error };
+            }
+            return { success: true, count: rows.length, data: data };
+        } catch (err) {
+            console.error('[Supabase] Exception in upsertTilesBatch:', err);
             return { success: false, error: err };
         }
     }

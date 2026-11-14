@@ -6,13 +6,43 @@
 class AdMobManager {
     constructor(appInstance) {
         this.app = appInstance;
-        this.isNative = typeof window.Capacitor !== 'undefined' && window.Capacitor.isNativePlatform();
+        this.isNative = typeof window.Capacitor !== 'undefined'
+            && typeof window.Capacitor.isNativePlatform === 'function'
+            && window.Capacitor.isNativePlatform();
         this.admob = null;
         this.isAdLoaded = false;
         this.testRewardAdId = 'ca-app-pub-3940256099942544/1712485313'; // Google Official Test Reward Ad ID for iOS
         this.testBannerAdId = 'ca-app-pub-3940256099942544/2934735716'; // Google Official Test Banner Ad ID for iOS
 
+        this.applyPlatformVisibility();
         this.init();
+    }
+
+    /**
+     * ネイティブ実行時はWeb用のダミー広告枠を常に非表示にする
+     * （AdMobネイティブバナーとの二重表示防止）。Webブラウザでは従来どおり表示。
+     */
+    applyPlatformVisibility() {
+        if (this.isNative) {
+            document.body.setAttribute('data-platform', 'native');
+            const webBanner = document.getElementById('banner-ad-container');
+            if (webBanner) webBanner.classList.add('hidden');
+        } else {
+            document.body.removeAttribute('data-platform');
+        }
+    }
+
+    /** AdMobネイティブバナー分の下部余白を確保／解除する */
+    setNativeBannerVisible(visible) {
+        if (!this.isNative) {
+            document.body.removeAttribute('data-native-banner');
+            return;
+        }
+        if (visible) {
+            document.body.setAttribute('data-native-banner', 'true');
+        } else {
+            document.body.removeAttribute('data-native-banner');
+        }
     }
 
     async init() {
@@ -35,6 +65,10 @@ class AdMobManager {
 
                 // Prepare first reward video
                 this.preloadRewardVideo();
+
+                // 起動時の広告状態（Ad-Freeなら非表示、未購入ならバナー表示）を適用
+                const adFree = this.app && this.app.coinManager ? this.app.coinManager.isAdFree() : false;
+                await this.updateAdFreeState(adFree);
             } else {
                 console.log('[AdMob] Native AdMob plugin not found in window.Capacitor.Plugins.');
             }
@@ -107,16 +141,33 @@ class AdMobManager {
      * Show or Hide AdMob Bottom Banner depending on Ad-Free status
      */
     async updateAdFreeState(isAdFree) {
+        // Web用ダミー広告枠: ネイティブでは常に非表示、WebではAd-Free時のみ非表示
+        const webBanner = document.getElementById('banner-ad-container');
+        if (webBanner) {
+            const hideWebBanner = this.isNative ? true : !!isAdFree;
+            webBanner.classList.toggle('hidden', hideWebBanner);
+        }
+
+        if (!this.isNative) {
+            this.setNativeBannerVisible(false);
+            return;
+        }
+
         if (isAdFree) {
-            if (this.isNative && this.admob) {
+            // 下部余白の解除 → AdMobバナーを非表示
+            this.setNativeBannerVisible(false);
+            if (this.admob) {
                 try {
                     await this.admob.hideBanner();
                 } catch (e) {
                     console.warn('[AdMob] Failed to hide banner:', e);
                 }
+                try {
+                    if (typeof this.admob.removeBanner === 'function') await this.admob.removeBanner();
+                } catch (e) { /* removeBanner is optional */ }
             }
         } else {
-            if (this.isNative && this.admob) {
+            if (this.admob) {
                 try {
                     await this.admob.showBanner({
                         adId: this.testBannerAdId,
@@ -124,8 +175,10 @@ class AdMobManager {
                         position: 'BOTTOM_CENTER',
                         margin: 0
                     });
+                    this.setNativeBannerVisible(true);
                 } catch (e) {
                     console.warn('[AdMob] Failed to show native banner:', e);
+                    this.setNativeBannerVisible(false);
                 }
             }
         }

@@ -16,6 +16,7 @@ ASSETS_TO_COPY = [
     'iap.js',
     'coins.js',
     'grid.js',
+    'outbox.js',
     'poster.js',
     'pro.js',
     'search.js',

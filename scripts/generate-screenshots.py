@@ -28,7 +28,7 @@ font_jp_lg = ImageFont.truetype(FONT_JP, 28)
 SCREENSHOTS = [
     {
         'file': 'screenshot-1-main-battle.png',
-        'tag': 'リアル歩行 × 白黒オセロ陣取り',
+        'tag': 'リアル歩行 × 白黒陣取り',
         'title': '歩いて街を白黒陣取り',
         'sub': '日常の散歩や通勤が、リアルな陣取りバトルに。',
         'theme_color': (245, 158, 11), # amber
@@ -260,7 +260,7 @@ def compose_season_screen(screen_img, inner_box):
     sy = bar_y + 80
     stats = [
         ("今週のあなたの開拓マス", "148 マス"),
-        ("オセロ逆転奪還マス", "32 マス"),
+        ("逆転奪還マス", "32 マス"),
         ("週間ランキング", "第 4 位"),
         ("シーズン勝利ボーナス", "+1,000 COIN")
     ]
@@ -307,7 +307,7 @@ def compose_shop_screen(screen_img, inner_box):
         ("深夜の徘徊者", "深夜帯に街を歩く孤高のプレイヤー", "1,000 C", False),
         ("ストリートファイター", "歩行バトルを繰り返す歴戦の強者", "3,000 C", True),
         ("ナスカの末裔", "地図上に幾何学の絵を描く者", "8,000 C", False),
-        ("テラ・コンクエスター", "地球上の領土を制圧する最高位称号", "50,000 C", False),
+        ("テラ・コンクエスター", "地球上の領土を制圧する最高位称号", "9,999,999,999 C", False),
         ("2026-W46 TOP10", "週間ランキング上位入賞者限定刻印", "限定獲得", False),
     ]
     
@@ -315,8 +315,16 @@ def compose_shop_screen(screen_img, inner_box):
         draw.rounded_rectangle([(mx + 30, iy), (mx + mw - 30, iy + 120)], radius=16, fill=(24, 24, 27), outline=(39, 39, 42), width=1)
         draw.text((mx + 50, iy + 22), name, fill=(255, 255, 255), font=font_jp_md)
         draw.text((mx + 50, iy + 65), desc, fill=(113, 113, 122), font=ImageFont.truetype(FONT_JP, 18))
-        
-        btn_w = 140
+
+        # 金額が長い場合はボタン幅を広げ、フォントを自動縮小してはみ出しを防ぐ
+        price_font = ImageFont.truetype(FONT_EN, 20) if price.isascii() else ImageFont.truetype(FONT_JP, 18)
+        pb = draw.textbbox((0, 0), price, font=price_font)
+        pw = pb[2] - pb[0]
+        if pw + 40 > 190:
+            price_font = ImageFont.truetype(FONT_EN, 15) if price.isascii() else ImageFont.truetype(FONT_JP, 16)
+            pb = draw.textbbox((0, 0), price, font=price_font)
+            pw = pb[2] - pb[0]
+        btn_w = max(140, pw + 40)
         btn_x = mx + mw - 30 - btn_w - 20
         btn_y = iy + 35
         if is_equipped:
@@ -324,7 +332,8 @@ def compose_shop_screen(screen_img, inner_box):
             draw.text((btn_x + 32, btn_y + 12), "装備中", fill=(255, 255, 255), font=font_jp_sm)
         else:
             draw.rounded_rectangle([(btn_x, btn_y), (btn_x + btn_w, btn_y + 50)], radius=12, fill=(39, 39, 42))
-            draw.text((btn_x + 20, btn_y + 12), price, fill=(245, 158, 11), font=ImageFont.truetype(FONT_EN, 20))
+            ph = pb[3] - pb[1]
+            draw.text((btn_x + (btn_w - pw) // 2, btn_y + (50 - ph) // 2 - pb[1]), price, fill=(245, 158, 11), font=price_font)
             
         iy += 138
 
@@ -347,7 +356,7 @@ def compose_pocket_screen(screen_img, inner_box):
         ("● 画面消灯でも自動開拓", "アプリを閉じてポケットに入れたままでも、約100mマスを自動で測位・自陣色へ塗り替えます。"),
         ("● 完全公正な実力勝負", "課金による移動速度アップや範囲拡大は一切なし。歩いた距離と戦略だけで競い合うストイックルール。"),
         ("● 省電力＆オフライン耐性", "電波が一時的に途切れても歩行ログを端末内に安全保持。復帰時にまとめて陣地へ反映されます。"),
-        ("● プライバシー完全保護", "あなたの正確な自宅住所や移動軌跡は非公開。オセロマスのみが白黒で共有されます。")
+        ("● プライバシー完全保護", "あなたの正確な自宅住所や移動軌跡は非公開。陣地マスのみが白黒で共有されます。")
     ]
     
     fy = my + 160

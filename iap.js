@@ -16,8 +16,13 @@
  * - Each transaction is granted at most once: processed transaction IDs
  *   are persisted in localStorage, so an app restart between "grant" and
  *   "finish" cannot double-credit consumable coin packs.
- * - Consumable coin packs cannot be restored (Apple policy). Only the
- *   non-consumable Ad-Free pass is restored / re-applied.
+ * - Consumable coin packs cannot be re-delivered on restore (Apple policy).
+ *   The Ad-Free entitlement they carry is therefore state-based: it is
+ *   persisted locally (tw_is_ad_free / tw_ad_free_source) and, on restore,
+ *   re-derived from the App Store receipt history, which still lists the
+ *   consumed 500 / 1,500 / 5,000 yen pack transactions.
+ * - Standard pack (500 yen) and above automatically unlock the same
+ *   Ad-Free entitlement as the 480 yen standalone pass.
  *
  * Receipt validation:
  * - By default the plugin validates the App Store receipt locally.
@@ -79,6 +84,9 @@ class IAPManager {
                 title: '広告完全非表示パス (Ad-Free Pro)'
             }
         };
+
+        // スタンダードパック（500円）以上の購入特典として広告完全非表示を自動解放
+        this.AD_FREE_MIN_YEN = 500;
 
         this.PROCESSED_KEY = 'tw_iap_processed_tx_v1';
         this.store = null;          // CdvPurchase.store (native only)
@@ -416,20 +424,84 @@ class IAPManager {
 
         const packKey = Object.keys(this.products).find(k => this.products[k] === item);
         const total = item.coins * quantity;
+        const unlocksAdFree = this.packUnlocksAdFree(item);
         this.app.coinManager.addCoins(total, `IAP購入: ${item.title}`);
+        if (unlocksAdFree) this.applyAdFree(`pack:${packKey}`);
         this.toast(
             `購入完了！ +${total.toLocaleString()} COIN`,
-            `${item.title} (${this.getDisplayPrice(packKey) || item.fallbackPrice}) を獲得しました`
+            unlocksAdFree
+                ? `${item.title} を獲得。広告完全非表示（Ad-Free）も解放しました`
+                : `${item.title} (${this.getDisplayPrice(packKey) || item.fallbackPrice}) を獲得しました`
         );
         this.refreshShopUI();
     }
 
-    applyAdFree() {
+    /**
+     * 500円以上のコインパックは広告完全非表示（Ad-Free）を付帯する。
+     */
+    packUnlocksAdFree(item) {
+        return !!item && item.type === 'consumable' && Number(item.yen) >= this.AD_FREE_MIN_YEN;
+    }
+
+    applyAdFree(source = 'ad-free-pass') {
         if (this.app && this.app.coinManager) {
-            this.app.coinManager.setAdFree(true);
+            this.app.coinManager.setAdFree(true, source);
         } else {
             localStorage.setItem('tw_is_ad_free', 'true');
+            localStorage.setItem('tw_ad_free_source', source);
         }
+    }
+
+    /**
+     * 購入履歴（App Storeレシート／検証済みレシート）から、500円以上の
+     * コインパック購入歴を探す。消耗型パックは再配布できないが、付帯した
+     * Ad-Free 特典は購入履歴がある限り再適用できる。
+     */
+    findAdFreePackInPurchaseHistory() {
+        if (!this.store) return null;
+        const qualifying = Object.keys(this.products)
+            .filter(k => this.packUnlocksAdFree(this.products[k]))
+            .map(k => this.products[k].id);
+        if (qualifying.length === 0) return null;
+
+        const found = new Set();
+        const collect = (id) => {
+            if (id && qualifying.indexOf(id) >= 0) found.add(id);
+        };
+        const collectTransaction = (tx) => {
+            if (!tx || tx.isPending) return;
+            const items = tx.products || tx.items || [];
+            if (Array.isArray(items)) {
+                for (const it of items) collect(it && (it.id || it.productId));
+            }
+            collect(tx.productId);
+            collect(tx.product_id);
+        };
+
+        try {
+            const txs = Array.isArray(this.store.localTransactions) ? this.store.localTransactions : [];
+            txs.forEach(collectTransaction);
+        } catch (e) { /* accessor unavailable */ }
+
+        try {
+            const receipts = Array.isArray(this.store.localReceipts) ? this.store.localReceipts : [];
+            for (const receipt of receipts) {
+                const collection = (receipt && receipt.collection) || [];
+                if (Array.isArray(collection)) collection.forEach(collectTransaction);
+            }
+        } catch (e) { /* accessor unavailable */ }
+
+        try {
+            const verified = this.store.verifiedPurchases;
+            if (Array.isArray(verified)) {
+                for (const vp of verified) {
+                    if (!vp) continue;
+                    collect(vp.id || vp.productId);
+                }
+            }
+        } catch (e) { /* accessor unavailable */ }
+
+        return found.size > 0 ? Array.from(found) : null;
     }
 
     // ---------------------------------------------------------------
@@ -448,7 +520,13 @@ class IAPManager {
             if (!owned && product && typeof this.store.findInVerifiedReceipts === 'function') {
                 owned = !!this.store.findInVerifiedReceipts(product);
             }
-            if (owned) this.applyAdFree();
+            if (owned) this.applyAdFree('ad-free-pass');
+
+            // 500円以上のコインパック購入歴からも Ad-Free を復元する
+            const packHistory = this.findAdFreePackInPurchaseHistory();
+            if (packHistory) {
+                this.applyAdFree('pack-history');
+            }
         } catch (e) {
             console.warn('[IAP] Entitlement sync skipped:', e);
         }
@@ -458,7 +536,9 @@ class IAPManager {
         if (!this.isNative) {
             // Web build: nothing to restore from a store; just re-apply
             // the locally persisted entitlement state.
-            if (localStorage.getItem('tw_is_ad_free') === 'true') this.applyAdFree();
+            if (localStorage.getItem('tw_is_ad_free') === 'true') {
+                this.applyAdFree(localStorage.getItem('tw_ad_free_source') || 'local');
+            }
             this.toast('購入の復元が完了しました', '保存されている状態を同期しました');
             return;
         }
@@ -487,11 +567,15 @@ class IAPManager {
         const wasAdFree = localStorage.getItem('tw_is_ad_free') === 'true';
         this.syncEntitlements();
         const isAdFreeNow = localStorage.getItem('tw_is_ad_free') === 'true';
+        const adFreeSource = localStorage.getItem('tw_ad_free_source') || '';
 
         if (isAdFreeNow) {
-            this.toast('購入の復元が完了しました', '広告完全非表示パスを再適用しました');
+            const detail = adFreeSource.indexOf('pack') === 0 || adFreeSource === 'pack-history'
+                ? 'パック購入特典の広告完全非表示を再適用しました'
+                : '広告完全非表示パスを再適用しました';
+            this.toast('購入の復元が完了しました', detail);
         } else if (!wasAdFree) {
-            this.toast('復元できる購入がありませんでした', 'コインパックは消耗型のため復元できません');
+            this.toast('復元できる購入がありませんでした', 'コインパックは消耗型のため再付与できません');
         } else {
             this.toast('購入の復元が完了しました', '購入状態を同期しました');
         }

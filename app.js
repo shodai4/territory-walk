@@ -43,6 +43,12 @@ class TerritoryWalkApp {
         this.adMobManager = new AdMobManager(this);
         this.iapManager = new IAPManager(this);
 
+        // オフライン陣地の一時保存キュー（送信失敗分もここに退避される）
+        if (typeof TileSyncQueue !== 'undefined') {
+            this.syncQueue = new TileSyncQueue(this);
+            this.syncQueue.onChange = (count, offline, flushing) => this.updateSyncQueueBadge(count, offline, flushing);
+        }
+
         this.initToastSystem();
         this.initTeam();
         this.initDOM();
@@ -80,10 +86,56 @@ class TerritoryWalkApp {
         setInterval(() => {
             this.loadRemoteTiles();
         }, 8000);
+
+        // 前回オフライン中に溜まった未送信分を起動時に再送
+        setTimeout(() => {
+            if (this.syncQueue) {
+                this.syncQueue.notify();
+                this.syncQueue.flush('startup');
+            }
+        }, 2000);
+    }
+
+    updateSyncQueueBadge(count, offline, flushing) {
+        const badge = document.getElementById('sync-queue-badge');
+        const labelEl = document.getElementById('sync-queue-count');
+        const dot = document.getElementById('sync-queue-dot');
+        if (!badge || !labelEl) return;
+
+        let label = '';
+        if (offline) {
+            label = count > 0 ? `オフライン ${count}マス未送信` : 'オフライン';
+        } else if (count > 0) {
+            label = flushing ? `同期中 ${count}マス` : `${count}マス同期待ち`;
+        }
+
+        if (label) {
+            labelEl.textContent = label;
+            badge.classList.remove('hidden');
+            badge.classList.add('flex');
+            if (dot) {
+                dot.className = offline
+                    ? 'w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse'
+                    : 'w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse';
+            }
+        } else {
+            badge.classList.add('hidden');
+            badge.classList.remove('flex');
+        }
+    }
+
+    enqueueTileSync(meshId, latIdx, lngIdx, team) {
+        if (!this.syncQueue) return;
+        const weekId = this.supabaseManager ? this.supabaseManager.getCurrentWeekId() : '';
+        this.syncQueue.enqueue({ meshId, latIdx, lngIdx, team, weekId });
+        if (!this.syncQueue.isOffline()) {
+            this.syncQueue.flush('tile-claim').catch(() => {});
+        }
     }
 
     initToastSystem() {
         this.toastQueue = [];
+        this.toastTimer = null;
         this.setupModalObservers();
     }
 
@@ -94,7 +146,9 @@ class TerritoryWalkApp {
             'rules-modal',
             'stats-modal',
             'weekly-result-modal',
-            'team-reset-modal'
+            'team-reset-modal',
+            'pro-modal',
+            'reward-ad-modal'
         ];
         for (const id of modalIds) {
             const el = document.getElementById(id);
@@ -112,7 +166,9 @@ class TerritoryWalkApp {
             'rules-modal',
             'stats-modal',
             'weekly-result-modal',
-            'team-reset-modal'
+            'team-reset-modal',
+            'pro-modal',
+            'reward-ad-modal'
         ];
         modalIds.forEach(id => {
             const el = document.getElementById(id);
@@ -120,12 +176,27 @@ class TerritoryWalkApp {
                 const observer = new MutationObserver(() => {
                     if (el.classList.contains('hidden')) {
                         // モーダルが閉じられたら少し間を置いて溜まっていたキューを順次表示
-                        setTimeout(() => this.flushToastQueue(), 250);
+                        setTimeout(() => {
+                            if (!this.isAnyModalOpen()) this.flushToastQueue();
+                        }, 250);
+                    } else {
+                        // メニューを優先: モーダルが開いたら表示中のトーストを退ける
+                        this.clearToasts();
                     }
                 });
                 observer.observe(el, { attributes: true, attributeFilter: ['class'] });
             }
         });
+    }
+
+    /** 表示中のトーストを即座に消す（モーダル優先のため） */
+    clearToasts() {
+        if (this.toastTimer) {
+            clearTimeout(this.toastTimer);
+            this.toastTimer = null;
+        }
+        const container = document.getElementById('toast-container');
+        if (container) container.innerHTML = '';
     }
 
     showToast(message, subtitle = null) {
@@ -144,12 +215,25 @@ class TerritoryWalkApp {
     }
 
     renderToast(message, subtitle = null) {
+        // メニュー優先: モーダル表示中はトーストを出さない
+        if (this.isAnyModalOpen()) return;
+
         let container = document.getElementById('toast-container');
         if (!container) {
             container = document.createElement('div');
             container.id = 'toast-container';
-            container.className = 'fixed top-[148px] left-1/2 -translate-x-1/2 z-[3000] flex flex-col items-center gap-2 pointer-events-none max-w-[92vw] w-max';
+            container.className = 'fixed left-1/2 -translate-x-1/2 z-[1500] flex flex-col items-center gap-2 pointer-events-none max-w-[92vw] w-max';
             document.body.appendChild(container);
+        }
+
+        // ヘッダー（検索バー含む）の直下に配置し、被りを防止
+        this.positionToastContainer(container);
+
+        // 連続スタック防止: 常に最新1件のみ表示
+        container.innerHTML = '';
+        if (this.toastTimer) {
+            clearTimeout(this.toastTimer);
+            this.toastTimer = null;
         }
 
         const toast = document.createElement('div');
@@ -166,7 +250,7 @@ class TerritoryWalkApp {
         container.appendChild(toast);
 
         // 3.5秒後にフェードアウト＆DOM削除
-        setTimeout(() => {
+        this.toastTimer = setTimeout(() => {
             toast.style.opacity = '0';
             toast.style.transform = 'translateY(-10px)';
             setTimeout(() => {
@@ -177,23 +261,37 @@ class TerritoryWalkApp {
         }, 3500);
     }
 
+    /**
+     * トーストをヘッダー（検索バー）直下に配置する。
+     * セーフエリアや回転でヘッダー高さが変わっても被らないよう実測する。
+     */
+    positionToastContainer(container) {
+        if (!container) return;
+        let top = 160;
+        try {
+            const header = document.querySelector('header');
+            if (header) {
+                const rect = header.getBoundingClientRect();
+                top = Math.round(rect.bottom + 12);
+            }
+        } catch (e) { /* fallback */ }
+        container.style.top = `${Math.max(top, 96)}px`;
+    }
+
     flushToastQueue() {
         if (!this.toastQueue || this.toastQueue.length === 0) return;
         if (this.isAnyModalOpen()) return;
 
-        // キューから最大3件まで順次スタック表示
-        const items = this.toastQueue.splice(0, 3);
+        // 最新1件のみを表示（積み重なり防止）
+        const latest = this.toastQueue[this.toastQueue.length - 1];
         this.toastQueue = [];
-
-        items.forEach((item, idx) => {
-            setTimeout(() => {
-                if (!this.isAnyModalOpen()) {
-                    this.renderToast(item.message, item.subtitle);
-                } else {
-                    this.toastQueue.push(item);
-                }
-            }, idx * 280);
-        });
+        setTimeout(() => {
+            if (!this.isAnyModalOpen()) {
+                this.renderToast(latest.message, latest.subtitle);
+            } else {
+                this.toastQueue.push(latest);
+            }
+        }, 120);
     }
 
     async initTeam() {
@@ -893,7 +991,7 @@ class TerritoryWalkApp {
                 const tiles = res.myTiles || 0;
                 const inviteCode = (this.coinManager && this.coinManager.getInviteCode()) || '';
 
-                const shareText = `【TERRITORY WALK】前週シーズン決着！\n所属: ${teamName}チーム (${outcomeText})\n最終制圧比率: Black ${blackPct}% vs White ${whitePct}%\n個人開拓貢献: ${tiles}マス\n\n街を歩いてオセロ陣地を奪い合おう！\n招待コード: ${inviteCode}\n#テリトリーウォーク #TerritoryWalk`;
+                const shareText = `【TERRITORY WALK】前週シーズン決着！\n所属: ${teamName}チーム (${outcomeText})\n最終制圧比率: Black ${blackPct}% vs White ${whitePct}%\n個人開拓貢献: ${tiles}マス\n\n街を歩いて白黒陣地を奪い合おう！\n招待コード: ${inviteCode}\n#テリトリーウォーク #TerritoryWalk`;
                 const shareUrl = 'https://shodai4.github.io/territory-walk/';
 
                 if (navigator.share) {
@@ -1293,7 +1391,23 @@ class TerritoryWalkApp {
                         this.gridManager.fetchAndRenderTilesInBounds();
                     }
                 }
+                // フォアグラウンド復帰時に未送信分をまとめて同期
+                if (this.syncQueue) this.syncQueue.flush('foreground');
             }
+        });
+
+        // 通信状態の復帰・切断（オフラインキューとの連携）
+        window.addEventListener('online', () => {
+            if (this.syncQueue) this.syncQueue.flush('online');
+        });
+        window.addEventListener('offline', () => {
+            if (this.syncQueue) this.syncQueue.notify();
+        });
+
+        // 画面回転・リサイズ時はトースト位置を再調整（検索バーとの被り防止）
+        window.addEventListener('resize', () => {
+            const container = document.getElementById('toast-container');
+            if (container) this.positionToastContainer(container);
         });
 
         // Capacitor Native AppState listener
@@ -1301,6 +1415,7 @@ class TerritoryWalkApp {
             try {
                 window.Capacitor.Plugins.App.addListener('appStateChange', (state) => {
                     this.isAppInBackground = !state.isActive;
+                    if (state.isActive && this.syncQueue) this.syncQueue.flush('app-active');
                 });
             } catch (e) {}
         }
@@ -1449,10 +1564,9 @@ class TerritoryWalkApp {
                 this.coinManager.onTileClaimed(isReclaimed);
             }
 
-            // 3. Supabase online sync
+            // 3. Supabase online sync（オフライン時はOutboxに退避し、復帰後に一括再送）
             if (this.supabaseManager) {
-                this.supabaseManager.upsertTile(meshId, latIdx, lngIdx, this.currentTeam)
-                    .catch(err => console.warn('[Supabase Sync] Background tile upsert error:', err));
+                this.enqueueTileSync(meshId, latIdx, lngIdx, this.currentTeam);
             }
         }
     }

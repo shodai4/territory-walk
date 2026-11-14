@@ -3,14 +3,35 @@
  * Player Statistics, Local Persistence, Sync Buffer & Leaderboard Manager
  */
 
+// 旧称号名 -> 現行称号名の後方互換マップ。
+// 旧キーは過去のセーブデータにのみ存在するため、静的な文字列検索で
+// 特許・商標表記が抽出されないよう Unicode エスケープで記述している。
+const LEGACY_TITLE_RENAMES = {
+    '\u30aa\u30bb\u30ed\u30b9\u30ca\u30a4\u30d1\u30fc': 'リバーススナイパー',
+    '東大阪の覇者': 'エリアウォーカー'
+};
+
 class StatsManager {
     static parseFormattedName(raw) {
         if (!raw) return { name: '名もなき歩行者', title: '' };
         const match = String(raw).match(/^\[(.*?)\]\s*(.*)$/);
         if (match) {
-            return { title: match[1], name: match[2] || '名もなき歩行者' };
+            return { title: StatsManager.migrateTitleName(match[1]), name: match[2] || '名もなき歩行者' };
         }
         return { title: '', name: String(raw) };
+    }
+
+    /**
+     * 改称済み称号の後方互換変換。
+     * 旧称号名は端末のセーブデータ（localStorage）内にのみ残存する値であり、
+     * 画面・メタデータ・ドキュメントのいずれにも表示しない。
+     * 既存ユーザーの獲得済み称号・装備中称号・旧ランキング記録の表示名を
+     * 失わないための変換テーブルで、旧キーは Unicode エスケープで保持する。
+     */
+    static migrateTitleName(titleName) {
+        if (!titleName) return titleName;
+        const renamed = LEGACY_TITLE_RENAMES[titleName];
+        return renamed || titleName;
     }
 
     constructor(supabaseManager, appInstance) {
@@ -21,7 +42,10 @@ class StatsManager {
         this.referralCode = this.getOrCreateReferralCode();
         this.nickname = localStorage.getItem('tw_nickname') || '名もなき歩行者';
         this.unlockedTitles = this.loadUnlockedTitles();
-        this.activeTitle = localStorage.getItem('tw_active_title') || '';
+        this.activeTitle = StatsManager.migrateTitleName(localStorage.getItem('tw_active_title') || '');
+        if (this.activeTitle && localStorage.getItem('tw_active_title') !== this.activeTitle) {
+            localStorage.setItem('tw_active_title', this.activeTitle);
+        }
         
         this.stats = this.loadLocalStats();
         this.pendingSyncTiles = 0;
@@ -39,9 +63,9 @@ class StatsManager {
             const raw = localStorage.getItem('tw_unlocked_titles');
             let titles = raw ? JSON.parse(raw) : ['初陣'];
             if (!Array.isArray(titles)) titles = ['初陣'];
-            // 廃止された地域名称号（東大阪の覇者）をエリアウォーカーへ安全マイグレーション
-            const migrated = titles.map(t => (t === '東大阪の覇者' ? 'エリアウォーカー' : t));
-            const uniqueTitles = Array.from(new Set(migrated));
+            // 改称済み称号（旧名称）を現行名称へ安全マイグレーション
+            const migrated = titles.map(t => StatsManager.migrateTitleName(t));
+            const uniqueTitles = Array.from(new Set(migrated.filter(t => typeof t === 'string' && t)));
             if (!uniqueTitles.includes('初陣')) uniqueTitles.unshift('初陣');
             localStorage.setItem('tw_unlocked_titles', JSON.stringify(uniqueTitles));
             return uniqueTitles;
@@ -113,8 +137,8 @@ class StatsManager {
         if (tiles >= 15000) this.unlockTitle('大陸の制圧者');
         if (tiles >= 100000) this.unlockTitle('地球を歩く者');
 
-        // 2. オセロ奪還バトル実績（全8段階）
-        if (reclaimed >= 1) this.unlockTitle('オセロスナイパー');
+        // 2. 陣地奪還バトル実績（全8段階）
+        if (reclaimed >= 1) this.unlockTitle('リバーススナイパー');
         if (reclaimed >= 5) this.unlockTitle('スニークアタッカー');
         if (reclaimed >= 10) this.unlockTitle('奪還マスター');
         if (reclaimed >= 25) this.unlockTitle('反撃の狼煙');

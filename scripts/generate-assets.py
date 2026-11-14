@@ -21,7 +21,7 @@ def create_app_icon(size=1024):
     """
     Creates a 1024x1024 square icon with NO ALPHA channel (required by App Store).
     Dark obsidian theme (#09090b) with subtle territory grid lines,
-    a contrasting Black/White othello territory core, and an amber GPS pulse circle.
+    a contrasting Black/White territory core, and an amber GPS pulse circle.
     """
     img = Image.new("RGB", (size, size), color=(9, 9, 11)) # #09090b
     draw = ImageDraw.Draw(img)
@@ -52,7 +52,7 @@ def create_app_icon(size=1024):
         width=int(size * 0.008)
     )
 
-    # 4. Central Black/White Othello split disc (The essence of Territory Walk)
+    # 4. Central Black/White split disc (The essence of Territory Walk)
     core_radius = int(size * 0.24)
     # Right half: White territory (#fafafa)
     draw.pieslice(
