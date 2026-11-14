@@ -1903,17 +1903,23 @@ class TerritoryWalkApp {
         // 1歩の結果を D-Pad 下に表示（塗れたのか・送信待ちが何件かを目で確認できる）
         this.reportVirtualStep = (result) => {
             const teamLabel = this.currentTeam === 'white' ? 'WHITE' : 'BLACK';
-            const pending = this.syncQueue ? this.syncQueue.count() : 0;
             if (!result || !result.meshId) {
                 this.updateDpadStatus('塗り対象なし');
                 return;
             }
             const short = String(result.meshId).replace('tile_', '');
-            if (result.changed) {
-                this.updateDpadStatus(`${teamLabel} ${short} 獲得 / 送信待ち ${pending}`);
-            } else {
-                this.updateDpadStatus(`${short} は既に${teamLabel} / 送信待ち ${pending}`);
-            }
+            const render = () => {
+                const pending = this.syncQueue ? this.syncQueue.count() : 0;
+                if (result.changed) {
+                    this.updateDpadStatus(`${teamLabel} ${short} 獲得 / 送信待ち ${pending}`);
+                } else {
+                    this.updateDpadStatus(`${short} は既に${teamLabel} / 送信待ち ${pending}`);
+                }
+            };
+            render();
+            // 送信は非同期なので、少し後に送信待ち件数を更新して実際の残件数を出す
+            clearTimeout(this.dpadStatusTimer);
+            this.dpadStatusTimer = setTimeout(render, 1200);
         };
 
         const bindButton = (id, dLat, dLng) => {
