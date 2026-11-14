@@ -562,8 +562,8 @@ button, a, input, select, .btn-action {
 
 /* マーキング ON/OFF トグル（現在地ボタンの真上・375px幅でも崩れない固定サイズ） */
 .marking-toggle-btn {
-    width: 60px;
-    height: 52px;
+    width: 64px;
+    height: 54px;
     flex: 0 0 auto;
     display: flex;
     flex-direction: column;
@@ -626,7 +626,7 @@ button, a, input, select, .btn-action {
 
 .marking-toggle-title {
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 7px;
+    font-size: 8px;
     line-height: 1;
     font-weight: 700;
     letter-spacing: 0.02em;
@@ -636,7 +636,7 @@ button, a, input, select, .btn-action {
 
 .marking-toggle-state {
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 9px;
+    font-size: 10px;
     line-height: 1;
     font-weight: 700;
     letter-spacing: 0.02em;

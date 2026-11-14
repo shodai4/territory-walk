@@ -576,7 +576,7 @@ test('文言: 今回の機能のユーザー向け文言は「マーキング」
 test('CSS: 375px幅で崩れない固定サイズと状態別の配色がある', () => {
     assert.match(CSS, /#marking-paused-banner \{[^}]*width: calc\(100% - 1\.5rem\);[^}]*max-width: 25rem;/);
     assert.match(CSS, /#marking-paused-banner\.hidden \{\s*display: none !important;/);
-    assert.match(CSS, /\.marking-toggle-btn \{[^}]*width: 60px;[^}]*height: 52px;/);
+    assert.match(CSS, /\.marking-toggle-btn \{[^}]*width: 64px;[^}]*height: 54px;/);
     assert.match(CSS, /\.marking-toggle-btn\[data-state="paused"\] \{[^}]*background: rgba\(8, 47, 73, 0\.92\);[^}]*border-color: rgba\(56, 189, 248, 0\.85\);/);
 });
 
