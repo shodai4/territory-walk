@@ -246,7 +246,8 @@ test('バナー設置: index.html がバナー要素と permission.js を読み�
     assert.match(html, /id="location-permission-banner"/);
     assert.match(html, /id="btn-location-banner-retry"/);
     assert.match(html, /位置情報がオフになっています/);
-    assert.match(html, /設定 ＞ テリトリーウォーク ＞ 位置情報/);
+    // iOS の設定アプリには CFBundleDisplayName（テリウォーク）で並ぶため、案内文もその名前に合わせる
+    assert.match(html, /設定 ＞ テリウォーク ＞ 位置情報/);
     // 常設化: 閉じるボタン（✕）は持たない
     assert.doesNotMatch(html, /btn-location-banner-close/, '✕ボタンを置かない');
     assert.doesNotMatch(html, /案内を閉じる/, '「閉じる」ラベルを置かない');

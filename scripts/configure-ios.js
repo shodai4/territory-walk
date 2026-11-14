@@ -39,8 +39,13 @@ const MINIMUM_IOS_VERSION = '15.0';
 /**
  * ホーム画面（アイコンの下）に表示するアプリ名。
  * Xcode の PRODUCT_NAME（英語）とは別に、この日本語表示名を Info.plist に固定する。
+ *
+ * 2026年11月15日、翔大さんの決定でアイコン下が長すぎるため『テリウォーク』へ短縮した。
+ * App Store の公式アプリ名（『テリトリーウォーク - 白黒歩行陣取り』）と
+ * Web側のタイトル・ロゴ・利用規約内の名称は『テリトリーウォーク』のまま変更しない。
+ * ここ（CFBundleDisplayName / CFBundleName）だけが短い表示名を持つ。
  */
-const APP_DISPLAY_NAME = 'テリトリーウォーク';
+const APP_DISPLAY_NAME = 'テリウォーク';
 
 /**
  * Info.plist に入れるべきキー一覧。
@@ -55,7 +60,7 @@ const CONFIG_ENTRIES = [
         mode: 'value'
     },
     {
-        // 内部表示名。16文字以内が推奨のため、同じ日本語名で揃える
+        // 内部表示名。16文字以内が推奨のため、ホーム画面の表示名と同じ日本語名で揃える
         key: 'CFBundleName',
         value: `<string>${APP_DISPLAY_NAME}</string>`,
         mode: 'value'

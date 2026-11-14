@@ -1,6 +1,6 @@
 {
   "appId": "com.oekaki.territorywalk",
-  "appName": "テリトリーウォーク",
+  "appName": "テリウォーク",
   "webDir": "www",
   "server": {
     "androidScheme": "https",

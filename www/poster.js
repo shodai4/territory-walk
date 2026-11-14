@@ -61,7 +61,12 @@ class PosterGenerator {
             
             if (navigator.canShare && navigator.canShare({ files: [file] })) {
                 try {
-                    await navigator.share({ files: [file], title: 'Territory Walk', text: 'My weekly conquest!' });
+                    // ハッシュタグは coins.js の共通定義（#テリウォーク #テリトリーウォーク #TerritoryWalk）と揃える
+                    await navigator.share({
+                        files: [file],
+                        title: 'Territory Walk',
+                        text: 'My weekly conquest! #テリウォーク #テリトリーウォーク #TerritoryWalk'
+                    });
                 } catch (e) {
                     this.downloadBlob(blob);
                 }

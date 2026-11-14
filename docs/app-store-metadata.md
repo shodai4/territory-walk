@@ -9,7 +9,7 @@
 
 - **プラットフォーム**: iOS にチェック
 - **名前（App Store 表示名・30文字以内）**: `テリトリーウォーク - 白黒歩行陣取り`（App Store Connect に登録済みの名称を正とする）
-  - ホーム画面のアイコン下に出る名前は別途 `テリトリーウォーク`（`Info.plist` の `CFBundleDisplayName` に固定。`scripts/configure-ios.js`）
+  - ホーム画面のアイコン下に出る名前は別途 `テリウォーク`（`Info.plist` の `CFBundleDisplayName` に固定。`scripts/configure-ios.js`）。2026年11月15日の翔大さんの決定で、長すぎて読めないため `テリトリーウォーク` から短縮した。App Store の登録名・Web側のタイトル・規約類は `テリトリーウォーク` のまま変更しない
 - **プライマリ言語**: `日本語`
 - **Bundle ID (バンドルID)**: `com.oekaki.territorywalk`（事前にCertificates, Identifiers & Profilesで登録したIdentifierを選択）
 - **SKU**: `territory-walk-ios`

@@ -4,6 +4,18 @@
  * Zero-emoji, strictly minimal and high-contrast dark UI design.
  */
 
+/**
+ * X（旧Twitter）シェア文言の共通ハッシュタグ。
+ *
+ * 2026年11月15日、翔大さんの指示「エックスの共有でのハッシュタグも #テリウォーク 増やしといて」。
+ * ホーム画面の表示名（CFBundleDisplayName）を『テリウォーク』へ短縮したのと対で、
+ * 投稿でも短い名前を見つけてもらうためのタグを加える。
+ *
+ * 文言ごとにタグを書き散らすと重複・入れ忘れが起きるので、この1か所だけを正とする。
+ * 並び順は「新しい短い名前 → これまでの名前 → 英字」で固定し、同じタグは二度出さない。
+ */
+const SHARE_HASHTAGS = ['#テリウォーク', '#テリトリーウォーク', '#TerritoryWalk'];
+
 class CoinManager {
     constructor(appInstance, supabaseManager) {
         this.app = appInstance;
@@ -810,6 +822,67 @@ class CoinManager {
     }
 
     // --- Viral Sharing: X (Twitter) Daily Share Bonus (+30 COIN) ---
+
+    /*
+     * シェア文言の共通部品。
+     * X（および OS の共有シート）に出す文言はすべてここで組み立てる。
+     * app.js（週次リザルト）からも CoinManager.buildWeeklyResultShareText() を直接呼ぶ。
+     */
+
+    /** 共通ハッシュタグの一覧（コピーを返すので、呼び出し側の変更が他へ影響しない） */
+    static getShareHashtags() {
+        return SHARE_HASHTAGS.slice();
+    }
+
+    /** 文言末尾に付けるハッシュタグ行 */
+    static getShareHashtagLine() {
+        return SHARE_HASHTAGS.join(' ');
+    }
+
+    /**
+     * 本文の末尾に共通ハッシュタグを1行だけ付ける。
+     * 本文側に同じタグが残っていても二重にならないよう、先に既存のタグを取り除いてから付け直す。
+     */
+    static withShareHashtags(body) {
+        let text = String(body == null ? '' : body);
+        SHARE_HASHTAGS.forEach((tag) => {
+            text = text.split(tag).join('');
+        });
+        text = text
+            .replace(/[ \t]+$/gm, '')
+            .replace(/\n{3,}/g, '\n\n')
+            .trim();
+        return text ? `${text}\n${CoinManager.getShareHashtagLine()}` : CoinManager.getShareHashtagLine();
+    }
+
+    /** 1日1回の X シェア（現在の戦績）文言 */
+    static buildDailyShareText({ tiles = 0, myTeam = 'Black', code = 'WALK' } = {}) {
+        return CoinManager.withShareHashtags(
+            `歩行陣取りで現在 ${tiles} マス開拓中！今週は【${myTeam}】陣営で白熱バトル！一緒に歩いて陣地を奪い合おう！\n招待コード: ${code}`
+        );
+    }
+
+    /** 友達招待（+150 COIN）のシェア文言 */
+    static buildReferralShareText({ code = '' } = {}) {
+        return CoinManager.withShareHashtags(
+            `リアル歩行陣取り「テリトリーウォーク」で白黒の陣地を奪い合おう！\n招待コード【${code}】を入力すると +150 COIN プレゼント！`
+        );
+    }
+
+    /** 週次シーズン結果（app.js の週次リザルト画面）のシェア文言 */
+    static buildWeeklyResultShareText({
+        teamName = 'BLACK',
+        outcomeText = '',
+        blackPct = 50,
+        whitePct = 50,
+        tiles = 0,
+        inviteCode = ''
+    } = {}) {
+        return CoinManager.withShareHashtags(
+            `【TERRITORY WALK】前週シーズン決着！\n所属: ${teamName}チーム (${outcomeText})\n最終制圧比率: Black ${blackPct}% vs White ${whitePct}%\n個人開拓貢献: ${tiles}マス\n\n街を歩いて白黒陣地を奪い合おう！\n招待コード: ${inviteCode}`
+        );
+    }
+
     canShareToXToday() {
         const today = new Date().toISOString().split('T')[0];
         const lastShare = localStorage.getItem('tw_last_x_share_date');
@@ -826,7 +899,7 @@ class CoinManager {
         const myTeam = this.app ? (this.app.currentTeam === 'black' ? 'Black (黒)' : 'White (白)') : 'Black';
         const code = this.getInviteCode() || 'WALK';
 
-        const tweetText = `歩行陣取り #テリトリーウォーク で現在 ${tiles} マス開拓中！今週は【${myTeam}】陣営で白熱バトル！一緒に歩いて陣地を奪い合おう！\n招待コード: ${code}\n#TerritoryWalk`;
+        const tweetText = CoinManager.buildDailyShareText({ tiles, myTeam, code });
         const tweetUrl = 'https://shodai4.github.io/territory-walk/';
         const xUrl = `https://x.com/intent/tweet?text=${encodeURIComponent(tweetText)}&url=${encodeURIComponent(tweetUrl)}`;
 
@@ -867,7 +940,7 @@ class CoinManager {
     shareReferralNative() {
         const code = this.getInviteCode();
         const url = 'https://shodai4.github.io/territory-walk/';
-        const text = `リアル歩行陣取り「テリトリーウォーク」で白黒の陣地を奪い合おう！\n招待コード【${code}】を入力すると +150 COIN プレゼント！\n`;
+        const text = CoinManager.buildReferralShareText({ code });
 
         if (navigator.share) {
             navigator.share({

@@ -1131,7 +1131,15 @@ class TerritoryWalkApp {
                 const tiles = res.myTiles || 0;
                 const inviteCode = (this.coinManager && this.coinManager.getInviteCode()) || '';
 
-                const shareText = `【TERRITORY WALK】前週シーズン決着！\n所属: ${teamName}チーム (${outcomeText})\n最終制圧比率: Black ${blackPct}% vs White ${whitePct}%\n個人開拓貢献: ${tiles}マス\n\n街を歩いて白黒陣地を奪い合おう！\n招待コード: ${inviteCode}\n#テリトリーウォーク #TerritoryWalk`;
+                // シェア文言（末尾のハッシュタグ #テリウォーク 等）は coins.js の共通定義に一本化
+                const shareText = CoinManager.buildWeeklyResultShareText({
+                    teamName,
+                    outcomeText,
+                    blackPct,
+                    whitePct,
+                    tiles,
+                    inviteCode
+                });
                 const shareUrl = 'https://shodai4.github.io/territory-walk/';
 
                 if (navigator.share) {

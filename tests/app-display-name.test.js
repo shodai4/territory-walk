@@ -1,6 +1,11 @@
 /**
  * TERRITORY WALK - Node tests
- * ホーム画面に表示されるアプリ名を「テリトリーウォーク」に固定する。
+ * ホーム画面に表示されるアプリ名を「テリウォーク」に固定する。
+ *
+ * 2026年11月15日、翔大さんの決定でアイコン下の表示名を「テリトリーウォーク」から
+ * 「テリウォーク」へ短縮した（長すぎてホーム画面で読めないため）。
+ * App Store の公式アプリ名（「テリトリーウォーク - 白黒歩行陣取り」）と、Web側の
+ * タイトル・ロゴ・利用規約内の名称は「テリトリーウォーク」のまま変更しない。
  *
  *   1) capacitor.config.json の appName
  *   2) Info.plist の CFBundleDisplayName / CFBundleName（値の更新・注入・冪等）
@@ -28,7 +33,9 @@ const {
     applyLocalizedDisplayName
 } = require(SCRIPT);
 
-const DISPLAY_NAME = 'テリトリーウォーク';
+const DISPLAY_NAME = 'テリウォーク';
+/** 公式名（App Store 表示名・Web側の名称）。表示名を短縮してもこちらは変えない */
+const OFFICIAL_NAME = 'テリトリーウォーク';
 
 /** Capacitor 6 の iOS テンプレートに近い Info.plist（表示名は英語のまま） */
 function templatePlist(extra = '') {
@@ -58,7 +65,7 @@ function countKey(xml, key) {
 /* ------------------------------------------------------------------ *
  * 1. Capacitor 設定
  * ------------------------------------------------------------------ */
-test('capacitor.config.json の appName が「テリトリーウォーク」', () => {
+test('capacitor.config.json の appName が「テリウォーク」', () => {
     const config = JSON.parse(fs.readFileSync(path.join(ROOT, 'capacitor.config.json'), 'utf8'));
     assert.equal(config.appName, DISPLAY_NAME);
     assert.equal(APP_DISPLAY_NAME, DISPLAY_NAME, 'スクリプト側の定数とも一致');
@@ -71,7 +78,7 @@ test('capacitor.config.json の appName が「テリトリーウォーク」', (
 test('Info.plist: 英語の表示名を日本語に更新する', () => {
     const { content } = configureContent(templatePlist());
 
-    assert.match(content, /<key>CFBundleDisplayName<\/key>\s*<string>テリトリーウォーク<\/string>/);
+    assert.match(content, /<key>CFBundleDisplayName<\/key>\s*<string>テリウォーク<\/string>/);
     assert.doesNotMatch(content, /Territory Walk/);
     assert.equal(countKey(content, 'CFBundleDisplayName'), 1);
     assert.deepEqual(verifyContent(content), []);
@@ -83,7 +90,7 @@ test('Info.plist: CFBundleName が無ければ注入し、日本語名に揃え�
 
     const { content } = configureContent(before);
 
-    assert.match(content, /<key>CFBundleName<\/key>\s*<string>テリトリーウォーク<\/string>/);
+    assert.match(content, /<key>CFBundleName<\/key>\s*<string>テリウォーク<\/string>/);
     assert.equal(countKey(content, 'CFBundleName'), 1);
     // 16文字以内（Apple の推奨）
     assert.ok(DISPLAY_NAME.length <= 16, `CFBundleName は16文字以内（実際: ${DISPLAY_NAME.length}）`);
@@ -135,7 +142,7 @@ test('InfoPlist.strings: 既に正しければ書き換えない', () => {
 test('InfoPlist.strings: 検証は古い表示名を見逃さない', () => {
     const problems = verifyStringsContent('"CFBundleDisplayName" = "Territory Walk";\n');
     assert.ok(problems.length > 0);
-    assert.match(problems[0], /テリトリーウォーク/);
+    assert.match(problems[0], /「テリウォーク」/);
 });
 
 test('InfoPlist.strings: ja.lproj のファイルを実際に更新する', () => {
@@ -174,14 +181,14 @@ test('CLI: Info.plist と ja.lproj の両方に日本語のアプリ名が入る
             stdio: ['ignore', 'pipe', 'pipe']
         }).toString('utf8');
 
-        assert.match(out, /Home screen name: テリトリーウォーク/);
+        assert.match(out, /Home screen name: テリウォーク/);
 
         const plist = fs.readFileSync(plistPath, 'utf8');
-        assert.match(plist, /<key>CFBundleDisplayName<\/key>\s*<string>テリトリーウォーク<\/string>/);
-        assert.match(plist, /<key>CFBundleName<\/key>\s*<string>テリトリーウォーク<\/string>/);
+        assert.match(plist, /<key>CFBundleDisplayName<\/key>\s*<string>テリウォーク<\/string>/);
+        assert.match(plist, /<key>CFBundleName<\/key>\s*<string>テリウォーク<\/string>/);
 
         const strings = fs.readFileSync(stringsPath, 'utf8');
-        assert.match(strings, /"CFBundleDisplayName" = "テリトリーウォーク";/);
+        assert.match(strings, /"CFBundleDisplayName" = "テリウォーク";/);
         assert.doesNotMatch(strings, /Territory Walk/);
     } finally {
         fs.rmSync(dir, { recursive: true, force: true });
@@ -199,4 +206,28 @@ test('CLI: ios プロジェクトが無いときは何もせず正常終了す�
     } finally {
         fs.rmSync(dir, { recursive: true, force: true });
     }
+});
+
+/* ------------------------------------------------------------------ *
+ * 5. 表示名は短くしたが、公式名（App Store・Web側）は変えない
+ * ------------------------------------------------------------------ */
+test('公式名: App Store 申請メタデータのアプリ名は「テリトリーウォーク」のまま', () => {
+    const meta = fs.readFileSync(path.join(ROOT, 'docs', 'app-store-metadata.md'), 'utf8');
+    assert.match(meta, /テリトリーウォーク - 白黒歩行陣取り/, 'App Store Connect の登録名は変えない（審査中の名称変更は避ける）');
+    assert.match(meta, /ホーム画面のアイコン下に出る名前は別途 `テリウォーク`/, 'ホーム画面の表示名だけが短いことを申請資料にも書く');
+});
+
+test('公式名: Web側のタイトルと法務ページの名称（TERRITORY WALK）は変えない', () => {
+    const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+    assert.match(html, /<title>TERRITORY WALK - 白黒歩行陣取りアプリ<\/title>/);
+    ['privacy.html', 'terms.html', 'support.html'].forEach((file) => {
+        const text = fs.readFileSync(path.join(ROOT, file), 'utf8');
+        assert.match(text, /TERRITORY WALK/, `${file} は公式名 TERRITORY WALK を保つ`);
+        assert.doesNotMatch(text, /テリウォーク/, `${file} に短い表示名は出さない（規約・ポリシーの名称は公式名のまま）`);
+    });
+});
+
+test('表示名: ホーム画面に収まる長さで、旧名より短い', () => {
+    assert.ok(DISPLAY_NAME.length <= 8, `アイコン下に収まる長さ（実際: ${DISPLAY_NAME.length}文字）`);
+    assert.ok(DISPLAY_NAME.length < OFFICIAL_NAME.length, '旧名（テリトリーウォーク）より短い');
 });
