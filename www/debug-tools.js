@@ -136,6 +136,12 @@ class DebugTools {
             serverSkipped = true;
         }
 
+        // 削除直前に始まっていたリモート取得が、消したはずのマスを
+        // キャッシュに戻してしまうのを防ぐ（60秒間は再マージしない）。
+        if (serverDeleted > 0 || serverSkipped) {
+            app.territoryReset = { at: Date.now(), ids: new Set(targetIds) };
+        }
+
         return {
             ok: true,
             weekId,

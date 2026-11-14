@@ -227,6 +227,10 @@ test('リセット: 確認するとローカル全消し・当週サーバー削
         'ローカル陣地＋Outboxの和集合を削除対象にする'
     );
     assert.equal(res.serverDeleted, 4);
+
+    // 削除直後の再マージ防止ガードが張られている
+    assert.ok(app.territoryReset, 'territoryReset が記録される');
+    assert.ok(app.territoryReset.ids.has('tile_100_200'));
 });
 
 test('リセット: サーバー削除が失敗してもローカル白紙化は成立し、失敗を結果に残す', async () => {
@@ -333,4 +337,11 @@ test('ビルド: www/ に debug-tools.js が同期されている（iOS側も同
     const wwwFile = path.join(ROOT, 'www', 'debug-tools.js');
     assert.ok(fs.existsSync(wwwFile), 'www/debug-tools.js が存在する');
     assert.equal(fs.readFileSync(wwwFile, 'utf8'), rootFile, 'www側と同一内容');
+});
+
+test('配線: リセット直後のリモート再マージを grid.js が抑止する', () => {
+    const grid = fs.readFileSync(path.join(ROOT, 'grid.js'), 'utf8');
+    assert.match(grid, /isRecentlyReset\(tileId\)/, '判定メソッドがある');
+    assert.match(grid, /if \(this\.isRecentlyReset\(tile\.tile_id\)\) return;/, 'マージループでスキップする');
+    assert.match(grid, /app\.territoryReset/, 'app側の記録を参照する');
 });

@@ -33,6 +33,8 @@ class TerritoryWalkApp {
         this.virtualPos = [...CONFIG.DEFAULT_CENTER];
         // 実GPSの最新座標（デバッグの仮想散歩を終えたときに戻す先）
         this.lastRealPosition = null;
+        // デバッグの白紙リセット直後の再マージ防止（grid.js が参照）
+        this.territoryReset = null;
         this.isMapVisible = true;
         this.isDebugMode = false;
         this.debugEnabled = CONFIG.ENABLE_DEBUG_TOOLS !== false;

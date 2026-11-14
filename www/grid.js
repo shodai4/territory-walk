@@ -135,6 +135,8 @@ class GridManager {
                     : new Set();
                 tiles.forEach(tile => {
                     if (pendingMeshes.has(tile.tile_id)) return;
+                    // デバッグの白紙リセット直後：削除したマスを古い取得結果で戻さない
+                    if (this.isRecentlyReset(tile.tile_id)) return;
                     if (this.claimedTilesCache.get(tile.tile_id) !== tile.team) {
                         this.claimedTilesCache.set(tile.tile_id, tile.team);
                         updated = true;
@@ -149,6 +151,16 @@ class GridManager {
         } catch (e) {
             console.warn('Failed to sync remote tiles:', e);
         }
+    }
+
+    /**
+     * デバッグの白紙リセット直後か（削除済みマスを再マージしないための判定）
+     */
+    isRecentlyReset(tileId) {
+        const reset = this.app && this.app.territoryReset;
+        if (!reset || !reset.ids) return false;
+        if (Date.now() - reset.at > 60000) return false;
+        return reset.ids.has(tileId);
     }
 
     /**
