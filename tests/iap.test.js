@@ -621,3 +621,71 @@ test('Ad-Free 説明文: キャッシュバスターが更新されている', (
     assert.match(html, /iap\.js\?v=\d{8}v\d+/);
     assert.match(html, /coins\.js\?v=\d{8}v\d+/);
 });
+
+/* ------------------------------------------------------------------ *
+ * 10. 価格表示はすべて日本円（¥）固定（$ 表記の根絶）
+ *     実機で「ビギナーパック ($0.99) を獲得しました」と出た不具合の再発防止。
+ * ------------------------------------------------------------------ */
+test('価格: カタログは全パック日本円表記で、yen と fallbackPrice が一致する', () => {
+    const h = createHarness();
+    const expected = {
+        'pack-120': '¥120',
+        'pack-500': '¥500',
+        'pack-1500': '¥1,500',
+        'pack-5000': '¥5,000',
+        'ad-free': '¥480'
+    };
+
+    Object.keys(expected).forEach((packKey) => {
+        const item = h.iap.products[packKey];
+        assert.ok(item, `${packKey} がある`);
+        assert.equal(item.fallbackPrice, expected[packKey], `${packKey} のカタログ表記が円`);
+        assert.equal(h.iap.formatYen(item.yen), expected[packKey], `${packKey} の金額から円表記を作れる`);
+        assert.doesNotMatch(h.iap.formatYen(item.yen), /\$/, '円表記に $ を含めない');
+    });
+});
+
+test('価格: StoreKit が $0.99 を返しても表示価格・購入完了トーストは円のまま', () => {
+    const h = createHarness();
+
+    // サンドボックスが返す外貨価格（実機で起きたケース）
+    const product = h.makeProduct(PACK_120, {
+        getOffer: () => ({ id: 'default', productId: PACK_120, pricingPhases: [{ price: '$0.99' }] })
+    });
+    assert.equal(typeof h.callbacks.productUpdated, 'function', 'productUpdated が配線されている');
+    h.callbacks.productUpdated(product);
+
+    // 参照用には記録されるが、表示には一切使わない
+    assert.equal(h.iap.storePriceByProductId[PACK_120], '$0.99');
+    assert.equal(h.iap.getDisplayPrice('pack-120'), '¥120', 'パックの表示価格は円固定');
+    assert.equal(h.iap.getDisplayPriceForYen(120), '¥120', '円額からの表示価格も円固定');
+    assert.equal(h.iap.getDisplayPriceForYen(1500), '¥1,500', '3桁区切りも円表記');
+
+    // 購入完了トースト（実機で $ が出た箇所）
+    const tx = h.makeTransaction(PACK_120, { transactionId: 'tx-dollar-1' });
+    h.emitApproved(tx);
+
+    const granted = h.coins.toasts.find((t) => String(t[1] || '').indexOf('獲得しました') >= 0);
+    assert.ok(granted, '購入完了トーストが出る');
+    assert.match(granted[1], /ビギナーパック \(¥120\) を獲得しました/);
+    assert.doesNotMatch(JSON.stringify(h.coins.toasts), /\$0\.99/, '$ 表記をトーストに出さない');
+});
+
+test('価格: 未知の円額でも日本円表記にフォールバックする（null を返さない）', () => {
+    const h = createHarness();
+    assert.equal(h.iap.getDisplayPriceForYen(300), '¥300', 'カタログ外の円額も円表記');
+    assert.equal(h.iap.getDisplayPrice('unknown-pack'), null, '未知のパックキーは null');
+});
+
+test('ソース点検: iap.js / coins.js / app.js / index.html に $ 価格表記が残っていない', () => {
+    ['iap.js', 'coins.js', 'app.js', 'index.html'].forEach((file) => {
+        const source = fs.readFileSync(path.join(ROOT, file), 'utf8');
+        assert.doesNotMatch(source, /\$\s?\d/, `${file} に「$ + 数字」の価格表記が無い`);
+    });
+});
+
+test('ソース点検: iap.js はストア価格を表示用ヘルパーの戻り値に使わない', () => {
+    assert.doesNotMatch(IAP_SOURCE, /storePriceByProductId\[[^\]]+\]\s*\|\|/, '表示にストア価格を使わない');
+    assert.match(IAP_SOURCE, /getDisplayPrice\(packKey\) \{[\s\S]*?return this\.formatYen\(item\.yen\)/, 'getDisplayPrice は円固定');
+    assert.match(IAP_SOURCE, /getDisplayPriceForYen\(yen\) \{[\s\S]*?return this\.formatYen\(/, 'getDisplayPriceForYen も円固定');
+});
