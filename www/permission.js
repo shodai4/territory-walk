@@ -4,7 +4,8 @@
  *
  * - Persistent, low-noise banner shown while location permission is denied
  *   (Web Geolocation API and Capacitor Geolocation error shapes are both handled).
- * - "×" hides it temporarily; a successful fix (permission granted) hides it automatically.
+ * - 常設表示: ユーザー操作では消せない（✕ボタンは廃止）。位置情報が許可され、
+ *   実際に測位できた時点で hide() により自動的に消える。
  * - Sits below the header, above the map, behind modals (z-[2000]) and toasts (z-[1500]).
  */
 
@@ -16,12 +17,10 @@ class LocationPermissionBanner {
     constructor(doc = null, options = {}) {
         this.doc = doc || (typeof document !== 'undefined' ? document : null);
         this.elementId = 'location-permission-banner';
-        this.closeButtonId = 'btn-location-banner-close';
         this.retryButtonId = 'btn-location-banner-retry';
 
         this.el = null;
         this.isDenied = false;
-        this.isDismissed = false;
         this.onChange = options.onChange || null;
         this.retryHandler = options.retryHandler || null;
 
@@ -64,15 +63,9 @@ class LocationPermissionBanner {
         return false;
     }
 
+    /** 「再確認」ボタンのみを配線する（常設化にともない閉じる操作は持たない）。 */
     bindControls() {
         if (!this.doc) return;
-        const closeBtn = this.doc.getElementById(this.closeButtonId);
-        if (closeBtn && typeof closeBtn.addEventListener === 'function') {
-            closeBtn.addEventListener('click', (event) => {
-                if (event && typeof event.preventDefault === 'function') event.preventDefault();
-                this.dismiss();
-            });
-        }
         const retryBtn = this.doc.getElementById(this.retryButtonId);
         if (retryBtn && typeof retryBtn.addEventListener === 'function') {
             retryBtn.addEventListener('click', (event) => {
@@ -87,14 +80,12 @@ class LocationPermissionBanner {
     }
 
     /**
-     * Show the banner. Skipped while the player has dismissed it, unless force is set.
+     * Show the banner. 常設化したため、すでに表示中でなければ必ず表示する。
      * @returns {boolean} true when the banner actually became visible
      */
-    show(options = {}) {
+    show() {
         this.isDenied = true;
         if (!this.el) return false;
-        if (this.isDismissed && !options.force) return false;
-        if (options.force) this.isDismissed = false;
         if (this.isVisible()) return false;
 
         this.el.classList.remove('hidden');
@@ -103,6 +94,7 @@ class LocationPermissionBanner {
         return true;
     }
 
+    /** 位置情報が許可された時点でのみ呼ぶ（ユーザー操作では消えない）。 */
     hide() {
         if (!this.el || !this.isVisible()) return false;
         this.el.classList.add('hidden');
@@ -110,24 +102,16 @@ class LocationPermissionBanner {
         return true;
     }
 
-    /** 「×」: hide temporarily, stay hidden until permission is granted or the player retries. */
-    dismiss() {
-        this.isDismissed = true;
-        this.hide();
-    }
-
     /** A successful position fix proves permission is granted: hide and reset the state. */
     handlePermissionGranted() {
-        const wasActive = this.isDenied || this.isDismissed || this.isVisible();
+        const wasActive = this.isDenied || this.isVisible();
         this.isDenied = false;
-        this.isDismissed = false;
         this.hide();
         return wasActive;
     }
 
-    /** 「再確認」: clear the dismissal and ask for a fresh fix through the host app. */
+    /** 「再確認」: ask for a fresh fix through the host app. */
     retry() {
-        this.isDismissed = false;
         if (typeof this.retryHandler === 'function') {
             this.retryHandler();
             return;
@@ -136,7 +120,7 @@ class LocationPermissionBanner {
         navigator.geolocation.getCurrentPosition(
             () => this.handlePermissionGranted(),
             (error) => {
-                if (LocationPermissionBanner.isPermissionDeniedError(error)) this.show({ force: true });
+                if (LocationPermissionBanner.isPermissionDeniedError(error)) this.show();
             },
             { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
         );

@@ -1522,9 +1522,10 @@ class TerritoryWalkApp {
             this.teamDecisionName.textContent = isWhite ? 'WHITE（白）陣営' : 'BLACK（黒）陣営';
         }
         if (this.teamDecisionDescription) {
-            this.teamDecisionDescription.textContent = isWhite
-                ? 'オートバランサーにより、あなたは白陣営に配属されました。街を歩いた場所が白の陣地になります。'
-                : 'オートバランサーにより、あなたは黒陣営に配属されました。街を歩いた場所が黒の陣地になります。';
+            // 単語の途中で折り返さないよう、読点と文末で明示的に改行する（375px幅でも各行が収まる長さに分割）
+            this.teamDecisionDescription.innerHTML = isWhite
+                ? 'オートバランサーにより、<br>あなたは白陣営に配属されました。<br>街を歩いた場所が白の陣地になります。'
+                : 'オートバランサーにより、<br>あなたは黒陣営に配属されました。<br>街を歩いた場所が黒の陣地になります。';
         }
         if (this.teamDecisionModal) {
             this.teamDecisionModal.classList.remove('hidden');
@@ -1986,7 +1987,7 @@ class TerritoryWalkApp {
                 return;
             }
             const becameVisible = this.locationBanner.show();
-            // 常設バナーが出ている間はトーストを重ねない（×で閉じた後も静かに保つ）
+            // 常設バナーが出ている間はトーストを重ねない（バナーは許可されるまで出たまま）
             if (becameVisible) {
                 this.showToast('位置情報がオフになっています');
             }
