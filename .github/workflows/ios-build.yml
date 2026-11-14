@@ -75,6 +75,9 @@ jobs:
           python3 /tmp/pin_ump.py
           echo "=== Podfile target block ==="
           grep -A4 "^target 'App' do" Podfile || true
+          # `npx cap sync ios` already ran pod install and wrote a Podfile.lock that pins
+          # GoogleUserMessagingPlatform 3.x; drop it so the pin above takes effect.
+          rm -f Podfile.lock
           pod install
           echo "=== Resolved Google pod versions ==="
           grep -E "Google-Mobile-Ads-SDK|GoogleUserMessagingPlatform" Podfile.lock | head -10 || true
