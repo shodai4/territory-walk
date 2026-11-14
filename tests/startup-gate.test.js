@@ -138,14 +138,21 @@ test('onStart が例外を投げてもゲートは開始済みとして扱う', 
 test('配線: app.js は位置情報とAdMobを起動ゲート経由で開始する', () => {
     const app = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
 
-    // コンストラクタはゲートを立てる。位置情報の直接開始は startDeferredServices の中だけ。
+    // コンストラクタはゲートを立てる。位置情報の直接開始は startLocationTracking の中だけ。
+    // （マーキング停止中はウォッチャーを張らないため、開始は1段ラップした startLocationTracking に集約）
     assert.match(app, /this\.initStartupGate\(\);/, 'コンストラクタでゲートを立てる');
     const geoCalls = app.match(/this\.initGeolocation\(\)/g) || [];
-    assert.equal(geoCalls.length, 1, 'initGeolocation の呼び出しは startDeferredServices の1か所だけ');
+    assert.equal(geoCalls.length, 1, 'initGeolocation の呼び出しは startLocationTracking の1か所だけ');
 
     assert.match(
         app,
-        /startDeferredServices\(trigger = 'manual'\) \{\s*if \(this\.servicesStarted\) return false;[\s\S]*?this\.initGeolocation\(\);[\s\S]*?this\.adMobManager\.init\(\);/,
+        /startLocationTracking\(\) \{\s*if \(this\.isMarkingPaused\(\)\) return false;[\s\S]*?this\.initGeolocation\(\);/,
+        '測位の開始は停止中ガードを通ってから initGeolocation を呼ぶ'
+    );
+
+    assert.match(
+        app,
+        /startDeferredServices\(trigger = 'manual'\) \{\s*if \(this\.servicesStarted\) return false;[\s\S]*?this\.startLocationTracking\(\);[\s\S]*?this\.adMobManager\.init\(\);/,
         '開始処理は位置情報→AdMobの順に一度だけ走る'
     );
     assert.match(app, /new StartupGate\(\{[\s\S]*?onStart: \(trigger\) => this\.startDeferredServices\(trigger\)/, 'ゲートの開始契機を開始処理へ繋ぐ');
