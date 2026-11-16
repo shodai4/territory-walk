@@ -581,8 +581,8 @@ test('CSS: 375px幅で崩れない固定サイズと状態別の配色がある'
 });
 
 test('キャッシュバスター: 変更した app.js は v53、未変更の style.css は v49 を参照する', () => {
-    assert.match(HTML, /app\.js\?v=20261115v55/);
-    assert.match(HTML, /style\.css\?v=20261115v49/);
+    assert.match(HTML, /app\.js\?v=20261116v56/);
+    assert.match(HTML, /style\.css\?v=20261116v50/);
 });
 
 test('ビルド: www/ の index.html / style.css / app.js がルートと一致する', () => {

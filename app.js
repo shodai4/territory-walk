@@ -43,6 +43,11 @@ class TerritoryWalkApp {
         this.proManager = null;
         this.posterGenerator = null;
 
+        // v1.1: 非表示ピン / 月曜の結果通知 / Apple Watch 連携（未定義の環境では null のまま）
+        this.privacyZones = null;
+        this.weeklyNotifier = null;
+        this.watchBridge = null;
+
         this.userMarker = null;
         this.watchId = null;
         this.currentMeshId = null;
@@ -98,10 +103,12 @@ class TerritoryWalkApp {
         this.initDOM();
         this.initMap();
         this.initGrid();
+        this.initPrivacyZones();
         this.initSkinSelector();
         this.initMapThemeSelector();
         this.initStatsModal();
         this.initWeeklyResultModal();
+        this.initWeeklyResultNotifier();
         this.initProModal();
         this.initExportButton();
         // 初回起動はルール説明の「ゲームをはじめる」まで位置情報・ATTの許可要求を待たせる
@@ -196,6 +203,7 @@ class TerritoryWalkApp {
         const modalIds = [
             'shop-modal',
             'menu-modal',
+            'privacy-modal',
             'rules-modal',
             'stats-modal',
             'weekly-result-modal',
@@ -217,6 +225,7 @@ class TerritoryWalkApp {
         const modalIds = [
             'shop-modal',
             'menu-modal',
+            'privacy-modal',
             'rules-modal',
             'stats-modal',
             'weekly-result-modal',
@@ -607,6 +616,63 @@ class TerritoryWalkApp {
             this.loadRemoteTiles();
         } else {
             console.warn('GridManager is not defined.');
+        }
+    }
+
+    /**
+     * v1.1: 非表示ピン（プライバシーゾーン）。
+     * 端末内（localStorage）だけで完結し、サーバーには何も送らない。
+     */
+    initPrivacyZones() {
+        if (typeof PrivacyZoneManager === 'undefined') return;
+        try {
+            this.privacyZones = new PrivacyZoneManager(this);
+            this.privacyZones.initUI();
+            this.renderPrivacySummary();
+        } catch (e) {
+            console.warn('Failed to initialize privacy zones:', e);
+            this.privacyZones = null;
+        }
+    }
+
+    /** メニュー内の「非表示ピン」の件数表示 */
+    renderPrivacySummary() {
+        const el = document.getElementById('privacy-summary-text');
+        if (!el || !this.privacyZones) return;
+        const count = this.privacyZones.getZones().length;
+        el.textContent = count > 0 ? `${count}件登録中（端末内のみ）` : '未登録';
+    }
+
+    /** 地図タップで中心を指定するときに、開いている画面を閉じる */
+    closeModalsForPrivacyPick() {
+        ['menu-modal', 'privacy-modal'].forEach((id) => {
+            const el = document.getElementById(id);
+            if (el) el.classList.add('hidden');
+        });
+    }
+
+    /** v1.1: 月曜リセット後の結果発表を、音を出さずに知らせるローカル通知 */
+    initWeeklyResultNotifier() {
+        if (typeof WeeklyResultNotifier === 'undefined') return;
+        try {
+            this.weeklyNotifier = new WeeklyResultNotifier(this);
+            this.weeklyNotifier.bindUI();
+            this.weeklyNotifier.renderUI();
+        } catch (e) {
+            console.warn('Failed to initialize weekly notifier:', e);
+            this.weeklyNotifier = null;
+        }
+    }
+
+    /** v1.1: Apple Watch（コンパニオン）への状態送出。プラグインが無い環境では何もしない */
+    initWatchBridge() {
+        if (this.watchBridge || typeof WatchBridgeClient === 'undefined') return;
+        try {
+            this.watchBridge = new WatchBridgeClient(this);
+            this.watchBridge.init();
+        } catch (e) {
+            console.warn('Failed to initialize watch bridge:', e);
+            this.watchBridge = null;
         }
     }
 
@@ -1650,6 +1716,12 @@ class TerritoryWalkApp {
         if (this.adMobManager && typeof this.adMobManager.init === 'function') {
             this.adMobManager.init();
         }
+
+        // 歩き始めてから Watch 連携と通知の予約を始める（起動直後の許可要求を増やさない）
+        this.initWatchBridge();
+        if (this.weeklyNotifier && typeof this.weeklyNotifier.init === 'function') {
+            Promise.resolve(this.weeklyNotifier.init()).catch(() => {});
+        }
         return true;
     }
 
@@ -1659,6 +1731,7 @@ class TerritoryWalkApp {
         const openModal = () => {
             this.menuModal.classList.remove('hidden');
             this.updateAutoBalanceUI();
+            this.renderPrivacySummary();
             this.resetViewportScroll();
         };
 
@@ -1996,6 +2069,19 @@ class TerritoryWalkApp {
     }
 
     /**
+     * Watch（コンパニオン）へ状態を知らせる。
+     * 未定義・プラグイン未登録・Watch未ペアリングのいずれでも黙って何もしない。
+     */
+    notifyWatchState(reason) {
+        if (!this.watchBridge) return;
+        try {
+            this.watchBridge.onStateChanged(reason);
+        } catch (e) {
+            console.warn('[Watch] state push failed:', e);
+        }
+    }
+
+    /**
      * ON / OFF を確定する。
      * @param {boolean} paused true で停止、false で再開
      * @param {{ silent?: boolean, source?: string }} options
@@ -2023,6 +2109,8 @@ class TerritoryWalkApp {
         }
 
         this.renderMarkingPauseUI();
+        // WatchのON/OFF表示を合わせる（Watch側の操作で変わった場合もここで同期）
+        this.notifyWatchState('marking');
 
         if (changed && options.silent !== true) {
             this.showToast(next ? 'マーキングを一時停止しました' : 'マーキングを再開しました');
@@ -2369,6 +2457,25 @@ class TerritoryWalkApp {
         const { meshId, latIdx, lngIdx } = this.gridManager.getMeshIdFromLatLng(lat, lng);
         const cachedTeam = this.gridManager.claimedTilesCache.get(meshId);
 
+        // 【v1.1 非表示ピン】区域の中は「塗らない・送らない・数えない」（設置した本人の画面でも同じ）。
+        // 他人の画面でも初期配置のままなので、区域の存在や住まいの位置は見えない。
+        const privacyZone = (this.privacyZones && typeof this.gridManager.getPrivacyZone === 'function')
+            ? this.gridManager.getPrivacyZone(latIdx, lngIdx)
+            : null;
+        if (privacyZone) {
+            this.lastPrivacyBlockAt = Date.now();
+            return {
+                changed: false,
+                meshId,
+                latIdx,
+                lngIdx,
+                blocked: true,
+                reason: 'privacy-zone',
+                team: cachedTeam || null,
+                isReclaimed: false
+            };
+        }
+
         if (this.currentMeshId === meshId && cachedTeam === this.currentTeam) {
             // すでに現在地かつ自陣：塗り直しも送信もしない
             return { changed: false, meshId, latIdx, lngIdx, team: this.currentTeam, isReclaimed: false };
@@ -2387,19 +2494,22 @@ class TerritoryWalkApp {
             // 1. Immediate local UI update
             this.gridManager.claimedTilesCache.set(meshId, this.currentTeam);
             this.gridManager.saveTilesToStorage();
+            // 自分が今週踏んだマス（自分の画面だけの枠線用・サーバーには送らない）
+            if (typeof this.gridManager.recordFootprint === 'function') {
+                this.gridManager.recordFootprint(meshId);
+            }
 
             if (!this.isAppInBackground) {
-                if (this.gridManager.renderedMeshes.has(meshId)) {
-                    this.gridManager.renderedMeshes.get(meshId).setStyle(this.gridManager.getTileStyle(this.currentTeam));
-                } else {
-                    this.gridManager.renderSingleTile(meshId, latIdx, lngIdx, this.currentTeam);
-                }
+                this.gridManager.renderSingleTile(meshId, latIdx, lngIdx);
                 this.updateScoreUI();
                 this.playClaimSound();
                 this.triggerHaptic();
             } else {
                 this.updateScoreUI();
             }
+
+            // Watch（コンパニオン）へ今の状態を送る。プラグイン未登録なら何もしない
+            this.notifyWatchState('claim');
 
             // 2. Stats logging
             if (this.statsManager) {

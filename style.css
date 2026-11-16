@@ -660,3 +660,65 @@ body[data-skin="neon"] #btn-marking-toggle {
 body[data-skin="gold"] #btn-marking-toggle {
     border-color: rgba(234, 179, 8, 0.6) !important;
 }
+
+/* ------------------------------------------------------------------ *
+ * v1.1 非表示ピン（プライバシーゾーン）
+ * ------------------------------------------------------------------ */
+.privacy-zone-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.5rem 0.625rem;
+    background: #09090b;
+    border: 1px solid #27272a;
+    border-radius: 0.625rem;
+}
+
+.privacy-zone-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    min-width: 0;
+}
+
+.privacy-zone-name {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+    font-weight: 700;
+    color: #e4e4e7;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.privacy-zone-meta {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 9px;
+    color: #a1a1aa;
+    white-space: nowrap;
+}
+
+.privacy-zone-delete {
+    flex-shrink: 0;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.5rem;
+    border: 1px solid #7f1d1d;
+    background: rgba(127, 29, 29, 0.35);
+    color: #fca5a5;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 10px;
+    font-weight: 700;
+    transition: transform 0.1s ease;
+}
+
+.privacy-zone-delete:active {
+    transform: scale(0.95);
+}
+
+/* 半径・名前の選択状態（JS が privacy-selected を付ける） */
+[data-privacy-radius].privacy-selected {
+    border-color: #38bdf8 !important;
+    background: rgba(14, 165, 233, 0.18) !important;
+    color: #e0f2fe !important;
+}

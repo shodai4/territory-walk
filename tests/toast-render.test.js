@@ -196,7 +196,7 @@ test('描画: renderToast は文言を innerHTML に埋め込まない', () => {
 
 test('描画: キャッシュバスター v53 と www/ 同期', () => {
     const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
-    assert.match(html, /app\.js\?v=20261115v55/, 'app.js は v54');
+    assert.match(html, /app\.js\?v=20261116v56/, 'app.js は v56');
     assert.match(html, /iap\.js\?v=20261115v50/, 'iap.js は v50');
 
     const wwwApp = path.join(ROOT, 'www', 'app.js');

@@ -17,3 +17,7 @@ Thumbs.db
 .vscode/
 .idea/
 *.log
+
+# Apple Watch: CI（generate-watch-assets.py）が生成するアセット
+watch/TerritoryWatch/Assets.xcassets/
+watch/ios/silent.wav

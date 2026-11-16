@@ -1,7 +1,67 @@
 /**
  * TERRITORY WALK - grid.js
  * 100m Quad Mesh Calculation, Tile State Management, Dynamic Styling & Leaflet Grid Layer
+ *
+ * v1.1 プライバシー設計:
+ *   1. DBに無いマスは week_id + 座標の決定論的ハッシュで白 / 黒 50%:50% の「初期配置」として表示する
+ *      （全ユーザーが同じ座標で同じ色を見る。DB容量ゼロ・週が変われば自動でシャッフル）。
+ *   2. 塗りは半透明にして下の地図（道路・駅名・建物）を読める濃さにする。
+ *   3. 自分が今週踏んで塗ったマスだけ、自分の端末で細い枠線（足跡）を付ける。サーバーには送らない。
+ *   4. 非表示ピン（privacy.js）の区域の中は、自分の画面でも初期配置の見た目に戻す。
  */
+
+/** 塗りの濃さ（初期配置・実際に塗ったマスで同じにする＝見分けが付かない） */
+const TILE_FILL_OPACITY = 0.45;
+const TILE_STROKE_OPACITY = 0.55;
+const TILE_STROKE_WEIGHT = 1.2;
+/** 自分の足跡（今週踏んだマス）だけに付ける枠線 */
+const FOOTPRINT_STROKE_COLOR = '#f59e0b';
+const FOOTPRINT_STROKE_WEIGHT = 2.4;
+const FOOTPRINT_STROKE_OPACITY = 0.95;
+/** 自分の足跡の保存キー（端末内のみ） */
+const FOOTPRINT_STORAGE_KEY = 'tw_footprint';
+const FOOTPRINT_MAX_TILES = 3000;
+
+/**
+ * Asia/Tokyo の ISO 週（例: 2026-W47）。
+ * SupabaseManager が無い場面（テスト・オフライン）でも初期配置を同じ色にするために使う。
+ */
+function isoWeekIdJst(date = new Date()) {
+    const jstString = date.toLocaleString('en-US', { timeZone: 'Asia/Tokyo' });
+    const jstDate = new Date(jstString);
+    const target = new Date(jstDate.valueOf());
+    const dayNum = (jstDate.getDay() + 6) % 7; // Monday = 0
+    target.setDate(target.getDate() - dayNum + 3);
+    const firstThursday = new Date(target.getFullYear(), 0, 4);
+    const firstThursdayDayNum = (firstThursday.getDay() + 6) % 7;
+    firstThursday.setDate(firstThursday.getDate() - firstThursdayDayNum + 3);
+    const weekNum = Math.round(((target - firstThursday) / 86400000 - 3) / 7) + 1;
+    return `${target.getFullYear()}-W${String(weekNum).padStart(2, '0')}`;
+}
+
+/**
+ * マス座標と週から決まる 32bit ハッシュ（FNV-1a + 攪拌）。
+ * 同じ week_id・同じ座標なら、誰の端末でも必ず同じ値になる。
+ */
+function tileHash(weekId, latIdx, lngIdx) {
+    const text = `${weekId}:${latIdx}:${lngIdx}`;
+    let h = 0x811c9dc5;
+    for (let i = 0; i < text.length; i++) {
+        h ^= text.charCodeAt(i);
+        h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    h ^= h >>> 15;
+    h = Math.imul(h, 0x2c1b3c6d) >>> 0;
+    h ^= h >>> 12;
+    h = Math.imul(h, 0x297a2d39) >>> 0;
+    h ^= h >>> 15;
+    return h >>> 0;
+}
+
+/** 未登録マスの初期配置（white / black を 50%:50% で決める） */
+function deterministicInitialTeam(weekId, latIdx, lngIdx) {
+    return (tileHash(weekId, latIdx, lngIdx) & 1) === 1 ? 'white' : 'black';
+}
 
 class GridManager {
     constructor(map, appInstance) {
@@ -16,12 +76,21 @@ class GridManager {
         this.claimedTilesCache = new Map(); // meshId -> 'white' | 'black'
         this.renderedMeshes = new Map();     // meshId -> L.Rectangle layer
 
+        // 自分の足跡（今週踏んだマス）。端末内のみ・サーバーへは送らない
+        this.footprintWeek = null;
+        this.footprintIds = [];
+        this.footprintSet = new Set();
+
+        // 初期配置の色を決める週（週明けに更新される）
+        this.weekId = null;
+
         // Use Canvas renderer for low memory footprint and high 60fps performance
         this.canvasRenderer = (typeof L !== 'undefined' && L.canvas) ? L.canvas({ padding: 0.5 }) : null;
         this.gridLayerGroup = L.layerGroup().addTo(this.map);
 
         this.checkWeekReset();
         this.loadTilesFromStorage();
+        this.loadFootprint();
         this.initEventListeners();
     }
 
@@ -45,6 +114,14 @@ class GridManager {
         return [[south, west], [north, east]];
     }
 
+    /** マスの中心座標（非表示ピンの内外判定に使う） */
+    getMeshCenter(latIdx, lngIdx) {
+        return {
+            lat: (latIdx + 0.5) * this.LAT_GRID,
+            lng: (lngIdx + 0.5) * this.LNG_GRID
+        };
+    }
+
     getMeshId(latIdx, lngIdx) {
         return `tile_${latIdx}_${lngIdx}`;
     }
@@ -54,15 +131,29 @@ class GridManager {
         return { meshId: this.getMeshId(latIdx, lngIdx), latIdx, lngIdx };
     }
 
+    /** 現在の週ID（初期配置のハッシュ種） */
+    getWeekId() {
+        if (this.app && this.app.supabaseManager) {
+            this.weekId = this.app.supabaseManager.getCurrentWeekId();
+        } else if (!this.weekId) {
+            this.weekId = isoWeekIdJst();
+        }
+        return this.weekId || isoWeekIdJst();
+    }
+
     checkWeekReset() {
-        if (!this.app || !this.app.supabaseManager) return;
-        const currentWeek = this.app.supabaseManager.getCurrentWeekId();
+        const currentWeek = this.getWeekId();
         const savedWeek = localStorage.getItem('territory_current_week');
 
         if (savedWeek && savedWeek !== currentWeek) {
             console.log(`Weekly reset detected: ${savedWeek} -> ${currentWeek}`);
             localStorage.removeItem('territory_claimed_tiles');
             this.claimedTilesCache.clear();
+            // 足跡も週が変われば意味がないので消す（初期配置の枠線が残らないように）
+            this.footprintIds = [];
+            this.footprintSet = new Set();
+            this.footprintWeek = currentWeek;
+            this.saveFootprint();
         }
         localStorage.setItem('territory_current_week', currentWeek);
     }
@@ -74,7 +165,9 @@ class GridManager {
                 const parsed = JSON.parse(raw);
                 if (Array.isArray(parsed)) {
                     parsed.forEach(([id, team]) => {
-                        this.claimedTilesCache.set(id, team);
+                        if (team === 'white' || team === 'black') {
+                            this.claimedTilesCache.set(id, team);
+                        }
                     });
                 }
             }
@@ -90,6 +183,91 @@ class GridManager {
         } catch (e) {
             console.warn('Failed to save tiles to localStorage:', e);
         }
+    }
+
+    /* ---------------- 自分の足跡（端末内のみ） ---------------- */
+
+    loadFootprint() {
+        const week = this.getWeekId();
+        this.footprintWeek = week;
+        try {
+            const raw = localStorage.getItem(FOOTPRINT_STORAGE_KEY);
+            if (!raw) return;
+            const parsed = JSON.parse(raw);
+            if (parsed && parsed.week === week && Array.isArray(parsed.ids)) {
+                this.footprintIds = parsed.ids.filter((id) => typeof id === 'string');
+                this.footprintSet = new Set(this.footprintIds);
+            }
+        } catch (e) {
+            this.footprintIds = [];
+            this.footprintSet = new Set();
+        }
+    }
+
+    saveFootprint() {
+        try {
+            localStorage.setItem(FOOTPRINT_STORAGE_KEY, JSON.stringify({
+                week: this.footprintWeek || this.getWeekId(),
+                ids: this.footprintIds
+            }));
+        } catch (e) {
+            console.warn('Failed to save footprint:', e);
+        }
+    }
+
+    /** 自分が今週塗ったマスを記録する（描画の枠線だけで、サーバーには送らない） */
+    recordFootprint(meshId) {
+        if (!meshId) return;
+        const week = this.getWeekId();
+        if (this.footprintWeek !== week) {
+            this.footprintWeek = week;
+            this.footprintIds = [];
+            this.footprintSet = new Set();
+        }
+        if (this.footprintSet.has(meshId)) return;
+        this.footprintSet.add(meshId);
+        this.footprintIds.push(meshId);
+        if (this.footprintIds.length > FOOTPRINT_MAX_TILES) {
+            const overflow = this.footprintIds.length - FOOTPRINT_MAX_TILES;
+            const removed = this.footprintIds.splice(0, overflow);
+            removed.forEach((id) => this.footprintSet.delete(id));
+        }
+        this.saveFootprint();
+    }
+
+    isOwnFootprint(meshId) {
+        if (!meshId || this.footprintWeek !== this.getWeekId()) return false;
+        return this.footprintSet.has(meshId);
+    }
+
+    /* ---------------- 初期配置・非表示ピンを含めたマスの解決 ---------------- */
+
+    /** その座標が非表示ピンの中か（入っていれば region） */
+    getPrivacyZone(latIdx, lngIdx) {
+        const manager = this.app ? this.app.privacyZones : null;
+        if (!manager || typeof manager.containsMesh !== 'function') return null;
+        return manager.containsMesh(latIdx, lngIdx, this);
+    }
+
+    /**
+     * 画面に描く色を決める唯一の入口。
+     *   1) 非表示ピンの区域 → 初期配置（実際に塗られていても見せない）
+     *   2) サーバー/ローカルの実績 → その陣営
+     *   3) 未登録 → week_id + 座標のハッシュ（白 / 黒 50:50）
+     */
+    resolveTileTeam(meshId, latIdx, lngIdx) {
+        if (this.getPrivacyZone(latIdx, lngIdx)) {
+            return deterministicInitialTeam(this.getWeekId(), latIdx, lngIdx);
+        }
+        const claimed = this.claimedTilesCache.get(meshId);
+        if (claimed === 'white' || claimed === 'black') return claimed;
+        return deterministicInitialTeam(this.getWeekId(), latIdx, lngIdx);
+    }
+
+    /** そのマスに実際の記録（誰かが塗った陣地）があるか */
+    hasClaim(meshId) {
+        const team = this.claimedTilesCache.get(meshId);
+        return team === 'white' || team === 'black';
     }
 
     initEventListeners() {
@@ -165,8 +343,10 @@ class GridManager {
 
     /**
      * Get style definition for tile based on team and current active skin
+     * @param {'white'|'black'|null} team
+     * @param {{ ownFootprint?: boolean }} [options]
      */
-    getTileStyle(team) {
+    getTileStyle(team, options = {}) {
         const skin = document.body.dataset.skin || 'default';
         const styles = {
             default: {
@@ -213,12 +393,25 @@ class GridManager {
 
         const theme = styles[skin] || styles.default;
         const base = team === 'white' ? theme.white : (team === 'black' ? theme.black : theme.unclaimed);
-        
-        return {
+
+        // 塗りは「下の地図が読める濃さ」に統一する。
+        // 実際に塗ったマスも初期配置も同じ濃さにして、見た目で区別が付かないようにする。
+        const style = {
             ...base,
-            opacity: 0.9,
+            weight: TILE_STROKE_WEIGHT,
+            opacity: TILE_STROKE_OPACITY,
+            fillOpacity: team === 'white' || team === 'black' ? TILE_FILL_OPACITY : base.fillOpacity,
             interactive: false
         };
+
+        // 自分の足跡だけは、自分の端末で細くはっきりした枠を付ける（他人の画面には出ない）
+        if (options.ownFootprint && (team === 'white' || team === 'black')) {
+            style.color = FOOTPRINT_STROKE_COLOR;
+            style.weight = FOOTPRINT_STROKE_WEIGHT;
+            style.opacity = FOOTPRINT_STROKE_OPACITY;
+        }
+
+        return style;
     }
 
     /**
@@ -226,8 +419,13 @@ class GridManager {
      */
     redrawTiles() {
         for (const [meshId, rectangle] of this.renderedMeshes.entries()) {
-            const team = this.claimedTilesCache.get(meshId);
-            rectangle.setStyle(this.getTileStyle(team));
+            const parts = meshId.split('_');
+            if (parts.length !== 3) continue;
+            const latIdx = parseInt(parts[1], 10);
+            const lngIdx = parseInt(parts[2], 10);
+            rectangle.setStyle(this.getTileStyle(this.resolveTileTeam(meshId, latIdx, lngIdx), {
+                ownFootprint: this.isOwnFootprint(meshId)
+            }));
         }
     }
 
@@ -238,6 +436,9 @@ class GridManager {
     clearAllTiles() {
         const cleared = this.claimedTilesCache.size;
         this.claimedTilesCache.clear();
+        this.footprintIds = [];
+        this.footprintSet = new Set();
+        this.saveFootprint();
         for (const rectangle of this.renderedMeshes.values()) {
             try {
                 rectangle.setStyle(this.getTileStyle(null));
@@ -273,7 +474,7 @@ class GridManager {
 
         // 1. Render all claimed tiles (even if zoomed out)
         if (currentZoom >= renderMinZoom) {
-            for (const [meshId, team] of this.claimedTilesCache.entries()) {
+            for (const [meshId] of this.claimedTilesCache.entries()) {
                 if (renderedCount >= maxRender) break; // 広域時の描画負荷を上限で抑える
                 const parts = meshId.split('_');
                 if (parts.length === 3) {
@@ -284,21 +485,23 @@ class GridManager {
                         lngIdx >= minLngIdx - 1 && lngIdx <= maxLngIdx + 1) {
 
                         currentVisibleMeshes.add(meshId);
-                        this.renderSingleTile(meshId, latIdx, lngIdx, team);
+                        this.renderSingleTile(meshId, latIdx, lngIdx);
                         renderedCount++;
                     }
                 }
             }
         }
 
-        // 2. Render unclaimed empty grid only when zoomed in close (zoom >= 16)
+        // 2. 近距離表示では、未登録マスも「初期配置」の色で並べる（zoom >= 16）
         if (currentZoom >= 16) {
             for (let latIdx = minLatIdx; latIdx <= maxLatIdx; latIdx++) {
                 for (let lngIdx = minLngIdx; lngIdx <= maxLngIdx; lngIdx++) {
+                    if (renderedCount >= maxRender) break;
                     const meshId = this.getMeshId(latIdx, lngIdx);
                     currentVisibleMeshes.add(meshId);
                     if (!this.renderedMeshes.has(meshId)) {
-                        this.renderSingleTile(meshId, latIdx, lngIdx, this.claimedTilesCache.get(meshId));
+                        this.renderSingleTile(meshId, latIdx, lngIdx);
+                        renderedCount++;
                     }
                 }
             }
@@ -313,17 +516,43 @@ class GridManager {
         }
     }
 
-    renderSingleTile(meshId, latIdx, lngIdx, team) {
+    /**
+     * 1マス描く。色は resolveTileTeam が決める（初期配置 / 実績 / 非表示ピン）。
+     */
+    renderSingleTile(meshId, latIdx, lngIdx) {
+        if (latIdx === undefined || lngIdx === undefined) {
+            const parts = meshId.split('_');
+            latIdx = parseInt(parts[1], 10);
+            lngIdx = parseInt(parts[2], 10);
+        }
+
+        const style = this.getTileStyle(this.resolveTileTeam(meshId, latIdx, lngIdx), {
+            ownFootprint: this.isOwnFootprint(meshId)
+        });
+
         if (this.renderedMeshes.has(meshId)) {
             const rect = this.renderedMeshes.get(meshId);
-            rect.setStyle(this.getTileStyle(team));
-            return;
+            rect.setStyle(style);
+            return rect;
         }
 
         const bounds = this.getMeshBounds(latIdx, lngIdx);
-        const options = this.canvasRenderer ? { ...this.getTileStyle(team), renderer: this.canvasRenderer } : this.getTileStyle(team);
+        const options = this.canvasRenderer ? { ...style, renderer: this.canvasRenderer } : style;
         const rect = L.rectangle(bounds, options);
         rect.addTo(this.gridLayerGroup);
         this.renderedMeshes.set(meshId, rect);
+        return rect;
     }
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+        GridManager,
+        tileHash,
+        deterministicInitialTeam,
+        isoWeekIdJst,
+        TILE_FILL_OPACITY,
+        FOOTPRINT_STROKE_COLOR,
+        FOOTPRINT_STORAGE_KEY
+    };
 }
