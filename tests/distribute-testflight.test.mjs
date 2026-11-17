@@ -27,6 +27,7 @@ import {
   createAscClient,
   describeApiError,
   pickBuild,
+  fetchBuildList,
   fetchBuildByNumber,
   waitForBuildValid,
   ensureEncryptionCompliance,
@@ -304,6 +305,42 @@ test('waitForBuildValid: 15分待っても VALID にならなければタイム�
   assert.ok(calls.length >= 3 && calls.length <= 5, `呼び出し回数: ${calls.length}`);
 });
 
+test('waitForBuildValid: タイムアウト時は直近のビルド番号を添えて知らせる', async () => {
+  const { fetchImpl } = makeFetch([
+    {
+      match: `GET /v1/apps/${APP_ID}/builds`,
+      respond: { data: [buildPayload({ id: 'B', version: '77', state: 'PROCESSING' })] },
+    },
+  ]);
+  const client = createAscClient({ jwtFactory: 'token', fetchImpl, sleep: async () => {}, maxRetries: 0 });
+  let clock = 1_700_000_000_000;
+
+  await assert.rejects(
+    () =>
+      waitForBuildValid(client, {
+        appId: APP_ID,
+        buildNumber: '42',
+        timeoutMs: 40_000,
+        intervalMs: 20_000,
+        sleep: async () => {
+          clock += 20_000;
+        },
+        now: () => clock,
+      }),
+    /直近のビルド: 77\(PROCESSING\)/,
+  );
+});
+
+test('fetchBuildList: アプリ配下のビルド一覧をそのまま返す', async () => {
+  const { fetchImpl, calls } = makeFetch([
+    { match: `GET /v1/apps/${APP_ID}/builds`, respond: { data: [buildPayload({ id: 'A' }), buildPayload({ id: 'B', version: '43' })] } },
+  ]);
+  const client = createAscClient({ jwtFactory: 'token', fetchImpl, sleep: async () => {}, maxRetries: 0 });
+  const builds = await fetchBuildList(client, { appId: APP_ID });
+  assert.equal(builds.length, 2);
+  assert.equal(calls.length, 1);
+});
+
 /* ------------------------------------------------------------------ *
  * 5) 輸出コンプライアンス
  * ------------------------------------------------------------------ */
@@ -387,7 +424,7 @@ test('assignBuildToGroup: 204 は追加成功、409 は追加済みとして成�
   const clientOk = createAscClient({ jwtFactory: 'token', fetchImpl: ok.fetchImpl, sleep: async () => {}, maxRetries: 0 });
   assert.deepEqual(await assignBuildToGroup(clientOk, { groupId: 'G1', buildId: 'B-1' }), {
     ok: true,
-    alreadyPresent: false,
+    mode: 'added',
   });
   assert.deepEqual(ok.calls[0].body, { data: [{ type: 'builds', id: 'B-1' }] });
 
@@ -395,8 +432,45 @@ test('assignBuildToGroup: 204 は追加成功、409 は追加済みとして成�
   const clientConflict = createAscClient({ jwtFactory: 'token', fetchImpl: conflict.fetchImpl, sleep: async () => {}, maxRetries: 0 });
   assert.deepEqual(await assignBuildToGroup(clientConflict, { groupId: 'G1', buildId: 'B-1' }), {
     ok: true,
-    alreadyPresent: true,
+    mode: 'already_present',
   });
+});
+
+// 実際のワークフローで観測した応答（開発テスト = 内部グループ・自動配信オン）
+const INTERNAL_GROUP_422 = [
+  422,
+  {
+    errors: [
+      {
+        status: '422',
+        code: 'ENTITY_UNPROCESSABLE',
+        title: 'Builds cannot be assigned to this internal group.',
+        detail: 'Cannot add internal group to a build.',
+      },
+    ],
+  },
+];
+
+test('assignBuildToGroup: 内部グループの 422 では逆向きの関連付けを試す', async () => {
+  const { fetchImpl, calls } = makeFetch([
+    { match: 'POST /v1/betaGroups/G1/relationships/builds', respond: INTERNAL_GROUP_422 },
+    { match: 'POST /v1/builds/B-1/relationships/betaGroups', respond: 204 },
+  ]);
+  const client = createAscClient({ jwtFactory: 'token', fetchImpl, sleep: async () => {}, maxRetries: 0 });
+
+  assert.deepEqual(await assignBuildToGroup(client, { groupId: 'G1', buildId: 'B-1' }), { ok: true, mode: 'added' });
+  assert.deepEqual(calls[1].body, { data: [{ type: 'betaGroups', id: 'G1' }] });
+});
+
+test('assignBuildToGroup: 両方向が 422 なら「自動配信に任せる」として成功扱い', async () => {
+  const { fetchImpl } = makeFetch([
+    { match: 'POST /v1/betaGroups/G1/relationships/builds', respond: INTERNAL_GROUP_422 },
+    { match: 'POST /v1/builds/B-1/relationships/betaGroups', respond: INTERNAL_GROUP_422 },
+  ]);
+  const client = createAscClient({ jwtFactory: 'token', fetchImpl, sleep: async () => {}, maxRetries: 0 });
+  const result = await assignBuildToGroup(client, { groupId: 'G1', buildId: 'B-1' });
+  assert.equal(result.ok, true);
+  assert.equal(result.mode, 'internal_auto');
 });
 
 test('assignBuildToGroup: 権限不足などは理由付きで失敗する', async () => {
@@ -499,6 +573,39 @@ test('distributeBuild: すでにグループに入っていれば 409 でも成�
     sleep: async () => {},
   });
   assert.equal(result.alreadyPresent, true);
+});
+
+test('distributeBuild: 内部グループの自動配信でも成功し、buildBetaDetail で配信を確認する', async () => {
+  // グループ側のビルド一覧は空（自動配信では一覧に現れないことがある）→ internalBuildState で判定
+  const routes = [
+    { match: `GET /v1/apps/${APP_ID}/builds`, respond: { data: [buildPayload({ id: 'B-42', version: '42' })] } },
+    { match: `GET /v1/apps/${APP_ID}/betaGroups`, respond: { data: [groupPayload({ id: 'G1', name: '開発テスト' })] } },
+    { match: 'POST /v1/betaGroups/G1/relationships/builds', respond: INTERNAL_GROUP_422 },
+    { match: 'POST /v1/builds/B-42/relationships/betaGroups', respond: INTERNAL_GROUP_422 },
+    { match: 'GET /v1/betaGroups/G1/builds', respond: { data: [] } },
+    {
+      match: 'GET /v1/builds/B-42/buildBetaDetail',
+      respond: { data: { type: 'buildBetaDetails', id: 'BD', attributes: { internalBuildState: 'IN_BETA_TESTING' } } },
+    },
+  ];
+  const { fetchImpl } = makeFetch(routes);
+  const logs = [];
+
+  const result = await distributeBuild({
+    appId: APP_ID,
+    buildNumber: '42',
+    keyId: KEY_ID,
+    issuerId: ISSUER_ID,
+    privateKey: PRIVATE_PEM,
+    fetchImpl,
+    sleep: async () => {},
+    log: (line) => logs.push(line),
+  });
+
+  assert.equal(result.assignmentMode, 'internal_auto');
+  assert.equal(result.verified, true);
+  assert.ok(logs.some((line) => line.includes('自動配信')));
+  assert.ok(logs.some((line) => line.includes('IN_BETA_TESTING')));
 });
 
 test('distributeBuild: 内部グループが無ければ作成を促して失敗する', async () => {

@@ -384,7 +384,7 @@ export function pickInternalGroup(groups, preferredName = DEFAULT_BETA_GROUP_NAM
 
 export async function fetchBetaGroups(client, appId) {
   const result = await client.request('GET', `/apps/${encodeURIComponent(appId)}/betaGroups`, {
-    query: { limit: 200, 'fields[betaGroups]': 'name,isInternalGroup,createdDate' },
+    query: { limit: 200, 'fields[betaGroups]': 'name,isInternalGroup,hasAccessToAllBuilds,createdDate' },
   });
   if (!result.ok) throw new Error(`ベータグループ一覧の取得に失敗: ${describeApiError(result)}`);
   return result.data?.data || [];
@@ -393,14 +393,35 @@ export async function fetchBetaGroups(client, appId) {
 /**
  * POST /v1/betaGroups/{groupId}/relationships/builds
  * 204 / 200 = 追加した、409 = すでに入っている（成功扱い）。
+ *
+ * 内部グループは「自動配信（Enable automatic distribution）」が有効だと
+ * Apple 側が 422「Builds cannot be assigned to this internal group.」を返す。
+ * そのときは逆向きの POST /v1/builds/{buildId}/relationships/betaGroups も試し、
+ * それも弾かれたら「自動配信に任せる（追加不要）」として成功扱いにする。
+ * （内部グループは VALID になった時点で内部テスターへ配信される）
  */
-export async function assignBuildToGroup(client, { groupId, buildId }) {
+export async function assignBuildToGroup(client, { groupId, buildId, log = () => {} }) {
   const result = await client.request('POST', `/betaGroups/${encodeURIComponent(groupId)}/relationships/builds`, {
     body: { data: [{ type: 'builds', id: buildId }] },
   });
-  if (result.status === 409) return { ok: true, alreadyPresent: true };
-  if (result.ok) return { ok: true, alreadyPresent: false };
-  throw new Error(`グループへのビルド追加に失敗: ${describeApiError(result)}`);
+  if (result.status === 409) return { ok: true, mode: 'already_present' };
+  if (result.ok) return { ok: true, mode: 'added' };
+
+  const reason = describeApiError(result);
+  const internalGroupRefusal =
+    result.status === 422 && /internal/i.test(JSON.stringify(result.data || result.text || ''));
+
+  if (internalGroupRefusal) {
+    log(`[ASC] Apple が内部グループへの手動追加を拒否しました（${reason}）。逆向きの関連付けを試します`);
+    const reverse = await client.request('POST', `/builds/${encodeURIComponent(buildId)}/relationships/betaGroups`, {
+      body: { data: [{ type: 'betaGroups', id: groupId }] },
+    });
+    if (reverse.status === 409) return { ok: true, mode: 'already_present' };
+    if (reverse.ok) return { ok: true, mode: 'added' };
+    return { ok: true, mode: 'internal_auto', reason };
+  }
+
+  throw new Error(`グループへのビルド追加に失敗: ${reason}`);
 }
 
 /** 追加後にグループのビルド一覧を見て、本当に入っているか確認する（失敗しても致命にしない） */
@@ -421,6 +442,21 @@ export async function verifyBuildInGroup(client, { groupId, buildId, maxPages = 
     query = Object.fromEntries(nextUrl.searchParams.entries());
   }
   return { verified: false, reason: 'グループのビルド一覧をたどり切れませんでした' };
+}
+
+/**
+ * ビルドの TestFlight 配信状態（internalBuildState）を読む。
+ * 自動配信の内部グループではビルド側が「IN_BETA_TESTING」になっていれば配信済み。
+ */
+export async function fetchInternalBuildState(client, buildId) {
+  const result = await client.request('GET', `/builds/${encodeURIComponent(buildId)}/buildBetaDetail`, {
+    query: { 'fields[buildBetaDetails]': 'internalBuildState,externalBuildState' },
+  });
+  if (!result.ok) return { available: false, reason: describeApiError(result) };
+  return {
+    available: true,
+    internalBuildState: result.data?.data?.attributes?.internalBuildState ?? null,
+  };
 }
 
 /* ------------------------------------------------------------------ *
@@ -493,27 +529,49 @@ export async function distributeBuild({
   }
 
   // (4) グループへ追加
-  const assigned = await assignBuildToGroup(client, { groupId: group.id, buildId: build.id });
-  log(
-    assigned.alreadyPresent
-      ? `[ASC] ビルド ${buildNumber} はすでに「${group.name}」に入っていました（409 / 変更なし）`
-      : `[ASC] ビルド ${buildNumber} を「${group.name}」に追加しました`,
-  );
-
-  // (5) 反映確認（取れなくても異常とは限らないので警告どまり）
-  const check = await verifyBuildInGroup(client, { groupId: group.id, buildId: build.id });
-  if (check.verified) {
-    log(`[ASC] 確認OK: 「${group.name}」のビルド一覧に ${buildNumber} が入っています`);
+  const assigned = await assignBuildToGroup(client, { groupId: group.id, buildId: build.id, log });
+  if (assigned.mode === 'already_present') {
+    log(`[ASC] ビルド ${buildNumber} はすでに「${group.name}」に入っていました（409 / 変更なし）`);
+  } else if (assigned.mode === 'added') {
+    log(`[ASC] ビルド ${buildNumber} を「${group.name}」に追加しました`);
   } else {
-    log(`[ASC] 注意: 反映確認が取れませんでした（${check.reason}）。グループへの追加自体は成功しています`);
+    log(
+      `[ASC] 「${group.name}」は内部グループのため Apple 側で自動配信されます（手動追加は不要）。` +
+        'VALID になった時点で内部テスターへ届きます',
+    );
+  }
+
+  // (5) 反映確認: グループ側の一覧 → 取れなければビルド側の配信状態（internalBuildState）
+  let verify = await verifyBuildInGroup(client, { groupId: group.id, buildId: build.id });
+  let internalBuildState = null;
+  if (!verify.verified) {
+    const detail = await fetchInternalBuildState(client, build.id);
+    internalBuildState = detail.available ? detail.internalBuildState : null;
+    if (internalBuildState === 'IN_BETA_TESTING') {
+      verify = { verified: true, via: 'internalBuildState' };
+    } else if (detail.available) {
+      log(`[ASC] ビルドの配信状態: ${internalBuildState}（内部テスターへの配信は処理完了後に反映されます）`);
+    }
+  }
+
+  if (verify.verified) {
+    log(
+      verify.via === 'internalBuildState'
+        ? `[ASC] 配信確認OK: ビルド ${buildNumber} は IN_BETA_TESTING（内部テスターへ配信中）`
+        : `[ASC] 確認OK: 「${group.name}」のビルド一覧に ${buildNumber} が入っています`,
+    );
+  } else {
+    log(`[ASC] 注意: 反映確認が取れませんでした（${verify.reason}）。追加自体は Apple 側で受け付けられています`);
   }
 
   return {
     build,
     group,
     compliancePatched,
-    alreadyPresent: assigned.alreadyPresent,
-    verified: check.verified,
+    assignmentMode: assigned.mode,
+    alreadyPresent: assigned.mode === 'already_present',
+    internalBuildState,
+    verified: verify.verified,
   };
 }
 
@@ -604,9 +662,11 @@ export async function main(argv = process.argv.slice(2), { env = process.env } =
 
     const statusLine = result.dryRun
       ? 'DRY RUN（追加はしていません）'
-      : result.alreadyPresent
+      : result.assignmentMode === 'already_present'
         ? '追加済み（変更なし）'
-        : '追加完了';
+        : result.assignmentMode === 'internal_auto'
+          ? '自動配信（内部グループ／追加操作不要）'
+          : '追加完了';
     console.log('');
     console.log('===== TestFlight 自動配信の結果 =====');
     console.log(`ビルド番号 : ${result.build.attributes?.version}（build id: ${result.build.id}）`);
@@ -632,7 +692,7 @@ export async function main(argv = process.argv.slice(2), { env = process.env } =
     ].join('\n'));
 
     appendLine(env.GITHUB_OUTPUT, [
-      `distribute_status=${result.dryRun ? 'dry_run' : result.alreadyPresent ? 'already_present' : 'added'}`,
+      `distribute_status=${result.dryRun ? 'dry_run' : result.assignmentMode || 'added'}`,
       `beta_group_name=${result.group.name}`,
       `beta_group_id=${result.group.id}`,
       `build_id=${result.build.id}`,
