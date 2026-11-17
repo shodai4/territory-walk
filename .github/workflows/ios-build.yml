@@ -81,6 +81,7 @@ jobs:
           pod install
           echo "=== Resolved Google pod versions ==="
           grep -E "Google-Mobile-Ads-SDK|GoogleUserMessagingPlatform" Podfile.lock | head -10 || true
+          
       - name: "Add watchOS companion target (optional, vars.ENABLE_WATCH_TARGET=true)"
         if: vars.ENABLE_WATCH_TARGET == 'true'
         run: bash ci/watch-setup.sh
