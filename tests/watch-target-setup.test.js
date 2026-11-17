@@ -118,21 +118,27 @@ test('CI: Watch 組み込みステップは変数ONのときだけ走る形で�
 
 test('CI: 適用スクリプトは冪等に挿入でき、正本と写しが揃う', () => {
     const os = require('node:os');
-    const { applyTo } = require(path.join(ROOT, 'scripts', 'apply-watch-workflow-step.js'));
+    const { applyTo, stripExisting, MARKER } =
+        require(path.join(ROOT, 'scripts', 'apply-watch-workflow-step.js'));
+    const workflowPath = path.join(ROOT, '.github', 'workflows', 'ios-build.yml');
+    const mirrorPath = path.join(ROOT, 'ci', 'ios-build.yml');
+    const source = fs.readFileSync(workflowPath, 'utf8');
     const temp = path.join(os.tmpdir(), `ios-build-${process.pid}.yml`);
-    fs.copyFileSync(path.join(ROOT, '.github', 'workflows', 'ios-build.yml'), temp);
+    // 挿入済みの ワークフローでも同じ冪等性を検証できるよう、いったんステップを外してから始める
+    fs.writeFileSync(temp, stripExisting(source));
     try {
         const before = fs.readFileSync(temp, 'utf8');
-        assert.ok(!before.includes('ENABLE_WATCH_TARGET'), 'このブランチの時点では未挿入');
+        assert.ok(!before.includes('ENABLE_WATCH_TARGET'), '取り外した状態から始める');
         assert.equal(applyTo(temp), true, '1回目は挿入する');
         const once = fs.readFileSync(temp, 'utf8');
         assert.equal(applyTo(temp), false, '2回目以降は変更しない（重複しない）');
         const twice = fs.readFileSync(temp, 'utf8');
         assert.equal(once, twice);
-        assert.equal((once.match(/ENABLE_WATCH_TARGET/g) || []).length,
-            (twice.match(/ENABLE_WATCH_TARGET/g) || []).length);
+        assert.equal(once.split(MARKER).length, 2, 'ステップは1つだけ');
         assert.ok(once.indexOf('ENABLE_WATCH_TARGET') < once.indexOf('Compile & Verify iOS Build'),
             'pod install の後・ビルドの前に挿入される');
+        assert.equal(source, once, '正本 .github/workflows/ios-build.yml がスクリプトの出力と一致する');
+        assert.equal(fs.readFileSync(mirrorPath, 'utf8'), source, '写し ci/ios-build.yml も正本と一致する');
     } finally {
         fs.rmSync(temp, { force: true });
     }
