@@ -38,18 +38,28 @@ function stripComments(source, isHtml) {
 /* ------------------------------------------------------------------ *
  * 1. 仮文言・未実装の残存
  * ------------------------------------------------------------------ */
+
+/**
+ * ルール説明の項目5は「地図上の初期配置はプライバシー保護のダミーです。」と
+ * 意図的に「ダミー」と説明する（2026-11-17 翔大さんの指定文言）。
+ * 仮置き・未実装の印としての「ダミー」ではないので、この1文だけを検出対象から外す。
+ * （この文が消えていないことは tests/rules-modal-scoring.test.js が本文の完全一致で監視している）
+ */
+const INTENTIONAL_DUMMY_SENTENCE = '地図上の初期配置はプライバシー保護のダミーです。';
+const withoutIntentionalDummy = (text) => text.split(INTENTIONAL_DUMMY_SENTENCE).join('');
+
 test('文言: 画面に出る文字に「準備中」「TODO」「ダミー」「未実装」等が残っていない', () => {
     const forbidden = ['準備中', 'TODO', 'FIXME', 'ダミー', 'テスト用', '未実装', 'coming soon', 'Coming Soon', 'lorem ipsum'];
     const offenders = [];
 
     HTML_FILES.forEach((file) => {
-        const text = stripComments(read(file), true);
+        const text = withoutIntentionalDummy(stripComments(read(file), true));
         forbidden.forEach((word) => {
             if (text.includes(word)) offenders.push(`${file}: ${word}`);
         });
     });
     JS_FILES.forEach((file) => {
-        const text = stripComments(read(file), false);
+        const text = withoutIntentionalDummy(stripComments(read(file), false));
         forbidden.forEach((word) => {
             if (text.includes(word)) offenders.push(`${file}: ${word}`);
         });

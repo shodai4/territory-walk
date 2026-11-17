@@ -297,7 +297,7 @@ test('AIウォーカー: クライアントからは実行できない（いた�
 test('AIウォーカー: ルール画面の文言は変えない（裏側の仕組みだけで動く）', () => {
     const html = read('index.html');
     assert.doesNotMatch(html, /AIウォーカー/, 'アプリの画面には出さない（翔大さんの判断）');
-    assert.match(html, /勝敗は実際に歩いたマスだけで集計/, '先行のルール追記（bd539e4）はそのまま');
+    assert.match(html, /勝敗は歩いたマスだけで集計/, '先行のルール追記（bd539e4・文言は 2026-11-17 に短縮）はそのまま');
     // アプリのコードからこの関数を呼ばない＝サーバー側の cron だけで完結する
     ['app.js', 'supabase.js', 'grid.js', 'stats.js'].forEach((file) => {
         assert.doesNotMatch(read(file), /run_ai_walkers/, `${file} から呼ばない`);
