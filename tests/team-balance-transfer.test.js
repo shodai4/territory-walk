@@ -561,7 +561,7 @@ test('引き継ぎ実行: 未入力・自分のコード・未登録コードは
     assert.match((await app.applyTransferCode('ZZZZ9999')).message, /オフライン/);
 
     app.supabaseManager = { fetchUserByTransferCode: async () => ({ ok: false, reason: 'not_ready' }) };
-    assert.match((await app.applyTransferCode('ZZZZ9999')).message, /準備/);
+    assert.match((await app.applyTransferCode('ZZZZ9999')).message, /引き継ぎをご利用いただけません/);
 });
 
 /* ------------------------------------------------------------------ *

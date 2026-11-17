@@ -2194,6 +2194,9 @@ class TerritoryWalkApp {
         if (typeof this.statsManager.syncTransferCode === 'function') {
             Promise.resolve(this.statsManager.syncTransferCode()).then((result) => {
                 this.updateTransferCodeStatus(result);
+                if (result && result.reason === 'not_ready') {
+                    console.info('[Transfer] transfer_code 列がありません。supabase/transfer_code.sql を実行すると機種変更の引き継ぎが有効になります。');
+                }
             }).catch(() => {});
         }
     }
@@ -2210,7 +2213,7 @@ class TerritoryWalkApp {
             return;
         }
         if (reason === 'not_ready') {
-            status.textContent = '引き継ぎコードのサーバー登録がまだ有効になっていません（supabase/transfer_code.sql の実行待ち）。端末内のデータは保持されます。';
+            status.textContent = 'サーバーとの準備が整い次第、コードの登録は自動で行われます。端末内のデータは保持されます。';
             status.className = 'text-[10px] leading-snug text-amber-400';
             return;
         }
@@ -2304,7 +2307,7 @@ class TerritoryWalkApp {
                 return { success: false, message: 'オフラインのため引き継ぎできません。通信できる場所でお試しください' };
             }
             if (found.reason === 'not_ready') {
-                return { success: false, message: '引き継ぎコードのサーバー登録がまだ有効になっていません（運営側の準備待ち）' };
+                return { success: false, message: 'ただいま引き継ぎをご利用いただけません。時間をおいて、もう一度お試しください' };
             }
             if (found.reason === 'not_found') {
                 return { success: false, message: 'そのコードは見つかりませんでした。コードをご確認ください（初回はオンラインで一度プレイすると登録されます）' };
