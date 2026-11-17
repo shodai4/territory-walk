@@ -58,20 +58,22 @@ final class WatchSessionManager: NSObject, WCSessionDelegate {
     }
 
     // MARK: Watch → iPhone の記録（inbox）
-    private func readInbox() -> [[String: Any]] {
+    // inbox は「バッチの配列」＝ [[[String: Any]]]（1バッチ＝Watchがまとめたタイル配列）。
+    // JS側（watch-bridge.js）は result.items を配列として受け取り、各要素をタイル配列として読む。
+    private func readInbox() -> [[[String: Any]]] {
         guard let data = try? Data(contentsOf: inboxURL),
               let object = try? JSONSerialization.jsonObject(with: data),
-              let batches = object as? [[String: Any]] else { return [] }
+              let batches = object as? [[[String: Any]]] else { return [] }
         return batches
     }
 
-    private func writeInbox(_ batches: [[String: Any]]) {
+    private func writeInbox(_ batches: [[[String: Any]]]) {
         guard let data = try? JSONSerialization.data(withJSONObject: batches, options: []) else { return }
         try? data.write(to: inboxURL, options: .atomic)
     }
 
     /// JSから呼ぶ: 溜まったWatch記録を取り出して空にする
-    func drainInbox() -> [[String: Any]] {
+    func drainInbox() -> [[[String: Any]]] {
         let batches = readInbox()
         try? FileManager.default.removeItem(at: inboxURL)
         return batches
@@ -164,7 +166,14 @@ public class WatchBridgePlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc func updateState(_ call: CAPPluginCall) {
-        let payload: [String: Any] = call.options
+        // CAPPluginCall.options は Capacitor のバージョンでキー型が変わるため、
+        // String キーだけを拾って [String: Any] に詰め替える。
+        var payload: [String: Any] = [:]
+        for (key, value) in call.options {
+            if let key = key as? String {
+                payload[key] = value
+            }
+        }
         WatchSessionManager.shared.pushContext(payload)
         call.resolve()
     }
