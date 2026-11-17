@@ -110,10 +110,15 @@ test('CI: トリガーは main のみ（作業ブランチではビルドしな�
 test('CI: Watch 組み込みステップは変数ONのときだけ走る形で用意されている', () => {
     const step = read('ci', 'watch-step.yml');
     assert.match(step, /if: vars\.ENABLE_WATCH_TARGET == 'true'/, '既定は組み込まない');
-    assert.match(step, /node scripts\/configure-watch\.js/);
-    assert.match(step, /ruby scripts\/add-watch-target\.rb/);
-    assert.match(step, /python3 scripts\/generate-watch-assets\.py/);
-    assert.match(step, /WATCH_EMBED=plugins/, 'PlugIns 埋め込みの再試行');
+    assert.match(step, /run: bash ci\/watch-setup\.sh/, '実処理はウォッチ用スクリプトに置く');
+
+    const setup = read('ci', 'watch-setup.sh');
+    assert.match(setup, /set -e/, '途中で失敗したら止まる');
+    assert.match(setup, /node scripts\/configure-watch\.js/);
+    assert.match(setup, /ruby scripts\/add-watch-target\.rb/);
+    assert.match(setup, /python3 scripts\/generate-watch-assets\.py/);
+    assert.match(setup, /WATCH_EMBED=plugins/, 'PlugIns 埋め込みの再試行');
+    assert.match(setup, /CURRENT_PROJECT_VERSION/, 'iPhone と同じビルド番号を渡す');
 });
 
 test('CI: 適用スクリプトは冪等に挿入でき、正本と写しが揃う', () => {

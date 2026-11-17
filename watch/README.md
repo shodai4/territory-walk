@@ -40,6 +40,8 @@ node scripts/apply-watch-workflow-step.js
 - ステップ名: `Add watchOS companion target (optional, vars.ENABLE_WATCH_TARGET=true)`
 - `vars.ENABLE_WATCH_TARGET == 'true'` のときだけ走る（既定は何もしない）
 - 走る位置: pod install の後、クリーンビルドの前（Swift のコンパイルエラーを署名前に検出）
+- 実処理は `ci/watch-setup.sh`（ワークフロー側は3行の呼び出しだけ。`node scripts/configure-watch.js`
+  / `scripts/add-watch-target.rb` / `scripts/generate-watch-assets.py` をこの順で実行する）
 
 理由: Watch 用 Bundle ID（`com.oekaki.territorywalk.watchkitapp`）が
 Apple Developer / App Store Connect に無い状態で配信まで進むと、署名/検証で落ちるため。

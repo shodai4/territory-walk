@@ -84,26 +84,7 @@ jobs:
 
       - name: "Add watchOS companion target (optional, vars.ENABLE_WATCH_TARGET=true)"
         if: vars.ENABLE_WATCH_TARGET == 'true'
-        env:
-          CURRENT_PROJECT_VERSION: ${{ github.run_number }}
-        run: |
-          set -e
-          echo "=== xcodeproj gem ==="
-          ruby -e "require 'xcodeproj'; puts 'xcodeproj ' + Xcodeproj::VERSION" \
-            || gem install xcodeproj --no-document
-
-          echo "=== Watch icons + silent sound ==="
-          python3 scripts/generate-watch-assets.py
-
-          echo "=== Copy Watch sources / bridge into generated iOS project ==="
-          node scripts/configure-watch.js
-
-          echo "=== Add Watch target to pbxproj ==="
-          ruby scripts/add-watch-target.rb \
-            || WATCH_EMBED=plugins ruby scripts/add-watch-target.rb
-
-          echo "=== Targets after injection ==="
-          xcodebuild -list -project ios/App/App.xcodeproj
+        run: bash ci/watch-setup.sh
 
       - name: "Compile & Verify iOS Build (Clean Build)"
         run: |
