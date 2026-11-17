@@ -6,6 +6,22 @@
 const SUPABASE_URL = 'https://xxzmrdfroqeflfgszgls.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_sPah3iPPh-CesDyG0hxG_A_ZMu2VTkb';
 
+/**
+ * PostgREST の Content-Range ヘッダーから総件数だけを取り出す。
+ *   例: "0-13/14" → 14  /  "100-199/12345" → 12345
+ * 件数不明（末尾がワイルドカード）・ヘッダーが無い・壊れている場合は null
+ * （呼び出し側はローカル集計へフォールバック）。
+ */
+function parseContentRangeTotal(headerValue) {
+    if (!headerValue || typeof headerValue !== 'string') return null;
+    const slash = headerValue.lastIndexOf('/');
+    if (slash < 0) return null;
+    const totalText = headerValue.slice(slash + 1).trim();
+    if (!/^\d+$/.test(totalText)) return null;
+    const total = Number(totalText);
+    return Number.isFinite(total) ? total : null;
+}
+
 class SupabaseManager {
     constructor() {
         this.client = null;
@@ -180,6 +196,71 @@ class SupabaseManager {
     }
 
     /**
+     * サーバー全体（territory_tiles）の指定チームのマス数を数える。
+     * PostgREST の HEAD リクエスト + `Prefer: count=exact` で行を転送させず、
+     * Content-Range ヘッダーの総件数だけを読む（DB側のSQL変更は不要）。
+     * @param {'black'|'white'} team
+     * @param {string|null} weekId 集計する週（null / '' なら全期間）
+     * @returns {Promise<number|null>} 取得できなければ null
+     */
+    async fetchTeamTileCount(team, weekId = this.getCurrentWeekId()) {
+        if (!this.client) return null;
+        if (typeof fetch !== 'function') return null;
+        if (team !== 'black' && team !== 'white') return null;
+
+        const params = new URLSearchParams({ select: 'team', team: `eq.${team}` });
+        if (weekId) params.set('week_id', `eq.${weekId}`);
+
+        try {
+            const res = await fetch(`${SUPABASE_URL}/rest/v1/territory_tiles?${params.toString()}`, {
+                method: 'HEAD',
+                headers: {
+                    apikey: SUPABASE_ANON_KEY,
+                    Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+                    Prefer: 'count=exact',
+                    Accept: 'application/json'
+                },
+                cache: 'no-store'
+            });
+            if (!res || !res.ok) return null;
+            const header = res.headers && typeof res.headers.get === 'function'
+                ? res.headers.get('content-range')
+                : null;
+            return parseContentRangeTotal(header);
+        } catch (err) {
+            console.warn('[Supabase] Failed to count tiles:', err && err.message ? err.message : err);
+            return null;
+        }
+    }
+
+    /**
+     * 全国の黒・白マス数を並列で取得する。
+     * オフライン・通信エラー・片方でも取れなかった場合は null（従来動作を壊さない）。
+     * @returns {Promise<{black:number, white:number, weekId:string|null, fetchedAt:number}|null>}
+     */
+    async fetchGlobalTeamCounts(weekId = this.getCurrentWeekId()) {
+        if (!this.client) return null;
+        if (typeof navigator !== 'undefined' && navigator && navigator.onLine === false) return null;
+
+        try {
+            const [black, white] = await Promise.all([
+                this.fetchTeamTileCount('black', weekId),
+                this.fetchTeamTileCount('white', weekId)
+            ]);
+            if (black === null || white === null) return null;
+            return {
+                black,
+                white,
+                weekId: weekId || null,
+                fetchedAt: Date.now()
+            };
+        } catch (err) {
+            console.warn('[Supabase] Failed to fetch global team counts:', err);
+            return null;
+        }
+    }
+
+    /**
      * Fetch all tiles within bounds and current week from Supabase
      */
     async fetchTilesInBounds(minLat, maxLat, minLng, maxLng, weekId = this.getCurrentWeekId()) {
@@ -223,5 +304,9 @@ class SupabaseManager {
             return [];
         }
     }
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { SupabaseManager, parseContentRangeTotal, SUPABASE_URL, SUPABASE_ANON_KEY };
 }
 

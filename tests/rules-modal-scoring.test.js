@@ -109,12 +109,18 @@ test('配布物: www/index.html にも同じルール説明が入っている（
  * 5: 文言と実装の一致
  * ------------------------------------------------------------------ */
 
-test('整合性: 上部の％バーは実際に塗ったマス（claimedTilesCache）だけで数える', () => {
+test('整合性: 上部の％バーは実際に塗ったマスだけで数える（全国集計→未取得時は claimedTilesCache）', () => {
     const app = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
     const body = app.slice(app.indexOf('updateScoreUI() {'), app.indexOf('initDPad() {'));
     assert.ok(body.length > 0, 'updateScoreUI の定義を切り出せる');
-    assert.match(body, /for \(const team of this\.gridManager\.claimedTilesCache\.values\(\)\)/, '集計対象は claims のみ');
+    assert.match(body, /this\.getScoreCounts\(\)/, '集計は getScoreCounts に集約する');
     assert.doesNotMatch(body, /deterministicInitialTeam/, '初期配置50%は集計に入れない');
+
+    const counts = app.slice(app.indexOf('getScoreCounts() {'), app.indexOf('applyGlobalCountDelta('));
+    assert.match(counts, /this\.globalTeamCounts/, '全国集計を参照する');
+    assert.match(counts, /\.loaded/, '全国集計が取れていればそれを使う');
+    assert.match(counts, /claimedTilesCache\.values\(\)/, '未取得時は従来どおり実績マスで数える');
+    assert.doesNotMatch(counts, /deterministicInitialTeam/, '初期配置50%は集計に入れない');
 });
 
 test('整合性: 勝敗（前週結果）も実際に塗ったマスの枚数から決まる', () => {

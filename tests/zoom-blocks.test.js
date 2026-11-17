@@ -380,12 +380,16 @@ test('スコア: ブロックを描いても claimedTilesCache（勝敗の集計
     }
 });
 
-test('スコア: ％バーの集計元は claimedTilesCache だけで、描画用の関数を参照しない', () => {
+test('スコア: ％バーの集計元は全国集計（未取得時は claimedTilesCache）で、描画用の関数を参照しない', () => {
     const source = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
     const body = source.slice(source.indexOf('    updateScoreUI()'), source.indexOf('    initDPad()'));
 
-    assert.match(body, /gridManager\.claimedTilesCache\.values\(\)/, '集計元は実績マス');
+    assert.match(body, /getScoreCounts\(\)/, '集計は getScoreCounts（全国集計→ローカル集計）に集約');
     assert.doesNotMatch(body, /resolveBlockTeam|renderedBlocks|displayModeForZoom/, '描画用の集計は使わない');
+
+    const counts = source.slice(source.indexOf('    getScoreCounts() {'), source.indexOf('    applyGlobalCountDelta('));
+    assert.match(counts, /gridManager\.claimedTilesCache\.values\(\)/, '未取得時は実績マス');
+    assert.doesNotMatch(counts, /resolveBlockTeam|renderedBlocks|displayModeForZoom/, '描画用の集計は使わない');
 });
 
 test('歩行判定: 塗る処理は従来どおり実績マスだけを書き換える（ブロックは表示のみ）', () => {

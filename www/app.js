@@ -94,6 +94,11 @@ class TerritoryWalkApp {
         this.lastRealPosition = null;
         // デバッグの白紙リセット直後の再マージ防止（grid.js が参照）
         this.territoryReset = null;
+        // 全国（サーバー全体）の黒・白マス数。上部％バーは「この端末が読んだ範囲」ではなく
+        // 「日本全体で実際に塗られたマス」を表示する（未取得・オフライン時はローカル集計へ戻す）。
+        this.globalTeamCounts = { black: 0, white: 0, loaded: false, weekId: null, fetchedAt: 0 };
+        this.globalCountsRequest = null;      // 取得中の Promise（多重リクエスト防止）
+        this.globalCountsLastRequestAt = 0;   // 最後に要求した時刻（スロットル用）
         this.isMapVisible = true;
         this.isDebugMode = false;
         this.debugEnabled = CONFIG.ENABLE_DEBUG_TOOLS !== false;
@@ -453,13 +458,13 @@ class TerritoryWalkApp {
     }
 
     isUnderdogTeam() {
-        if (!this.gridManager) return false;
+        // 劣勢判定も上部％バーと同じ数字（全国集計）で行う。未取得時はローカル集計。
         let blackCount = 0;
         let whiteCount = 0;
-        for (const team of this.gridManager.claimedTilesCache.values()) {
-            if (team === 'black') blackCount++;
-            else if (team === 'white') whiteCount++;
-        }
+        if (!this.gridManager && !(this.globalTeamCounts && this.globalTeamCounts.loaded)) return false;
+        const counts = this.getScoreCounts();
+        blackCount = counts.black;
+        whiteCount = counts.white;
         const total = blackCount + whiteCount;
         if (total === 0) return false;
         const myCount = this.currentTeam === 'black' ? blackCount : whiteCount;
@@ -732,9 +737,116 @@ class TerritoryWalkApp {
     }
 
     async loadRemoteTiles() {
+        // 上部％バーの全国集計もここで一緒に更新する（10秒スロットル）
+        this.refreshGlobalTeamCounts();
         if (!this.gridManager) return;
         await this.gridManager.fetchAndSyncTiles();
         this.updateScoreUI();
+    }
+
+    /**
+     * 全国（サーバー全体）の黒・白マス数を取得して上部％バーへ反映する。
+     *   - 連続呼び出し（地図移動・8秒ポーリング）は 10 秒スロットルで間引く
+     *   - force: true で即時取得（画面復帰・通信復帰・デバッグリセット後）
+     *   - 通信エラー時は前回値を保持し、一度も取れていなければローカル集計のまま
+     */
+    async refreshGlobalTeamCounts(options = {}) {
+        const force = !!(options && options.force);
+        if (!this.supabaseManager || typeof this.supabaseManager.fetchGlobalTeamCounts !== 'function') return null;
+        if (!this.globalTeamCounts) {
+            this.globalTeamCounts = { black: 0, white: 0, loaded: false, weekId: null, fetchedAt: 0 };
+        }
+
+        const weekId = (typeof this.supabaseManager.getCurrentWeekId === 'function')
+            ? this.supabaseManager.getCurrentWeekId()
+            : null;
+
+        // 週が変わった（月曜リセット）ら前週の数字を引きずらない
+        const knownWeek = this.globalTeamCounts.weekId;
+        if (this.globalTeamCounts.loaded && knownWeek && weekId && knownWeek !== weekId) {
+            this.globalTeamCounts = { black: 0, white: 0, loaded: false, weekId: null, fetchedAt: 0 };
+            this.updateScoreUI();
+        }
+
+        if (this.globalCountsRequest) return this.globalCountsRequest;
+
+        const GLOBAL_COUNTS_MIN_INTERVAL_MS = 10000;
+        const now = Date.now();
+        if (!force && (now - (this.globalCountsLastRequestAt || 0)) < GLOBAL_COUNTS_MIN_INTERVAL_MS) {
+            return null;
+        }
+        if (typeof navigator !== 'undefined' && navigator && navigator.onLine === false) return null;
+
+        this.globalCountsLastRequestAt = now;
+        this.globalCountsRequest = Promise.resolve()
+            .then(() => this.supabaseManager.fetchGlobalTeamCounts(weekId))
+            .then((counts) => {
+                this.globalCountsRequest = null;
+                if (!counts || typeof counts.black !== 'number' || typeof counts.white !== 'number') {
+                    return null;
+                }
+                this.globalTeamCounts = {
+                    black: counts.black,
+                    white: counts.white,
+                    loaded: true,
+                    weekId: counts.weekId || weekId || null,
+                    fetchedAt: Date.now()
+                };
+                this.updateScoreUI();
+                return counts;
+            })
+            .catch(() => {
+                this.globalCountsRequest = null;
+                return null;
+            });
+        return this.globalCountsRequest;
+    }
+
+    /**
+     * 上部％バーの元になる黒・白のマス数を返す。
+     * 全国集計が取れていればそれを使い、未取得・オフライン時は従来どおり
+     * この端末が読み込んだ範囲（claimedTilesCache）で計算する。
+     */
+    getScoreCounts() {
+        const global = this.globalTeamCounts;
+        if (global && global.loaded) {
+            return { black: global.black, white: global.white, source: 'global' };
+        }
+        let black = 0;
+        let white = 0;
+        if (this.gridManager && this.gridManager.claimedTilesCache) {
+            for (const team of this.gridManager.claimedTilesCache.values()) {
+                if (team === 'black') black++;
+                else if (team === 'white') white++;
+            }
+        }
+        return { black, white, source: 'local' };
+    }
+
+    /**
+     * 自分の塗り（新規は +1、相手からの奪取は自分 +1 / 相手 -1）を全国集計へ即時反映する。
+     * 数字は次のサーバー取得（10秒間隔）で正しい値に補正される。
+     */
+    applyGlobalCountDelta(team, delta) {
+        if (!this.globalTeamCounts || !this.globalTeamCounts.loaded) return;
+        if (team !== 'black' && team !== 'white') return;
+        const next = Math.max(0, (this.globalTeamCounts[team] || 0) + Number(delta || 0));
+        this.globalTeamCounts[team] = next;
+    }
+
+    /** Realtime で受けた他プレイヤーの塗りを全国集計へ反映する（前チーム -1 / 後チーム +1） */
+    applyRealtimeGlobalDelta(previousTeam, nextTeam) {
+        if (!this.globalTeamCounts || !this.globalTeamCounts.loaded) return;
+        if (previousTeam && previousTeam !== nextTeam) this.applyGlobalCountDelta(previousTeam, -1);
+        if (nextTeam) this.applyGlobalCountDelta(nextTeam, 1);
+        this.updateScoreUI();
+    }
+
+    /** デバッグの白紙リセット時：全国集計も空に戻し、すぐ取り直す */
+    resetGlobalTeamCounts() {
+        this.globalTeamCounts = { black: 0, white: 0, loaded: false, weekId: null, fetchedAt: 0 };
+        this.globalCountsRequest = null;
+        this.globalCountsLastRequestAt = 0;
     }
 
     initSkinSelector() {
@@ -2548,12 +2660,16 @@ class TerritoryWalkApp {
                 if (this.locationBanner) this.locationBanner.refreshPermissionState();
                 // フォアグラウンド復帰時に未送信分をまとめて同期
                 if (this.syncQueue) this.syncQueue.flush('foreground');
+                // 全国集計（上部％バー）も最新にする
+                this.refreshGlobalTeamCounts({ force: true });
             }
         });
 
         // 通信状態の復帰・切断（オフラインキューとの連携）
         window.addEventListener('online', () => {
             if (this.syncQueue) this.syncQueue.flush('online');
+            // 通信か復帰したら全国集計をすぐ取り直す（オフライン中はローカル集計で表示）
+            this.refreshGlobalTeamCounts({ force: true });
         });
         window.addEventListener('offline', () => {
             if (this.syncQueue) this.syncQueue.notify();
@@ -2572,6 +2688,7 @@ class TerritoryWalkApp {
                 window.Capacitor.Plugins.App.addListener('appStateChange', (state) => {
                     this.isAppInBackground = !state.isActive;
                     if (state.isActive && this.syncQueue) this.syncQueue.flush('app-active');
+                    if (state.isActive) this.refreshGlobalTeamCounts({ force: true });
                 });
             } catch (e) {}
         }
@@ -2815,6 +2932,9 @@ class TerritoryWalkApp {
             // 1. Immediate local UI update
             this.gridManager.claimedTilesCache.set(meshId, this.currentTeam);
             this.gridManager.saveTilesToStorage();
+            // 全国集計（上部％バー）へも即時反映する（新規 +1、奪取は相手 -1）
+            this.applyGlobalCountDelta(this.currentTeam, 1);
+            if (isReclaimed) this.applyGlobalCountDelta(cachedTeam, -1);
             // 自分が今週踏んだマス（自分の画面だけの枠線用・サーバーには送らない）
             if (typeof this.gridManager.recordFootprint === 'function') {
                 this.gridManager.recordFootprint(meshId);
@@ -2850,6 +2970,8 @@ class TerritoryWalkApp {
             // 3. Supabase online sync（オフライン時はOutboxに退避し、復帰後に一括再送）
             if (this.supabaseManager) {
                 this.enqueueTileSync(meshId, latIdx, lngIdx, this.currentTeam);
+                // 自分の塗りをサーバー側の全国集計にも反映させる（10秒スロットル）
+                this.refreshGlobalTeamCounts();
             }
 
             return { changed: true, meshId, latIdx, lngIdx, team: this.currentTeam, isReclaimed: !!isReclaimed };
@@ -2901,13 +3023,11 @@ class TerritoryWalkApp {
     updateScoreUI() {
         if (!this.gridManager || !this.scoreBlackEl || !this.scoreWhiteEl || !this.barBlackEl || !this.barWhiteEl) return;
 
-        let blackCount = 0;
-        let whiteCount = 0;
-
-        for (const team of this.gridManager.claimedTilesCache.values()) {
-            if (team === 'black') blackCount++;
-            else if (team === 'white') whiteCount++;
-        }
+        // 全国集計（サーバーの territory_tiles 全体）があればそれを使う。
+        // 未取得・オフライン時は、従来どおりこの端末が読み込んだ範囲で計算する。
+        const counts = this.getScoreCounts();
+        const blackCount = counts.black;
+        const whiteCount = counts.white;
 
         const total = blackCount + whiteCount;
         let blackPct = 50;
@@ -3215,7 +3335,10 @@ class TerritoryWalkApp {
         }
 
         if (this.gridManager) this.gridManager.updateGrids();
+        // 全国集計も白紙に戻し、サーバーから取り直す
+        this.resetGlobalTeamCounts();
         this.updateScoreUI();
+        this.refreshGlobalTeamCounts({ force: true });
         this.updateDpadStatus('全陣地を白紙化しました');
 
         let detail = 'ローカルの地図・保存データ・未送信キューを空にしました';
@@ -3299,14 +3422,21 @@ class TerritoryWalkApp {
                         if (payload.new && this.gridManager) {
                             const tile = payload.new;
                             const current = this.gridManager.claimedTilesCache.get(tile.tile_id);
+                            // キャッシュと違う＝この端末にとって新しい変化。自分の塗りや再受信は二重に数えない
                             if (current !== tile.team) {
                                 console.log('[Realtime Sync] Remote tile claimed:', tile.tile_id, tile.team);
+                                this.applyRealtimeGlobalDelta(payload.old ? payload.old.team : null, tile.team);
                                 this.gridManager.claimedTilesCache.set(tile.tile_id, tile.team);
                                 this.gridManager.saveTilesToStorage();
                                 this.gridManager.updateGrids();
                                 this.updateScoreUI();
                             }
+                        } else if (payload.new === null && payload.old && payload.old.team) {
+                            // 削除（白紙リセット等）も全国集計から差し引く
+                            this.applyRealtimeGlobalDelta(payload.old.team, null);
                         }
+                        // 正確な数はサーバー取得で補正する（10秒スロットル）
+                        this.refreshGlobalTeamCounts();
                     }
                 )
                 .subscribe((status) => {
