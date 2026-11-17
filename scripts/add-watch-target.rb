@@ -97,6 +97,11 @@ watch.frameworks_build_phase.files.clear
 
 group = project.main_group.find_subpath(WATCH_SOURCE_DIR, true)
 group.set_source_tree('<group>')
+# ここが抜けると、グループの実パスが未設定のままになり、配下のファイル参照が
+# ios/App/ 直下（例: ios/App/Assets.xcassets）に解決されて actool が
+# 「AppIcon が見つからない／No such file or directory」で落ちる。
+# main_group は ios/App を指すので、グループのパスは 'TerritoryWatch'。
+group.path = WATCH_SOURCE_DIR
 
 watch_source_abs = File.join(ROOT, 'ios', 'App', WATCH_SOURCE_DIR)
 swift_files = Dir.glob(File.join(watch_source_abs, '*.swift')).sort
@@ -181,6 +186,20 @@ if embed_index
     phases.insert(thin_index, phase)
   end
 end
+
+# ---------------------------------------------------------------- 自己点検
+# 参照パスが ios/App/TerritoryWatch/ の外を指していたら、ここで止める。
+# （actool が「AppIcon が見つからない」と落ちる原因はこれ）
+expected_dir = File.join(ROOT, 'ios', 'App', WATCH_SOURCE_DIR)
+refs = []
+refs.concat(watch.source_build_phase.files.map(&:file_ref))
+refs.concat(watch.resources_build_phase.files.map(&:file_ref))
+bad = refs.compact.reject { |ref| ref.real_path.to_s.start_with?(expected_dir) }
+unless bad.empty?
+  bad.each { |ref| warn("[watch] 誤った参照: #{ref.path} -> #{ref.real_path}") }
+  abort("[watch] グループのパスが不正です（#{WATCH_SOURCE_DIR} 配下に解決されていない）")
+end
+puts "[watch] 参照パスOK: ソース #{watch.source_build_phase.files.count} 本 / リソース #{watch.resources_build_phase.files.count} 件（すべて #{WATCH_SOURCE_DIR}/ 配下）"
 
 project.save
 puts "[watch] target=#{WATCH_TARGET_NAME} bundle=#{WATCH_BUNDLE_ID} embed=#{EMBED_MODE} -> 保存完了"
