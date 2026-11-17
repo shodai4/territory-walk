@@ -17,6 +17,8 @@ const path = require('node:path');
 
 const ROOT = path.resolve(__dirname, '..');
 const read = (...parts) => fs.readFileSync(path.join(ROOT, ...parts), 'utf8');
+/** 行末の空白を落として比較する（Web UI で編集すると空行にインデントが残ることがある） */
+const normalizeTrailing = (text) => text.replace(/[ \t]+$/gm, '');
 
 const WATCH_APP = read('watch', 'TerritoryWatch', 'TerritoryWatchApp.swift');
 const WATCH_MODEL = read('watch', 'TerritoryWatch', 'WatchModel.swift');
@@ -142,8 +144,16 @@ test('CI: 適用スクリプトは冪等に挿入でき、正本と写しが揃�
         assert.equal(once.split(MARKER).length, 2, 'ステップは1つだけ');
         assert.ok(once.indexOf('ENABLE_WATCH_TARGET') < once.indexOf('Compile & Verify iOS Build'),
             'pod install の後・ビルドの前に挿入される');
-        assert.equal(source, once, '正本 .github/workflows/ios-build.yml がスクリプトの出力と一致する');
-        assert.equal(fs.readFileSync(mirrorPath, 'utf8'), source, '写し ci/ios-build.yml も正本と一致する');
+        assert.equal(
+            normalizeTrailing(source),
+            normalizeTrailing(once),
+            '正本 .github/workflows/ios-build.yml がスクリプトの出力と一致する（行末の空白は無視）'
+        );
+        assert.equal(
+            normalizeTrailing(fs.readFileSync(mirrorPath, 'utf8')),
+            normalizeTrailing(source),
+            '写し ci/ios-build.yml も正本と一致する（行末の空白は無視）'
+        );
     } finally {
         fs.rmSync(temp, { force: true });
     }

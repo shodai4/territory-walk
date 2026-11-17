@@ -251,9 +251,11 @@ test('配線: ci/ios-build.yml は実際に動くワークフローと同一（�
     const deployedPath = path.join(ROOT, '.github', 'workflows', 'ios-build.yml');
     const canonicalPath = path.join(ROOT, 'ci', 'ios-build.yml');
     if (!fs.existsSync(deployedPath)) return; // ローカルに無い場合はスキップ
+    // 行末の空白は問わない（Web UI で編集すると空行にインデントが残ることがある）
+    const normalize = (text) => text.replace(/[ \t]+$/gm, '');
     assert.equal(
-        fs.readFileSync(canonicalPath, 'utf8'),
-        fs.readFileSync(deployedPath, 'utf8'),
+        normalize(fs.readFileSync(canonicalPath, 'utf8')),
+        normalize(fs.readFileSync(deployedPath, 'utf8')),
         'ci/ios-build.yml と .github/workflows/ios-build.yml がずれている'
     );
 });
