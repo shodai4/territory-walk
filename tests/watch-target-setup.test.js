@@ -123,6 +123,19 @@ test('CI: Watch 組み込みステップは変数ONのときだけ走る形で�
     assert.match(setup, /CURRENT_PROJECT_VERSION/, 'iPhone と同じビルド番号を渡す');
 });
 
+test('ブリッジ: inbox は「タイル配列の配列」で JS の読み方と揃っている', () => {
+    // CI で `no exact matches in call to instance method 'append'` が出た（v1.1）
+    assert.match(BRIDGE_SWIFT, /func readInbox\(\) -> \[\[\[String: Any\]\]\]/);
+    assert.match(BRIDGE_SWIFT, /batches\.append\(tiles\)/, 'バッチ＝タイル配列として積む');
+    assert.match(BRIDGE_SWIFT, /call\.resolve\(\["items": WatchSessionManager\.shared\.drainInbox\(\)\]\)/);
+});
+
+test('ブリッジ: CAPPluginCall.options のキー型に依存せず String キーへ詰め替える', () => {
+    // Capacitor のバージョンで [AnyHashable: Any] になるため（CI で型不一致エラー）
+    assert.match(BRIDGE_SWIFT, /for \(key, value\) in call\.options/);
+    assert.match(BRIDGE_SWIFT, /if let key = key as\? String/);
+});
+
 test('Watchアプリ: Map/MapPolygon/MapCircle を使うので MapKit を import している', () => {
     // CI で「cannot find 'Map' in scope」によりアーカイブが落ちた（v1.1）
     assert.match(WATCH_APP, /^import MapKit\b/m, 'MapKit の import が無いと Map 系が解決できない');
