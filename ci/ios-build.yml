@@ -81,11 +81,11 @@ jobs:
           pod install
           echo "=== Resolved Google pod versions ==="
           grep -E "Google-Mobile-Ads-SDK|GoogleUserMessagingPlatform" Podfile.lock | head -10 || true
-
+          
       - name: "Add watchOS companion target (optional, vars.ENABLE_WATCH_TARGET=true)"
         if: vars.ENABLE_WATCH_TARGET == 'true'
         run: bash ci/watch-setup.sh
-
+        
       - name: "Compile & Verify iOS Build (Clean Build)"
         run: |
           cd ios/App
@@ -266,6 +266,27 @@ jobs:
               exit 1
             fi
           fi
+
+      # ---------------------------------------------------------------------
+      # TestFlight 自動配信: アップロードしたビルドを内部テストグループ
+      # （名前に「開発テスト」を含むグループ優先）へ App Store Connect API で自動追加する。
+      # 処理: 処理完了(VALID)を最大15分ポーリング → 暗号化申告(null なら false)の補完
+      #       → 内部グループへ追加（409=追加済み も成功）
+      # スクリプト: scripts/distribute-testflight.mjs（npm test で検証済み）
+      # Secret 名は ASC_* を優先し、既存の APP_STORE_CONNECT_* 名にもフォールバックする。
+      # ---------------------------------------------------------------------
+      - name: TestFlight 内部テストグループへ自動配信
+        id: distribute
+        if: steps.check_keys.outputs.has_keys == 'true' && steps.upload.outcome == 'success'
+        timeout-minutes: 20
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID || secrets.APP_STORE_CONNECT_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID || secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY || secrets.APP_STORE_CONNECT_PRIVATE_KEY || secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+          ASC_APP_ID: '6834676433'
+          ASC_BUILD_NUMBER: ${{ github.run_number }}
+          ASC_BETA_GROUP_NAME: '開発テスト'
+        run: node scripts/distribute-testflight.mjs
 
       - name: "Cleanup API Key & Credential Files"
         if: always()
