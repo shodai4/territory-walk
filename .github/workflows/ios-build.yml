@@ -286,7 +286,17 @@ jobs:
           ASC_APP_ID: '6834676433'
           ASC_BUILD_NUMBER: ${{ github.run_number }}
           ASC_BETA_GROUP_NAME: '開発テスト'
-        run: node scripts/distribute-testflight.mjs
+        run: |
+          # アップロードされたビルドの番号を IPA から読み取る（Xcode が自動採番した場合の保険）
+          IPA_PATH=$(ls -1 "$RUNNER_TEMP/export/"*.ipa 2>/dev/null | head -n 1 || true)
+          if [ -n "$IPA_PATH" ]; then
+            ACTUAL=$(unzip -p "$IPA_PATH" "Payload/*.app/Info.plist" 2>/dev/null | plutil -extract CFBundleVersion raw -o - - 2>/dev/null || true)
+            if [ -n "$ACTUAL" ]; then
+              echo "[CI] IPA の CFBundleVersion: $ACTUAL（予定: ${ASC_BUILD_NUMBER}）"
+              export ASC_BUILD_NUMBER="$ACTUAL"
+            fi
+          fi
+          node scripts/distribute-testflight.mjs
 
       - name: "Cleanup API Key & Credential Files"
         if: always()
