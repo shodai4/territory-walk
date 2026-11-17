@@ -1107,10 +1107,6 @@ class TerritoryWalkApp {
         });
     }
 
-    updateThemeMapBadge() {
-        // UI見出し横のテキスト補足は全廃（ボタン自体のハイライト色で識別）
-    }
-
     initStatsModal() {
         const modal = document.getElementById('stats-modal');
         const openBtn = document.getElementById('btn-open-stats');
@@ -1676,21 +1672,6 @@ class TerritoryWalkApp {
         return pm.isPro === true;
     }
 
-    checkProAccess(actionName) {
-        if (this.debugEnabled && this.isDebugMode) {
-            console.log(`[Debug Mode] Pro restriction bypassed for: ${actionName}`);
-            return true;
-        }
-
-        if (!this.isProActive()) {
-            alert(`${actionName}を利用するには、Proサポーターへのアップグレードが必要です！`);
-            const modal = document.getElementById('pro-modal');
-            if (modal) modal.classList.remove('hidden');
-            return false;
-        }
-        return true;
-    }
-
     async exportPosterAction() {
         const hasAccess = this.isProActive() ||
                           (this.coinManager && this.coinManager.canAccessPosterExport());
@@ -1749,11 +1730,6 @@ class TerritoryWalkApp {
             this.mapToggleText.textContent = 'MAP: OFF';
             this.btnToggleMap.className = 'px-3 py-1.5 rounded-lg border text-xs font-mono font-bold flex items-center gap-1.5 transition-all active:scale-95 bg-zinc-900 border-zinc-700 text-zinc-400';
         }
-    }
-
-    initDebugMode() {
-        this.isDebugMode = false;
-        this.updateDebugModeUI();
     }
 
     /**
@@ -3610,32 +3586,6 @@ class TerritoryWalkApp {
                 this.cycleSkin();
             });
         }
-    }
-
-    jumpToLocation(lat, lng, displayName) {
-        if (!this.map) return;
-
-        // 1. スムーズに目標地点へカメラ移動 (ズームレベル 16: 100mマスが最適表示される)
-        this.map.flyTo([lat, lng], 16, {
-            animate: true,
-            duration: 1.2
-        });
-
-        // 2. 検索ピンマーカーを設置
-        if (this.searchManager) {
-            this.searchManager.setSearchMarker(lat, lng, displayName);
-        }
-
-        // 3. 移動先エリアのタイルの即時フェッチ＆グリッド更新
-        if (this.gridManager) {
-            setTimeout(() => {
-                this.gridManager.updateGrids();
-                this.gridManager.fetchAndSyncTiles();
-            }, 300);
-        }
-
-        // 4. トースト通知
-        this.showToast(`${displayName} の塗り状況を表示中 (右下で現在地へ復帰)`);
     }
 
     initEvents() {

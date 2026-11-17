@@ -100,14 +100,6 @@ class SearchManager {
         }
     }
 
-    toggleSearchBar() {
-        this.focusSearchInput();
-    }
-
-    openSearchBar() {
-        this.focusSearchInput();
-    }
-
     closeSearchBar() {
         if (this.resultsContainer) {
             this.resultsContainer.classList.add('hidden');
