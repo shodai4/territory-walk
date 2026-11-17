@@ -10,9 +10,16 @@ const CONFIG = {
     WIDE_ZOOM: 5,
     MIN_ZOOM: 2,
     MAX_ZOOM: 20,
-    // 広域表示（低ズーム）時のDB取得・描画を抑制するしきい値
-    REMOTE_FETCH_MIN_ZOOM: 12,
-    TILE_RENDER_MIN_ZOOM: 5,
+    // 地図の描画はズームで3段階（grid.js の displayModeForZoom）:
+    //   zoom >= 16 … 100mマス（初期配置＋実績＋自分の足跡）
+    //   13〜15 … 10×10マス（約1km四方）のブロックに集計して薄く描く
+    //   12以下 … マスもブロックも一切描かない（広域での居場所特定を防ぐ）
+    // 100mマスを描く下限ズーム
+    TILE_DETAIL_MIN_ZOOM: 16,
+    // 何かを描く下限ズーム（1kmブロック）。これ未満は何も描かない
+    TILE_RENDER_MIN_ZOOM: 13,
+    // 13未満は何も描かないので、DB取得もここ以上に限る（大範囲クエリの負荷も防ぐ）
+    REMOTE_FETCH_MIN_ZOOM: 13,
     MAX_TILES_PER_RENDER: 1200,
     // デバッグ機能（D-PAD・コイン操作・プレビュー・チーム切替等）のマスタースイッチ
     // App Store 提出ビルドのため false（UIごと非表示になり、AdMob も本番IDへ自動切替）
@@ -2657,7 +2664,12 @@ class TerritoryWalkApp {
             }
 
             if (!this.isAppInBackground) {
-                this.gridManager.renderSingleTile(meshId, latIdx, lngIdx);
+                // ズームに合った形で描く（近距離=マス / 中距離=1kmブロック / 広域=描かない）
+                if (typeof this.gridManager.renderTileForCurrentZoom === 'function') {
+                    this.gridManager.renderTileForCurrentZoom(meshId, latIdx, lngIdx);
+                } else {
+                    this.gridManager.renderSingleTile(meshId, latIdx, lngIdx);
+                }
                 this.updateScoreUI();
                 this.playClaimSound();
                 this.triggerHaptic();
