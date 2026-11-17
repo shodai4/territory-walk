@@ -42,6 +42,25 @@ const BACKGROUND_GEOLOCATION_OPTIONS = {
     distanceFilter: 20
 };
 
+// Web（navigator.geolocation）測位のオプション。
+// 衛星測位（enableHighAccuracy: true）は室内・ビルの谷間だと10秒以内に返らず
+// TIMEOUT(code=3) / POSITION_UNAVAILABLE(code=2) になりやすい。
+// その場合は Wi-Fi・基地局・IP で推定する低精度の測位へ自動で切り替え、
+// 「測位できないまま」で止まらないようにする（Chrome の Web 版の対策）。
+const WEB_GEOLOCATION_PRECISE_OPTIONS = {
+    enableHighAccuracy: true,
+    timeout: 10000,
+    maximumAge: 0
+};
+const WEB_GEOLOCATION_COARSE_OPTIONS = {
+    enableHighAccuracy: false,
+    timeout: 15000,
+    maximumAge: 60000
+};
+// 低精度測位（IP推定など）の誤差がこれ以上なら、地図・ピンは動かしても陣地は塗らない。
+// 100mマスに対して数km単位でずれた位置を開拓してしまうのを防ぐ。
+const WEB_GEOLOCATION_MAX_CLAIM_ACCURACY_M = 1000;
+
 class TerritoryWalkApp {
     constructor() {
         this.map = null;
@@ -59,6 +78,12 @@ class TerritoryWalkApp {
 
         this.userMarker = null;
         this.watchId = null;
+        // Web 測位の状態（高精度 → 低精度フォールバックの管理）
+        this.webGeolocationMode = 'precise';
+        this.webGeolocationAttempt = 0;
+        this.webCoarseFallbackNotified = false;
+        this.webCoarseAccuracyNotified = false;
+        this.webUnavailableNotified = false;
         this.currentMeshId = null;
         this.virtualPos = [...CONFIG.DEFAULT_CENTER];
         // v1.1: 前回の現在地が保存されているなら、そちらを初期位置にする。
@@ -1621,8 +1646,6 @@ class TerritoryWalkApp {
      * @returns {Promise<[number, number]|null>}
      */
     requestFreshPosition() {
-        const options = { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 };
-
         const toLatLng = (position) => {
             if (!position || !position.coords) return null;
             this.handlePositionUpdate(position, false);
@@ -1632,25 +1655,37 @@ class TerritoryWalkApp {
             return [lat, lng];
         };
 
-        return new Promise((resolve, reject) => {
-            const nativeGeo = this.getNativeGeolocation();
-            if (nativeGeo) {
-                Promise.resolve(nativeGeo.getCurrentPosition(options))
-                    .then((position) => resolve(toLatLng(position)))
-                    .catch(reject);
-                return;
+        const requestOnce = (geo, options) => new Promise((resolve, reject) => {
+            try {
+                geo.getCurrentPosition(
+                    (position) => resolve(toLatLng(position)),
+                    (error) => reject(error),
+                    options
+                );
+            } catch (e) {
+                reject(e);
             }
+        });
 
-            if (typeof navigator === 'undefined' || !navigator.geolocation) {
-                reject(new Error('geolocation unavailable'));
-                return;
-            }
+        const nativeGeo = this.getNativeGeolocation();
+        if (nativeGeo) {
+            return Promise.resolve(nativeGeo.getCurrentPosition(WEB_GEOLOCATION_PRECISE_OPTIONS))
+                .then(toLatLng);
+        }
 
-            navigator.geolocation.getCurrentPosition(
-                (position) => resolve(toLatLng(position)),
-                (error) => reject(error),
-                options
-            );
+        if (typeof navigator === 'undefined' || !navigator.geolocation) {
+            return Promise.reject(new Error('geolocation unavailable'));
+        }
+
+        const geo = navigator.geolocation;
+        return requestOnce(geo, WEB_GEOLOCATION_PRECISE_OPTIONS).catch((error) => {
+            // 高精度で TIMEOUT(3) / POSITION_UNAVAILABLE(2) なら低精度で取り直す。
+            // 権限拒否（code=1）はそのまま reject（バナー導線で許可を促す）。
+            if (!this.isCoarseFallbackError(error)) throw error;
+            return requestOnce(geo, WEB_GEOLOCATION_COARSE_OPTIONS).then((pos) => {
+                if (pos) this.webGeolocationMode = 'coarse';
+                return pos;
+            });
         });
     }
 
@@ -1933,30 +1968,150 @@ class TerritoryWalkApp {
         // 起動時点ですでに拒否済みなら、最初のエラーを待たずにバナーを出す
         if (this.locationBanner) this.locationBanner.refreshPermissionState();
 
-        const options = {
-            enableHighAccuracy: true,
-            timeout: 10000,
-            maximumAge: 0
-        };
-
         // ネイティブ（Capacitor Geolocation）が使える場合はそちらを優先し、
         // 権限拒否は同じ handlePositionError で一元処理する
         const nativeGeo = this.getNativeGeolocation();
-        if (nativeGeo && this.startNativeGeolocation(nativeGeo, options)) return true;
+        if (nativeGeo && this.startNativeGeolocation(nativeGeo, WEB_GEOLOCATION_PRECISE_OPTIONS)) return true;
 
-        navigator.geolocation.getCurrentPosition(
-            (position) => this.handlePositionUpdate(position, true),
-            (error) => this.handlePositionError(error),
-            options
-        );
+        return this.startWebGeolocationWatch(WEB_GEOLOCATION_PRECISE_OPTIONS, 'precise');
+    }
 
-        this.watchId = navigator.geolocation.watchPosition(
-            (position) => this.handlePositionUpdate(position, false),
-            (error) => this.handlePositionError(error),
-            options
-        );
+    /**
+     * Web 測位の getCurrentPosition / watchPosition を指定オプションで張る。
+     * 高精度（衛星測位）が TIMEOUT(3) / POSITION_UNAVAILABLE(2) で失敗したら
+     * startCoarseWebGeolocation() が低精度（Wi-Fi・基地局・IP 測位）で張り直す。
+     * @param {{enableHighAccuracy: boolean, timeout: number, maximumAge: number}} options
+     * @param {'precise'|'coarse'} mode
+     * @returns {boolean} 張れたか
+     */
+    startWebGeolocationWatch(options, mode = 'precise') {
+        if (this.markingPaused === true) return false;
+        if (typeof navigator === 'undefined' || !navigator.geolocation) return false;
 
+        // 張り直し前に古い watch を止める（watch が二重に走らないようにする）
+        this.clearWebGeolocationWatch();
+
+        this.webGeolocationMode = mode;
+        const attempt = this.nextWebGeolocationAttempt();
+
+        let firstFixDelivered = false;
+        const onSuccess = (position) => {
+            if (this.isStaleWebGeolocationAttempt(attempt)) return;
+            const isFirst = !firstFixDelivered;
+            firstFixDelivered = true;
+            this.webUnavailableNotified = false;
+
+            const accuracy = position && position.coords ? Number(position.coords.accuracy) : NaN;
+            const tooCoarse = mode === 'coarse'
+                && Number.isFinite(accuracy)
+                && accuracy > WEB_GEOLOCATION_MAX_CLAIM_ACCURACY_M;
+            if (tooCoarse) this.notifyCoarseAccuracySkip();
+
+            // 誤差がkm単位の測位で陣地を塗ったり、次回起動の初期位置に保存したりしない
+            this.handlePositionUpdate(position, isFirst, {
+                skipClaim: tooCoarse,
+                skipSave: tooCoarse
+            });
+            if (mode === 'coarse' && !this.isVirtualWalkActive() && !this.isMarkingPaused()) {
+                this.updateGPSStatus('GPS: 簡易測位', 'bg-emerald-400', 'text-emerald-400');
+            }
+        };
+        const onError = (error) => {
+            if (this.isStaleWebGeolocationAttempt(attempt)) return;
+            this.handleWebGeolocationError(error, mode);
+        };
+
+        navigator.geolocation.getCurrentPosition(onSuccess, onError, options);
+        this.watchId = navigator.geolocation.watchPosition(onSuccess, onError, options);
         return true;
+    }
+
+    /** Web の watchPosition を止める（watchId を空にする） */
+    clearWebGeolocationWatch() {
+        if (this.watchId == null) return false;
+        try {
+            if (typeof navigator !== 'undefined' && navigator.geolocation
+                && typeof navigator.geolocation.clearWatch === 'function') {
+                navigator.geolocation.clearWatch(this.watchId);
+            }
+        } catch (e) { /* ignore */ }
+        this.watchId = null;
+        return true;
+    }
+
+    /** Web 測位の試行番号を進める（張り直す前の遅延コールバックを見分けるため） */
+    nextWebGeolocationAttempt() {
+        this.webGeolocationAttempt = (this.webGeolocationAttempt || 0) + 1;
+        return this.webGeolocationAttempt;
+    }
+
+    /** すでに張り直された、古い試行のコールバックか */
+    isStaleWebGeolocationAttempt(attempt) {
+        return attempt !== this.webGeolocationAttempt;
+    }
+
+    /**
+     * 位置情報エラーが「高精度では取れないが低精度なら取れるかもしれない」ものか。
+     * 拒否（code=1 / PERMISSION_DENIED）は対象外（フォールバックせずバナー導線へ回す）。
+     */
+    isCoarseFallbackError(error) {
+        if (!error) return false;
+        if (typeof LocationPermissionBanner !== 'undefined'
+            && LocationPermissionBanner.isPermissionDeniedError(error)) return false;
+
+        const code = error.code;
+        if (code === 1 || code === '1') return false;
+        if (code === 2 || code === 3 || code === '2' || code === '3') return true;
+        if (typeof code === 'string' && /POSITION_UNAVAILABLE|TIMEOUT/i.test(code)) return true;
+        return false;
+    }
+
+    /** Web 測位のエラー：高精度がダメなら低精度へ張り直す（拒否は従来どおりバナーへ） */
+    handleWebGeolocationError(error, mode = this.webGeolocationMode) {
+        if (this.markingPaused === true) return;
+
+        if (mode !== 'coarse' && this.isCoarseFallbackError(error)) {
+            this.startCoarseWebGeolocation();
+            return;
+        }
+
+        this.handlePositionError(error);
+        // 低精度でも取れないときは、次に何をすればよいかを一度だけ伝える
+        if (mode === 'coarse' && this.isCoarseFallbackError(error)) {
+            this.notifyWebGeolocationUnavailable();
+        }
+    }
+
+    /**
+     * 高精度測位が TIMEOUT(3) / POSITION_UNAVAILABLE(2) で失敗したとき、
+     * 低精度（Wi-Fi・基地局・IP 測位）で測位を張り直す。
+     * 室内やビルの谷間でも「測位できないまま」にならないためのフォールバック。
+     * @returns {boolean} 張り直せたか
+     */
+    startCoarseWebGeolocation() {
+        if (this.markingPaused === true) return false;
+        if (typeof navigator === 'undefined' || !navigator.geolocation) return false;
+
+        this.updateGPSStatus('GPS: 簡易測位中', 'bg-amber-400', 'text-amber-400');
+        if (!this.webCoarseFallbackNotified) {
+            this.webCoarseFallbackNotified = true;
+            this.showToast('簡易測位に切り替えました', '衛星電波が届かないため、Wi-Fi・基地局から位置を推定します');
+        }
+        return this.startWebGeolocationWatch(WEB_GEOLOCATION_COARSE_OPTIONS, 'coarse');
+    }
+
+    /** 低精度測位でも取れなかったときの案内（一度だけ） */
+    notifyWebGeolocationUnavailable() {
+        if (this.webUnavailableNotified) return;
+        this.webUnavailableNotified = true;
+        this.showToast('位置情報を取得できませんでした', '屋外や窓際で「現在地」ボタンを押してみてください');
+    }
+
+    /** 低精度測位の誤差が大きすぎて陣地を塗らないときの案内（一度だけ） */
+    notifyCoarseAccuracySkip() {
+        if (this.webCoarseAccuracyNotified) return;
+        this.webCoarseAccuracyNotified = true;
+        this.showToast('現在地の精度が低いため陣地は塗りません', 'Wi-Fi につなぐか、屋外で「現在地」ボタンを押してください');
     }
 
     /**
@@ -2266,13 +2421,7 @@ class TerritoryWalkApp {
         }
 
         if (this.watchId != null) {
-            try {
-                if (typeof navigator !== 'undefined' && navigator.geolocation
-                    && typeof navigator.geolocation.clearWatch === 'function') {
-                    navigator.geolocation.clearWatch(this.watchId);
-                }
-            } catch (e) { /* ignore */ }
-            this.watchId = null;
+            this.clearWebGeolocationWatch();
             stopped = true;
         }
 
@@ -2363,12 +2512,19 @@ class TerritoryWalkApp {
             return;
         }
 
-        if (!('geolocation' in navigator)) return;
-        navigator.geolocation.getCurrentPosition(
-            (position) => this.handlePositionUpdate(position, false),
-            (error) => this.handlePositionError(error),
-            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-        );
+        if (typeof navigator === 'undefined' || !('geolocation' in navigator)) return;
+
+        const onSuccess = (position) => this.handlePositionUpdate(position, false);
+        const onError = (error) => {
+            // タイムアウト・測位不可は高精度では取れていないので、低精度で再試行する
+            if (this.isCoarseFallbackError(error)) {
+                this.startCoarseWebGeolocation();
+                return;
+            }
+            this.handlePositionError(error);
+        };
+
+        navigator.geolocation.getCurrentPosition(onSuccess, onError, WEB_GEOLOCATION_PRECISE_OPTIONS);
         if (this.locationBanner) this.locationBanner.refreshPermissionState();
     }
 
@@ -2432,7 +2588,7 @@ class TerritoryWalkApp {
         return R * c;
     }
 
-    handlePositionUpdate(position, isFirst = false) {
+    handlePositionUpdate(position, isFirst = false, options = {}) {
         // 位置情報が取得できた＝許可されている。拒否バナーは自動で消す
         if (this.locationBanner) this.locationBanner.handlePermissionGranted();
 
@@ -2443,7 +2599,8 @@ class TerritoryWalkApp {
         // 実GPSの最新座標は常に保持（デバッグ終了時にここへ戻す）
         this.lastRealPosition = [latitude, longitude];
         // 次回起動の初期表示用に端末へ保存（サーバー送信なし）
-        this.saveLastPosition(latitude, longitude);
+        // 誤差がkm単位の低精度測位は初期位置に使わない
+        if (options.skipSave !== true) this.saveLastPosition(latitude, longitude);
 
         // デバッグの仮想散歩中は、実GPSで仮想座標・マーカー・塗りを上書きしない。
         // ここで return しないと D-Pad の1歩が数秒で実際の位置に戻ってしまい、
@@ -2478,7 +2635,7 @@ class TerritoryWalkApp {
             }
         }
 
-        if (shouldProcessMesh) {
+        if (shouldProcessMesh && options.skipClaim !== true) {
             this.lastProcessedLat = latitude;
             this.lastProcessedLng = longitude;
             this.processMeshAndClaim(latitude, longitude);
