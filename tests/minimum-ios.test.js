@@ -259,3 +259,44 @@ test('配線: ci/ios-build.yml は実際に動くワークフローと同一（�
         'ci/ios-build.yml と .github/workflows/ios-build.yml がずれている'
     );
 });
+
+/* ------------------------------------------------------------------ *
+ * バージョン: v1.0 は公開済みなので 1.1 で出す（TestFlight アップロードの 90186/90062 対策）
+ * ------------------------------------------------------------------ */
+test('バージョン: MARKETING_VERSION を 1.1 に揃える（App / Watch 共通）', () => {
+    const ios = require(path.join(ROOT, 'scripts', 'configure-ios.js'));
+    assert.equal(ios.APP_MARKETING_VERSION, '1.1');
+
+    const before = `
+        MARKETING_VERSION = 1.0;
+        CURRENT_PROJECT_VERSION = 1;
+    `;
+    const { content, modified, occurrences } = ios.configureMarketingVersionContent(before);
+    assert.equal(modified, true);
+    assert.equal(occurrences, 1);
+    assert.match(content, /MARKETING_VERSION = 1\.1;/);
+    assert.match(content, /CURRENT_PROJECT_VERSION = 1;/, 'ビルド番号は触らない');
+
+    // App と Watch の2ターゲット分あっても両方そろえる
+    const two = 'MARKETING_VERSION = 1.0;\nMARKETING_VERSION = 1.0;';
+    const applied = ios.configureMarketingVersionContent(two);
+    assert.equal(applied.occurrences, 2);
+    assert.equal((applied.content.match(/MARKETING_VERSION = 1\.1;/g) || []).length, 2);
+
+    // すでに 1.1 なら変更しない（冪等）
+    assert.equal(ios.configureMarketingVersionContent('MARKETING_VERSION = 1.1;').modified, false);
+});
+
+test('バージョン: 古い MARKETING_VERSION は点検で検出できる', () => {
+    const ios = require(path.join(ROOT, 'scripts', 'configure-ios.js'));
+    const problems = ios.verifyMarketingVersionContent('MARKETING_VERSION = 1.0;');
+    assert.equal(problems.length, 1);
+    assert.match(problems[0], /1\.0/);
+
+    assert.deepEqual(ios.verifyMarketingVersionContent('MARKETING_VERSION = 1.1;'), []);
+});
+
+test('バージョン: package.json も 1.1 系に上がっている', () => {
+    const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+    assert.match(pkg.version, /^1\.1\./);
+});
