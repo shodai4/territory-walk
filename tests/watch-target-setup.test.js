@@ -123,6 +123,14 @@ test('CI: Watch 組み込みステップは変数ONのときだけ走る形で�
     assert.match(setup, /CURRENT_PROJECT_VERSION/, 'iPhone と同じビルド番号を渡す');
 });
 
+test('ターゲット: Watchグループに実パスを与え、参照が TerritoryWatch/ 配下に解決される', () => {
+    // これが無いと ios/App/Assets.xcassets に解決され、actool が
+    // 「AppIcon が見つからない / No such file or directory」でアーカイブに失敗する（v1.1 で実際に発生）
+    assert.match(ADD_TARGET, /group\.path = WATCH_SOURCE_DIR/);
+    assert.match(ADD_TARGET, /ref\.real_path\.to_s\.start_with\?\(expected_dir\)/,
+        '保存前に参照パスを自己点検する');
+});
+
 test('CI: 適用スクリプトは冪等に挿入でき、正本と写しが揃う', () => {
     const os = require('node:os');
     const { applyTo, stripExisting, MARKER } =
