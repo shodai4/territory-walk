@@ -514,10 +514,13 @@ class TerritoryWalkApp {
         // 対戦バー上部の「YOU」インジケーターを左上に完全固定 ＆ 対戦バーの自陣営「左側」固定
         const youIndicator = document.getElementById('you-indicator');
         const barContainer = document.getElementById('battle-bar-container');
+        // v1.1: PRO SUPPORTER は2段目の右端（MENU の下の空き）へ右寄せで置く。
+        //       非表示のときも YOU が左端に残るよう、別の入れ物に入れる。
+        const proBadgeSlot = document.getElementById('pro-badge-slot');
 
         if (this.currentTeam === 'white') {
             if (youIndicator) {
-                youIndicator.innerHTML = `${supporterBadge}<span class="px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/50 text-[9px] tracking-wider font-mono">YOU (白陣営)</span>`;
+                youIndicator.innerHTML = `<span class="px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/50 text-[9px] tracking-wider font-mono">YOU (白陣営)</span>`;
             }
             if (barContainer) {
                 barContainer.className = 'w-full h-7 bg-zinc-950 rounded-xl overflow-hidden flex flex-row-reverse border border-zinc-700 shadow-inner relative';
@@ -531,7 +534,7 @@ class TerritoryWalkApp {
             if (this.menuTeamText) this.menuTeamText.textContent = 'White Team';
         } else {
             if (youIndicator) {
-                youIndicator.innerHTML = `${supporterBadge}<span class="px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/50 text-[9px] tracking-wider font-mono">YOU (黒陣営)</span>`;
+                youIndicator.innerHTML = `<span class="px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/50 text-[9px] tracking-wider font-mono">YOU (黒陣営)</span>`;
             }
             if (barContainer) {
                 barContainer.className = 'w-full h-7 bg-zinc-950 rounded-xl overflow-hidden flex flex-row border border-zinc-700 shadow-inner relative';
@@ -543,6 +546,10 @@ class TerritoryWalkApp {
                 this.barWhiteEl.className = 'bg-white transition-all duration-500 flex items-center justify-center overflow-hidden shrink-0';
             }
             if (this.menuTeamText) this.menuTeamText.textContent = 'Black Team';
+        }
+
+        if (proBadgeSlot) {
+            proBadgeSlot.innerHTML = supporterBadge;
         }
 
         if (this.teamBadgeContainer) {

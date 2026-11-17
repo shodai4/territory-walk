@@ -54,14 +54,18 @@
 
         <!-- 2行目（全幅左右対称対戦バー・インラインパーセント・自陣営YOUマーク） -->
         <div class="w-full flex flex-col gap-1 select-none">
-            <!-- バー上部：左上固定YOUインジケーター（自陣営） -->
-            <div class="flex items-center px-1 text-[10px] font-mono font-bold leading-none">
+            <!-- バー上部：左端にYOU（自陣営）、右端にPROサポーターバッジ（MENU下の空き） -->
+            <div class="w-full flex items-center justify-between gap-1 px-1 text-[10px] font-mono font-bold leading-none">
                 <div id="you-indicator" class="flex items-center gap-1 text-amber-400 transition-all">
                     <span id="you-indicator-badge" class="px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/50 text-[9px] tracking-wider font-mono">YOU (黒陣営)</span>
                 </div>
-                <div id="sync-queue-badge" class="ml-auto hidden items-center gap-1 text-[9px] text-zinc-400 font-normal">
-                    <span id="sync-queue-dot" class="w-1.5 h-1.5 rounded-full bg-sky-400"></span>
-                    <span id="sync-queue-count">0マス同期待ち</span>
+                <div class="ml-auto flex items-center gap-1">
+                    <div id="sync-queue-badge" class="hidden items-center gap-1 text-[9px] text-zinc-400 font-normal">
+                        <span id="sync-queue-dot" class="w-1.5 h-1.5 rounded-full bg-sky-400"></span>
+                        <span id="sync-queue-count">0マス同期待ち</span>
+                    </div>
+                    <!-- PRO SUPPORTER（Proのときだけ中身が入る） -->
+                    <div id="pro-badge-slot" class="flex items-center"></div>
                 </div>
             </div>
 
