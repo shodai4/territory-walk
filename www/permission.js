@@ -63,6 +63,34 @@ class LocationPermissionBanner {
         return false;
     }
 
+    /**
+     * Capacitor のネイティブアプリ（iOS/Android）上で動いているか。
+     * ネイティブでは WKWebView の位置情報許可ダイアログ
+     * （"localhost" would like to use your current location.）を出さないよう、
+     * navigator.geolocation / navigator.permissions を一切呼ばない。
+     */
+    static isNativePlatform() {
+        try {
+            const cap = typeof window !== 'undefined' ? window.Capacitor : null;
+            return !!(cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform());
+        } catch (e) {
+            return false;
+        }
+    }
+
+    /** ネイティブの Capacitor Geolocation プラグイン（使えないときは null） */
+    static nativeGeolocationPlugin() {
+        try {
+            if (!LocationPermissionBanner.isNativePlatform()) return null;
+            const cap = window.Capacitor;
+            const plugin = cap && cap.Plugins ? cap.Plugins.Geolocation : null;
+            if (!plugin || typeof plugin.getCurrentPosition !== 'function') return null;
+            return plugin;
+        } catch (e) {
+            return null;
+        }
+    }
+
     /** 「再確認」ボタンのみを配線する（常設化にともない閉じる操作は持たない）。 */
     bindControls() {
         if (!this.doc) return;
@@ -116,6 +144,19 @@ class LocationPermissionBanner {
             this.retryHandler();
             return;
         }
+
+        // ネイティブでは WebView の navigator.geolocation を呼ばず、プラグインで再確認する
+        if (LocationPermissionBanner.isNativePlatform()) {
+            const plugin = LocationPermissionBanner.nativeGeolocationPlugin();
+            if (!plugin) return;
+            Promise.resolve(plugin.getCurrentPosition({ enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }))
+                .then(() => this.handlePermissionGranted())
+                .catch((error) => {
+                    if (LocationPermissionBanner.isPermissionDeniedError(error)) this.show();
+                });
+            return;
+        }
+
         if (typeof navigator === 'undefined' || !navigator.geolocation) return;
         navigator.geolocation.getCurrentPosition(
             () => this.handlePermissionGranted(),
@@ -132,6 +173,9 @@ class LocationPermissionBanner {
      */
     refreshPermissionState() {
         try {
+            // ネイティブ（WKWebView）では Web の Permissions API を問い合わせない。
+            // 許可状態はネイティブ測位の結果（成功＝許可 / 拒否エラー＝拒否）で判断する。
+            if (LocationPermissionBanner.isNativePlatform()) return;
             if (typeof navigator === 'undefined' || !navigator.permissions || !navigator.permissions.query) return;
             navigator.permissions.query({ name: 'geolocation' })
                 .then((status) => {

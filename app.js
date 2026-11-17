@@ -31,6 +31,7 @@ const CONFIG = {
 // 停止中にアプリを終了→再起動したときに、一瞬でも塗ってしまわないよう起動前に読む。
 const MARKING_PAUSE_STORAGE_KEY = 'tw_marking_paused';
 const BACKGROUND_GEOLOCATION_PLUGIN_NAME = 'BackgroundGeolocation';
+const NATIVE_GEOLOCATION_PLUGIN_NAME = 'Geolocation';
 const BACKGROUND_GEOLOCATION_OPTIONS = {
     // backgroundMessage を定義すると、画面消灯・バックグラウンド中も位置更新が届く
     backgroundMessage: '画面を消灯しても陣地を塗り続けます',
@@ -115,6 +116,10 @@ class TerritoryWalkApp {
         this.backgroundGeolocationPlugin = null;
         this.backgroundWatcherId = null;
         this.backgroundWatcherStarted = false;
+        // ネイティブの Capacitor Geolocation プラグイン（Web では常に null）
+        this.nativeGeolocationPlugin = null;
+        this.nativeWatchId = null;
+        this.nativeGeolocationAttempt = 0;
         this.lastProcessedLat = null;
         this.lastProcessedLng = null;
         this.backgroundClaimCount = 0;
@@ -1754,7 +1759,8 @@ class TerritoryWalkApp {
 
     /**
      * 最新の現在地を1回だけ取得する（現在地ボタン用）。
-     * ネイティブの Geolocation プラグイン → Web の getCurrentPosition の順。
+     * ネイティブ（iOS/Android アプリ）では Capacitor Geolocation プラグインだけを使い、
+     * Web ブラウザでは高精度 → 低精度の Web 測位フォールバックを使う。
      * @returns {Promise<[number, number]|null>}
      */
     requestFreshPosition() {
@@ -1779,10 +1785,24 @@ class TerritoryWalkApp {
             }
         });
 
-        const nativeGeo = this.getNativeGeolocation();
-        if (nativeGeo) {
+        // ネイティブでは WebView の navigator.geolocation を絶対に呼ばない。
+        // 呼ぶと WKWebView が「"localhost" would like to use your current location.」を出す。
+        // プラグインが使えないビルドでも Web API には落とさず、そのまま失敗させる。
+        if (this.isNativePlatform()) {
+            const nativeGeo = this.getNativeGeolocation();
+            if (!nativeGeo) return Promise.reject(new Error('native geolocation unavailable'));
             return Promise.resolve(nativeGeo.getCurrentPosition(WEB_GEOLOCATION_PRECISE_OPTIONS))
-                .then(toLatLng);
+                .then(toLatLng)
+                .catch((error) => {
+                    // ネイティブでも高精度が TIMEOUT / POSITION_UNAVAILABLE なら低精度で1回だけ取り直す
+                    if (!this.isCoarseFallbackError(error)) throw error;
+                    return Promise.resolve(nativeGeo.getCurrentPosition(WEB_GEOLOCATION_COARSE_OPTIONS))
+                        .then((position) => {
+                            const pos = toLatLng(position);
+                            if (pos) this.webGeolocationMode = 'coarse';
+                            return pos;
+                        });
+                });
         }
 
         if (typeof navigator === 'undefined' || !navigator.geolocation) {
@@ -2072,6 +2092,20 @@ class TerritoryWalkApp {
     startWebGeolocation() {
         if (this.markingPaused === true) return false;
         if (this.watchId != null) return true;
+
+        // ネイティブ（iOS/Android アプリ）では WebView の Geolocation API を絶対に呼ばない。
+        // WKWebView の "localhost" would like to use your current location. ダイアログの原因になるため、
+        // プラグインが使えるならそれだけを使い、無ければ安全に抜ける。
+        if (this.isNativePlatform()) {
+            if (this.nativeWatchId != null) return true;
+            const nativeGeo = this.getNativeGeolocation();
+            if (nativeGeo) {
+                return this.startNativeGeolocation(nativeGeo, WEB_GEOLOCATION_PRECISE_OPTIONS);
+            }
+            this.updateGPSStatus('GPS: 測位できません', 'bg-red-500', 'text-red-400');
+            return false;
+        }
+
         if (typeof navigator === 'undefined' || !('geolocation' in navigator)) {
             this.updateGPSStatus('GPS: 非対応', 'bg-red-500', 'text-red-400');
             return false;
@@ -2079,11 +2113,6 @@ class TerritoryWalkApp {
 
         // 起動時点ですでに拒否済みなら、最初のエラーを待たずにバナーを出す
         if (this.locationBanner) this.locationBanner.refreshPermissionState();
-
-        // ネイティブ（Capacitor Geolocation）が使える場合はそちらを優先し、
-        // 権限拒否は同じ handlePositionError で一元処理する
-        const nativeGeo = this.getNativeGeolocation();
-        if (nativeGeo && this.startNativeGeolocation(nativeGeo, WEB_GEOLOCATION_PRECISE_OPTIONS)) return true;
 
         return this.startWebGeolocationWatch(WEB_GEOLOCATION_PRECISE_OPTIONS, 'precise');
     }
@@ -2098,6 +2127,14 @@ class TerritoryWalkApp {
      */
     startWebGeolocationWatch(options, mode = 'precise') {
         if (this.markingPaused === true) return false;
+
+        // ネイティブでは navigator.geolocation を一切呼ばない（低精度への切り替えもプラグインで行う）
+        if (this.isNativePlatform()) {
+            const nativeGeo = this.getNativeGeolocation();
+            if (!nativeGeo) return false;
+            return this.startNativeGeolocation(nativeGeo, options);
+        }
+
         if (typeof navigator === 'undefined' || !navigator.geolocation) return false;
 
         // 張り直し前に古い watch を止める（watch が二重に走らないようにする）
@@ -2142,7 +2179,8 @@ class TerritoryWalkApp {
     clearWebGeolocationWatch() {
         if (this.watchId == null) return false;
         try {
-            if (typeof navigator !== 'undefined' && navigator.geolocation
+            if (!this.isNativePlatform()
+                && typeof navigator !== 'undefined' && navigator.geolocation
                 && typeof navigator.geolocation.clearWatch === 'function') {
                 navigator.geolocation.clearWatch(this.watchId);
             }
@@ -2202,6 +2240,15 @@ class TerritoryWalkApp {
      */
     startCoarseWebGeolocation() {
         if (this.markingPaused === true) return false;
+
+        // ネイティブでは navigator.geolocation を呼ばず、プラグインの低精度オプションで張り直す
+        if (this.isNativePlatform()) {
+            const nativeGeo = this.getNativeGeolocation();
+            if (!nativeGeo) return false;
+            this.updateGPSStatus('GPS: 簡易測位中', 'bg-amber-400', 'text-amber-400');
+            return this.startWebGeolocationWatch(WEB_GEOLOCATION_COARSE_OPTIONS, 'coarse');
+        }
+
         if (typeof navigator === 'undefined' || !navigator.geolocation) return false;
 
         this.updateGPSStatus('GPS: 簡易測位中', 'bg-amber-400', 'text-amber-400');
@@ -2538,14 +2585,7 @@ class TerritoryWalkApp {
         }
 
         if (this.nativeWatchId != null) {
-            try {
-                const nativeGeo = typeof this.getNativeGeolocation === 'function' ? this.getNativeGeolocation() : null;
-                if (nativeGeo && typeof nativeGeo.clearWatch === 'function') {
-                    Promise.resolve(nativeGeo.clearWatch({ id: this.nativeWatchId })).catch(() => {});
-                }
-            } catch (e) { /* ignore */ }
-            this.nativeWatchId = null;
-            stopped = true;
+            stopped = this.clearNativeGeolocationWatch() || stopped;
         }
 
         this.geolocationStarted = false;
@@ -2577,26 +2617,85 @@ class TerritoryWalkApp {
         return true;
     }
 
+    /**
+     * Capacitor のネイティブアプリ（iOS/Android）上で動いているか。
+     * ここが true のときは、どの経路でも WebView の navigator.geolocation を呼ばない。
+     * （WKWebView の「"localhost" would like to use your current location.」対策）
+     */
+    isNativePlatform() {
+        try {
+            const cap = typeof window !== 'undefined' ? window.Capacitor : null;
+            return !!(cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform());
+        } catch (e) {
+            return false;
+        }
+    }
+
     /** Capacitor Geolocation プラグインがネイティブで利用可能か（Webでは null） */
     getNativeGeolocation() {
+        if (this.nativeGeolocationPlugin) return this.nativeGeolocationPlugin;
         try {
+            // ブラウザ実行（Web）では使わない
+            if (!this.isNativePlatform()) return null;
+
             const cap = window.Capacitor;
-            if (!cap || !cap.Plugins || !cap.Plugins.Geolocation) return null;
-            if (typeof cap.isNativePlatform === 'function' && !cap.isNativePlatform()) return null;
-            return cap.Plugins.Geolocation;
+            if (!cap) return null;
+            // cap sync 前やプラグイン未組込のビルドでは PluginHeaders が無いので使わない
+            if (typeof cap.isPluginAvailable === 'function'
+                && !cap.isPluginAvailable(NATIVE_GEOLOCATION_PLUGIN_NAME)) {
+                return null;
+            }
+
+            let plugin = cap.Plugins ? cap.Plugins[NATIVE_GEOLOCATION_PLUGIN_NAME] : null;
+            if (!plugin && typeof cap.registerPlugin === 'function') {
+                plugin = cap.registerPlugin(NATIVE_GEOLOCATION_PLUGIN_NAME);
+            }
+            if (!plugin || typeof plugin.getCurrentPosition !== 'function') return null;
+
+            this.nativeGeolocationPlugin = plugin;
+            return plugin;
         } catch (e) {
             return null;
         }
     }
 
+    /**
+     * ネイティブの Geolocation プラグインで測位を開始する（getCurrentPosition + watchPosition）。
+     * 張り直すときは前の watch を止めて重複を防ぐ。
+     * watchPosition は解決が遅れるため、世代番号（nativeGeolocationAttempt）で
+     * 古いリクエストのコールバックを無視し、遅れて届いた watch はその場で止める。
+     */
     startNativeGeolocation(plugin, options) {
         try {
+            if (!plugin || typeof plugin.getCurrentPosition !== 'function') return false;
+
+            this.clearNativeGeolocationWatch();
+
+            const attempt = this.nextNativeGeolocationAttempt();
+            const isStale = () => attempt !== this.nativeGeolocationAttempt;
+
             Promise.resolve(plugin.getCurrentPosition(options))
-                .then((position) => this.handlePositionUpdate(position, true))
-                .catch((error) => this.handlePositionError(error));
+                .then((position) => {
+                    if (isStale()) return;
+                    this.handlePositionUpdate(position, true);
+                })
+                .catch((error) => {
+                    if (isStale()) return;
+                    // 高精度が TIMEOUT / POSITION_UNAVAILABLE なら低精度で張り直す（拒否はバナー導線へ）
+                    if (this.isCoarseFallbackError(error) && options === WEB_GEOLOCATION_PRECISE_OPTIONS) {
+                        this.startCoarseWebGeolocation();
+                        return;
+                    }
+                    this.handlePositionError(error);
+                });
 
             const watching = plugin.watchPosition(options, (position, error) => {
+                if (isStale()) return;
                 if (error) {
+                    if (this.isCoarseFallbackError(error) && options === WEB_GEOLOCATION_PRECISE_OPTIONS) {
+                        this.startCoarseWebGeolocation();
+                        return;
+                    }
                     this.handlePositionError(error);
                     return;
                 }
@@ -2604,14 +2703,46 @@ class TerritoryWalkApp {
             });
             if (watching && typeof watching.then === 'function') {
                 watching
-                    .then((id) => { this.nativeWatchId = id; })
-                    .catch((error) => this.handlePositionError(error));
+                    .then((id) => {
+                        // すでに張り直されていれば、この watch はその場で止める
+                        if (isStale()) {
+                            if (typeof plugin.clearWatch === 'function') {
+                                Promise.resolve(plugin.clearWatch({ id })).catch(() => {});
+                            }
+                            return;
+                        }
+                        this.nativeWatchId = id;
+                    })
+                    .catch((error) => {
+                        if (isStale()) return;
+                        this.handlePositionError(error);
+                    });
             }
             return true;
         } catch (e) {
-            console.warn('Capacitor Geolocation unavailable, falling back to Web API:', e);
+            console.warn('Capacitor Geolocation unavailable:', e);
             return false;
         }
+    }
+
+    /** ネイティブ測位の世代番号を進める（張り直す前の遅延コールバックを見分けるため） */
+    nextNativeGeolocationAttempt() {
+        this.nativeGeolocationAttempt = (this.nativeGeolocationAttempt || 0) + 1;
+        return this.nativeGeolocationAttempt;
+    }
+
+    /** ネイティブの watchPosition を止める（WebView の clearWatch は呼ばない） */
+    clearNativeGeolocationWatch() {
+        if (this.nativeWatchId == null) return false;
+        const id = this.nativeWatchId;
+        this.nativeWatchId = null;
+        try {
+            const nativeGeo = this.getNativeGeolocation();
+            if (nativeGeo && typeof nativeGeo.clearWatch === 'function') {
+                Promise.resolve(nativeGeo.clearWatch({ id })).catch(() => {});
+            }
+        } catch (e) { /* ignore */ }
+        return true;
     }
 
     /** バナーの「再確認」：拒否が解消されていればバナーが自動で消える */
@@ -2621,6 +2752,26 @@ class TerritoryWalkApp {
         if (backgroundPlugin && this.backgroundWatcherStarted) {
             this.stopBackgroundGeolocation();
             this.startBackgroundGeolocation(backgroundPlugin);
+            return;
+        }
+
+        // ネイティブでは WebView の navigator.geolocation を絶対に呼ばない
+        if (this.isNativePlatform()) {
+            const nativeGeo = this.getNativeGeolocation();
+            if (nativeGeo) {
+                Promise.resolve(nativeGeo.getCurrentPosition(WEB_GEOLOCATION_PRECISE_OPTIONS))
+                    .then((position) => this.handlePositionUpdate(position, false))
+                    .catch((error) => {
+                        if (this.isCoarseFallbackError(error)) {
+                            this.startCoarseWebGeolocation();
+                            return;
+                        }
+                        this.handlePositionError(error);
+                    });
+            } else if (backgroundPlugin) {
+                // 停止中の watcher を起こすだけで再確認する
+                this.startBackgroundGeolocation(backgroundPlugin);
+            }
             return;
         }
 

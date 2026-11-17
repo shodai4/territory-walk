@@ -428,7 +428,7 @@ test('Web: Capacitor が無いブラウザでは従来どおり navigator.geoloc
     assert.equal(app.backgroundWatcherStarted, false);
 });
 
-test('Web: ネイティブでもプラグイン未組込（cap sync 前）なら navigator.geolocation へ戻す', () => {
+test('ネイティブ: プラグイン未組込（cap sync 前）でも navigator.geolocation は呼ばず、安全に抜ける', () => {
     const geolocation = createWebGeolocation();
     const plugin = createNativePlugin();
     const loaded = loadTerritoryWalkApp({
@@ -446,19 +446,28 @@ test('Web: ネイティブでもプラグイン未組込（cap sync 前）なら
     app.initGeolocation();
 
     assert.equal(plugin.calls.addWatcher, 0, '未組込のプラグインは呼ばない');
-    assert.equal(geolocation.calls.watchPosition, 1);
+    // WKWebView の "localhost" would like to use your current location. を出さないため、
+    // ネイティブでは Web の Geolocation API に戻さない
+    assert.equal(geolocation.calls.watchPosition, 0, 'watchPosition は呼ばない');
+    assert.equal(geolocation.calls.getCurrentPosition, 0, 'getCurrentPosition も呼ばない');
+    assert.equal(app.watchId, null);
+    assert.ok(app.gpsStatuses.includes('GPS: 測位できません'));
 });
 
-test('Web: addWatcher が失敗（promise reject）しても navigator.geolocation で動き続ける', async () => {
+test('ネイティブ: addWatcher が失敗（promise reject）しても navigator.geolocation は呼ばず、Capacitor Geolocation で続ける', async () => {
     const geolocation = createWebGeolocation();
     const plugin = createNativePlugin({ addWatcherError: new Error('boom') });
+    const nativeGeo = {
+        getCurrentPosition: () => Promise.resolve({ coords: { latitude: 35.658, longitude: 139.7016, accuracy: 9 } }),
+        watchPosition: () => Promise.resolve('native-watch-1')
+    };
     const loaded = loadTerritoryWalkApp({
         navigator: { geolocation },
         window: {
             Capacitor: {
                 isNativePlatform: () => true,
                 isPluginAvailable: () => true,
-                Plugins: { BackgroundGeolocation: plugin }
+                Plugins: { BackgroundGeolocation: plugin, Geolocation: nativeGeo }
             }
         }
     });
@@ -468,7 +477,32 @@ test('Web: addWatcher が失敗（promise reject）しても navigator.geolocati
     await tick();
 
     assert.equal(app.backgroundWatcherStarted, false, '失敗した watcher は立ち上げ済みにしない');
-    assert.equal(geolocation.calls.watchPosition, 1, 'Web フォールバックで測位は続く');
+    assert.equal(geolocation.calls.watchPosition, 0, 'Web の watchPosition には戻さない');
+    assert.equal(geolocation.calls.getCurrentPosition, 0, 'Web の getCurrentPosition も呼ばない');
+    assert.equal(app.nativeWatchId, 'native-watch-1', 'ネイティブプラグインの watch で測位を続ける');
+});
+
+test('Web: addWatcher が失敗しネイティブ Geolocation も無ければ、Web を呼ばずに終わる', async () => {
+    const geolocation = createWebGeolocation();
+    const plugin = createNativePlugin({ addWatcherError: new Error('boom') });
+    const loaded = loadTerritoryWalkApp({
+        navigator: { geolocation },
+        window: {
+            Capacitor: {
+                isNativePlatform: () => true,
+                isPluginAvailable: (name) => name === 'BackgroundGeolocation',
+                Plugins: { BackgroundGeolocation: plugin }
+            }
+        }
+    });
+    const app = createApp(loaded);
+
+    app.initGeolocation();
+    await tick();
+
+    assert.equal(geolocation.calls.watchPosition, 0);
+    assert.equal(geolocation.calls.getCurrentPosition, 0);
+    assert.ok(app.gpsStatuses.includes('GPS: 測位できません'));
 });
 
 test('Web: 位置情報非対応の環境でも落ちない', () => {
