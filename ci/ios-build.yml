@@ -287,14 +287,19 @@ jobs:
           ASC_BUILD_NUMBER: ${{ github.run_number }}
           ASC_BETA_GROUP_NAME: '開発テスト'
         run: |
-          # アップロードされたビルドの番号を IPA から読み取る（Xcode が自動採番した場合の保険）
+          # アップロードされたビルドの番号を IPA から読み取る（Xcode が自動採番した場合の保険）。
+          # 読み取れない・数字でないときは ASC_BUILD_NUMBER（= github.run_number）のまま進む。
           IPA_PATH=$(ls -1 "$RUNNER_TEMP/export/"*.ipa 2>/dev/null | head -n 1 || true)
+          ACTUAL=""
           if [ -n "$IPA_PATH" ]; then
-            ACTUAL=$(unzip -p "$IPA_PATH" "Payload/*.app/Info.plist" 2>/dev/null | plutil -extract CFBundleVersion raw -o - - 2>/dev/null || true)
-            if [ -n "$ACTUAL" ]; then
-              echo "[CI] IPA の CFBundleVersion: $ACTUAL（予定: ${ASC_BUILD_NUMBER}）"
-              export ASC_BUILD_NUMBER="$ACTUAL"
-            fi
+            unzip -p "$IPA_PATH" "Payload/*.app/Info.plist" > "$RUNNER_TEMP/ipa-info.plist" 2>/dev/null || true
+            ACTUAL=$(plutil -extract CFBundleVersion raw -o - "$RUNNER_TEMP/ipa-info.plist" 2>/dev/null | tr -dc '0-9' || true)
+          fi
+          if [ -n "$ACTUAL" ]; then
+            echo "[CI] IPA CFBundleVersion: $ACTUAL (planned: ${ASC_BUILD_NUMBER})"
+            export ASC_BUILD_NUMBER="$ACTUAL"
+          else
+            echo "[CI] IPA CFBundleVersion not readable; using ${ASC_BUILD_NUMBER}"
           fi
           node scripts/distribute-testflight.mjs
 
