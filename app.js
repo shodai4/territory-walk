@@ -4,8 +4,10 @@
  */
 
 const CONFIG = {
-    DEFAULT_CENTER: [35.658034, 139.701636], // 渋谷（渋谷駅周辺）— 起動時の初期表示位置
+    DEFAULT_CENTER: [35.658034, 139.701636], // 渋谷（フォールバック座標。前回の現在地が無い初回起動で使う）
     DEFAULT_ZOOM: 17,
+    // 前回の現在地が無い初回起動の初期倍率（日本全体が見える広域表示で測位を待つ）
+    WIDE_ZOOM: 5,
     MIN_ZOOM: 2,
     MAX_ZOOM: 20,
     // 広域表示（低ズーム）時のDB取得・描画を抑制するしきい値
@@ -52,6 +54,10 @@ class TerritoryWalkApp {
         this.watchId = null;
         this.currentMeshId = null;
         this.virtualPos = [...CONFIG.DEFAULT_CENTER];
+        // v1.1: 前回の現在地が保存されているなら、そちらを初期位置にする。
+        // （毎回渋谷から始まらない。初回だけは渋谷を広域表示のフォールバックに使う）
+        this.savedPosition = this.loadSavedPosition();
+        if (this.savedPosition) this.virtualPos = [...this.savedPosition];
         // 実GPSの最新座標（デバッグの仮想散歩を終えたときに戻す先）
         this.lastRealPosition = null;
         // デバッグの白紙リセット直後の再マージ防止（grid.js が参照）
@@ -569,9 +575,12 @@ class TerritoryWalkApp {
     }
 
     initMap() {
+        // 前回の現在地があればそこを中心に開く。無ければ広域表示で測位を待つ。
+        const startCenter = this.savedPosition || CONFIG.DEFAULT_CENTER;
+        const startZoom = this.savedPosition ? CONFIG.DEFAULT_ZOOM : CONFIG.WIDE_ZOOM;
         this.map = L.map('map', {
-            center: CONFIG.DEFAULT_CENTER,
-            zoom: CONFIG.DEFAULT_ZOOM,
+            center: startCenter,
+            zoom: startZoom,
             minZoom: CONFIG.MIN_ZOOM,
             maxZoom: CONFIG.MAX_ZOOM,
             zoomControl: false,
@@ -602,7 +611,14 @@ class TerritoryWalkApp {
         }
 
         this.updateMapVisibilityUI();
-        this.updatePlayerMarker(CONFIG.DEFAULT_CENTER);
+        if (this.savedPosition) {
+            // 前回の現在地にピン（測位が取れたら handlePositionUpdate が更新する）
+            this.updatePlayerMarker(this.savedPosition);
+        } else {
+            // 初回起動: 渋谷に自分のピンを刺さず、測位が取れてから現在地へ飛ぶ
+            this.updatePlayerMarker(CONFIG.DEFAULT_CENTER);
+            this.hidePlayerMarker();
+        }
 
         // Sync tiles on map pan/zoom
         this.map.on('moveend', () => {
@@ -1534,6 +1550,96 @@ class TerritoryWalkApp {
         this.updateGPSStatus('GPS: 測位中', 'bg-emerald-400', 'text-emerald-400');
     }
 
+    /**
+     * 「現在地」ボタン（v1.1）。
+     * 以前は virtualPos を setView するだけだったため、virtualPos がまだフォールバック
+     * （渋谷）のままだと「押しても渋谷のまま」になっていた。
+     * 今は必ず GPS を取り直し、その結果へ地図とピンを移す。
+     */
+    recenterToCurrentPosition() {
+        if (this.searchManager) {
+            this.searchManager.clearSearchMarker();
+            this.searchManager.closeSearchBar();
+        }
+
+        // デバッグの仮想散歩中は仮想座標が正（GPSで取り消さない）
+        if (this.isVirtualWalkActive()) {
+            this.moveToCurrentPositionView(this.virtualPos);
+            this.showToast('仮想散歩中の位置に戻りました');
+            return;
+        }
+
+        // すでに分かっている位置があれば先に寄せる（測位を待たせない）
+        const known = this.lastRealPosition || this.savedPosition || null;
+        if (known) this.moveToCurrentPositionView(known);
+
+        // その上で必ず測位を取り直す（押すたびに最新の現在地へ）
+        this.requestFreshPosition()
+            .then((pos) => {
+                if (!pos) return;
+                this.moveToCurrentPositionView(pos);
+                this.showToast('現在地に戻りました');
+            })
+            .catch(() => {
+                if (known) {
+                    this.showToast('最新の現在地を取得できませんでした', '最後に分かっている位置に戻しました');
+                } else {
+                    this.showToast('現在地を取得できませんでした', '位置情報の許可をご確認ください');
+                }
+            });
+    }
+
+    /** 地図・ピンを指定座標へ移す（現在地ボタン用。倍率は通常表示） */
+    moveToCurrentPositionView(pos) {
+        if (!pos) return;
+        const lat = Number(pos[0]);
+        const lng = Number(pos[1]);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+        const center = [lat, lng];
+        this.virtualPos = [...center];
+        this.updatePlayerMarker(center);
+        if (this.map) this.map.setView(center, CONFIG.DEFAULT_ZOOM, { animate: true });
+    }
+
+    /**
+     * 最新の現在地を1回だけ取得する（現在地ボタン用）。
+     * ネイティブの Geolocation プラグイン → Web の getCurrentPosition の順。
+     * @returns {Promise<[number, number]|null>}
+     */
+    requestFreshPosition() {
+        const options = { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 };
+
+        const toLatLng = (position) => {
+            if (!position || !position.coords) return null;
+            this.handlePositionUpdate(position, false);
+            const lat = Number(position.coords.latitude);
+            const lng = Number(position.coords.longitude);
+            if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+            return [lat, lng];
+        };
+
+        return new Promise((resolve, reject) => {
+            const nativeGeo = this.getNativeGeolocation();
+            if (nativeGeo) {
+                Promise.resolve(nativeGeo.getCurrentPosition(options))
+                    .then((position) => resolve(toLatLng(position)))
+                    .catch(reject);
+                return;
+            }
+
+            if (typeof navigator === 'undefined' || !navigator.geolocation) {
+                reject(new Error('geolocation unavailable'));
+                return;
+            }
+
+            navigator.geolocation.getCurrentPosition(
+                (position) => resolve(toLatLng(position)),
+                (error) => reject(error),
+                options
+            );
+        });
+    }
+
     /** D-Pad 下部の状態表示（塗れたマス・送信待ち件数） */
     updateDpadStatus(text) {
         this.dpadStatusText = text;
@@ -2322,6 +2428,8 @@ class TerritoryWalkApp {
         const longitude = parseFloat(rawLng.toFixed(5));
         // 実GPSの最新座標は常に保持（デバッグ終了時にここへ戻す）
         this.lastRealPosition = [latitude, longitude];
+        // 次回起動の初期表示用に端末へ保存（サーバー送信なし）
+        this.saveLastPosition(latitude, longitude);
 
         // デバッグの仮想散歩中は、実GPSで仮想座標・マーカー・塗りを上書きしない。
         // ここで return しないと D-Pad の1歩が数秒で実際の位置に戻ってしまい、
@@ -2440,6 +2548,48 @@ class TerritoryWalkApp {
         } else {
             this.userMarker.setLatLng(latlng);
             this.userMarker.setIcon(customIcon);
+        }
+    }
+
+    /**
+     * プレイヤーピンを地図から外す（v1.1: 初回起動で渋谷にピンを残さないため）。
+     * 次の updatePlayerMarker で作り直される。
+     */
+    hidePlayerMarker() {
+        if (this.userMarker && this.map && typeof this.userMarker.remove === 'function') {
+            this.userMarker.remove();
+        }
+        this.userMarker = null;
+    }
+
+    // ---------------------------------------------------------------
+    // 前回の現在地（v1.1）
+    //   初期表示を渋谷固定から「前回いた場所」に変える。保存は端末内のみで、
+    //   サーバーには送らない（非表示ピンと同じくプライバシー設計に沿う）。
+    // ---------------------------------------------------------------
+
+    /** 保存済みの現在地を読む（無い・壊れている・範囲外なら null） */
+    loadSavedPosition() {
+        try {
+            const raw = localStorage.getItem('tw_last_position');
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            const lat = Number(parsed && parsed.lat);
+            const lng = Number(parsed && parsed.lng);
+            if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+            if (lat < -85 || lat > 85 || lng < -180 || lng > 180) return null;
+            return [lat, lng];
+        } catch (e) {
+            return null;
+        }
+    }
+
+    /** 実GPSの座標を端末に保存する（次回起動の初期表示に使う） */
+    saveLastPosition(lat, lng) {
+        try {
+            localStorage.setItem('tw_last_position', JSON.stringify({ lat, lng, at: Date.now() }));
+        } catch (e) {
+            /* 保存できないだけで、測位・塗りには影響しない */
         }
     }
 
@@ -2741,14 +2891,7 @@ class TerritoryWalkApp {
 
         if (this.btnRecenter) {
             this.btnRecenter.addEventListener('click', () => {
-                if (this.map && this.virtualPos) {
-                    this.map.setView(this.virtualPos, CONFIG.DEFAULT_ZOOM, { animate: true });
-                    if (this.searchManager) {
-                        this.searchManager.clearSearchMarker();
-                        this.searchManager.closeSearchBar();
-                    }
-                    this.showToast('現在地に戻りました');
-                }
+                this.recenterToCurrentPosition();
             });
         }
 

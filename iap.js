@@ -110,6 +110,11 @@ class IAPManager {
 
         this.PROCESSED_KEY = 'tw_iap_processed_tx_v1';
         this.PENDING_TIMEOUT_MS = 90000; // 承認待ちなどでUIが固まらないための保険
+        // 未完了トランザクションの付与をあきらめるまでの試行回数。
+        // 無制限に再送させると、起動のたびに「購入の反映に失敗しました」が出続ける。
+        this.MAX_GRANT_ATTEMPTS = 3;
+        this.RETRY_KEY = 'tw_iap_grant_retry_v1';          // { txKey: 試行回数 }
+        this.PENDING_GRANT_KEY = 'tw_iap_pending_grants_v1'; // [{ productId, quantity, at }]
         this.store = null;          // CdvPurchase.store (native only)
         this.storeReady = false;    // store.initialize() completed
         this.initStarted = false;
@@ -129,6 +134,14 @@ class IAPManager {
 
     init() {
         console.log(`[IAP] IAPManager initialized. Mode: ${this.isNative ? 'Native StoreKit' : 'Web Simulator'}`);
+
+        // 前回起動で「付与できずに退避した」購入があれば、coinManager が揃っている
+        // 今のうちに適用する（購入の取りこぼしを残さない）。
+        try {
+            this.flushPendingGrants();
+        } catch (err) {
+            console.error('[IAP] Failed to flush pending grants:', err);
+        }
 
         // The restore button is rendered dynamically by the shop, so this
         // direct binding may not find it; coins.js also wires the button
@@ -169,6 +182,19 @@ class IAPManager {
             // Not ready yet; the poller / deviceready listener will retry.
             return;
         }
+
+        // 付与先（coinManager）がまだ無い状態でストアを初期化すると、承認済み
+        // トランザクションが来ても付与できず「購入の反映に失敗しました」を繰り返す。
+        // app.js は coinManager → IAPManager の順に作るが、念のためここでも待つ。
+        if (!this.app || !this.app.coinManager) {
+            this.coinWaitAttempts = (this.coinWaitAttempts || 0) + 1;
+            if (this.coinWaitAttempts <= 20) {
+                setTimeout(() => this.initStore(), 250);
+                return;
+            }
+            console.warn('[IAP] CoinManager was not ready; initializing the store anyway.');
+        }
+
         this.initStarted = true;
 
         const CdvPurchase = window.CdvPurchase;
@@ -412,6 +438,8 @@ class IAPManager {
     /**
      * 付与に成功した（または付与済みだった）トランザクションだけ finish する。
      * 付与できなかった場合は finish しないので、次回起動時に再送されて再試行される。
+     * ただし無制限に再送させると起動のたびに失敗トーストが出続けるため、
+     * MAX_GRANT_ATTEMPTS 回で打ち切り、付与内容を端末に退避してから finish する。
      */
     async deliverAndFinish(transaction) {
         let delivered = false;
@@ -422,19 +450,48 @@ class IAPManager {
             delivered = false;
         }
 
+        const attemptKey = this.buildTransactionKey('grant', transaction);
+
         if (!delivered) {
-            console.warn('[IAP] Nothing was delivered; keeping the transaction unfinished so the store re-delivers it.');
+            const attempts = this.bumpGrantAttempt(attemptKey);
+            if (attempts < this.MAX_GRANT_ATTEMPTS) {
+                console.warn(`[IAP] Nothing was delivered (attempt ${attempts}/${this.MAX_GRANT_ATTEMPTS}); keeping the transaction unfinished so the store re-delivers it.`);
+                this.releasePendingLock();
+                this.toast('購入の反映に失敗しました', '次回起動時にもう一度自動で反映します');
+                return;
+            }
+
+            // 上限に達した。付与できなかった既知の商品を端末に退避してから finish する。
+            // 退避分は coinManager が使えるようになった時点（次回起動など）で
+            // flushPendingGrants() が付与するので、コインの取りこぼしは起きない。
+            console.error('[IAP] Grant failed repeatedly; queueing the grant and finishing the transaction to stop the retry loop.');
+            this.queueGrantsFromTransaction(transaction);
+            this.clearGrantAttempts(attemptKey);
+            try {
+                await transaction.finish();
+            } catch (err) {
+                console.error('[IAP] Failed to finish transaction:', err);
+            }
             this.releasePendingLock();
-            this.toast('購入の反映に失敗しました', '次回起動時にもう一度自動で反映します');
+            const flushed = this.flushPendingGrants();
+            if (flushed > 0) {
+                this.toast('購入を反映しました', '次回以降もコインは保持されます');
+            } else {
+                this.toast('購入の反映を保留しました', '次回起動時に自動で反映します');
+            }
+            this.refreshShopUI();
             return;
         }
 
+        this.clearGrantAttempts(attemptKey);
         try {
             await transaction.finish();
         } catch (err) {
             console.error('[IAP] Failed to finish transaction:', err);
         }
         this.releasePendingLock();
+        // 以前の起動で退避した付与があれば、ここでまとめて適用する。
+        this.flushPendingGrants();
         this.refreshShopUI();
     }
 
@@ -446,21 +503,32 @@ class IAPManager {
         if (!transaction) return false;
 
         const products = Array.isArray(transaction.products) ? transaction.products : [];
+
+        // 商品が空のトランザクション（過去の TestFlight 課金テストの残骸など）は
+        // 付与するものが無い。finish しないと起動のたびに StoreKit が再送し、
+        // そのたびに「購入の反映に失敗しました」を出してしまうので、完了にする。
         if (products.length === 0) {
-            console.warn('[IAP] Approved transaction has no products.');
-            return false;
+            console.warn('[IAP] Approved transaction has no products; finishing it without a grant.');
+            return true;
         }
 
         const quantity = this.resolveQuantity(transaction);
         let delivered = false;
+        let unknownProducts = 0;
 
         for (const purchased of products) {
             const productId = purchased && (purchased.id || purchased.productId);
-            if (!productId) continue;
+            if (!productId) {
+                unknownProducts++;
+                continue;
+            }
 
             const item = this.findProductById(productId);
             if (!item) {
-                console.warn('[IAP] Unknown product in transaction:', productId);
+                // このアプリの商品ではないID（旧テスト商品・他アプリなど）。
+                // 付与はできないが、finish しないと無限に再送される。
+                unknownProducts++;
+                console.warn('[IAP] Unknown product in transaction (skipped):', productId);
                 continue;
             }
 
@@ -503,6 +571,13 @@ class IAPManager {
                 return false;
             }
             delivered = true;
+        }
+
+        // 知らない商品IDだけのトランザクションも、付与できないまま finish しないと
+        // 起動のたびに再送され続ける。既知の商品が1つも無ければ完了にして止める。
+        if (!delivered && unknownProducts === products.length) {
+            console.warn('[IAP] Transaction contains no known product; finishing it without a grant.');
+            return true;
         }
 
         return delivered;
@@ -684,6 +759,116 @@ class IAPManager {
         }
     }
 
+    // ---------------------------------------------------------------
+    // 付与リトライの上限と「付与待ち」の退避
+    // ---------------------------------------------------------------
+
+    loadJson(key, fallback) {
+        try {
+            const raw = localStorage.getItem(key);
+            const value = raw ? JSON.parse(raw) : fallback;
+            return (value === null || value === undefined) ? fallback : value;
+        } catch (e) {
+            return fallback;
+        }
+    }
+
+    saveJson(key, value) {
+        try {
+            localStorage.setItem(key, JSON.stringify(value));
+            return true;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    /** トランザクション1件ごとの付与失敗回数（再起動でも数え続ける） */
+    bumpGrantAttempt(attemptKey) {
+        if (!attemptKey) return 1;
+        const map = this.loadJson(this.RETRY_KEY, {});
+        const next = (Number(map[attemptKey]) || 0) + 1;
+        map[attemptKey] = next;
+        const keys = Object.keys(map);
+        while (keys.length > 100) {
+            delete map[keys.shift()];
+        }
+        this.saveJson(this.RETRY_KEY, map);
+        return next;
+    }
+
+    clearGrantAttempts(attemptKey) {
+        if (!attemptKey) return;
+        const map = this.loadJson(this.RETRY_KEY, {});
+        if (!Object.prototype.hasOwnProperty.call(map, attemptKey)) return;
+        delete map[attemptKey];
+        this.saveJson(this.RETRY_KEY, map);
+    }
+
+    /** 付与できなかった商品を端末に退避する（同じ商品は数量を合算） */
+    queuePendingGrant(productId, quantity = 1) {
+        if (!productId) return;
+        const list = this.loadJson(this.PENDING_GRANT_KEY, []);
+        const entries = Array.isArray(list) ? list : [];
+        const found = entries.find(entry => entry && entry.productId === productId);
+        if (found) {
+            found.quantity = (Number(found.quantity) || 0) + quantity;
+        } else {
+            entries.push({ productId, quantity, at: Date.now() });
+        }
+        this.saveJson(this.PENDING_GRANT_KEY, entries);
+    }
+
+    /**
+     * 付与できなかった既知の商品を退避する。
+     * 非消耗型（Ad-Free）は状態ベースなので、退避せずその場で適用し直す。
+     */
+    queueGrantsFromTransaction(transaction) {
+        const products = Array.isArray(transaction && transaction.products) ? transaction.products : [];
+        const quantity = this.resolveQuantity(transaction);
+        for (const purchased of products) {
+            const productId = purchased && (purchased.id || purchased.productId);
+            if (!productId) continue;
+            const item = this.findProductById(productId);
+            if (!item) continue;
+            if (item.type === 'non-consumable') {
+                this.applyAdFree();
+                continue;
+            }
+            this.queuePendingGrant(productId, quantity);
+        }
+    }
+
+    /**
+     * 退避した付与を、coinManager が使えるようになった時点で適用する。
+     * @returns {number} 今回付与できた件数
+     */
+    flushPendingGrants() {
+        const list = this.loadJson(this.PENDING_GRANT_KEY, []);
+        const entries = Array.isArray(list) ? list : [];
+        if (entries.length === 0) return 0;
+        if (!this.app || !this.app.coinManager) return 0;
+
+        const remaining = [];
+        let granted = 0;
+        for (const entry of entries) {
+            if (!entry || !entry.productId) continue;
+            const item = this.findProductById(entry.productId);
+            if (!item) continue; // 知らない商品は捨てる（付与のしようが無い）
+            try {
+                if (this.grantItem(item, Number(entry.quantity) || 1)) {
+                    granted++;
+                } else {
+                    remaining.push(entry);
+                }
+            } catch (err) {
+                remaining.push(entry);
+            }
+        }
+
+        this.saveJson(this.PENDING_GRANT_KEY, remaining);
+        return granted;
+    }
+
     /**
      * 購入した商品を実際に付与する。
      * @returns {boolean} 付与できたら true。コインマネージャが未準備なら false
@@ -698,7 +883,9 @@ class IAPManager {
 
         if (item.type === 'non-consumable') {
             this.applyAdFree();
-            this.toast('購入完了！広告完全非表示パス', '下部バナー広告を消去し動画スキップを適用しました');
+            try {
+                this.toast('購入完了！広告完全非表示パス', '下部バナー広告を消去し動画スキップを適用しました');
+            } catch (e) { /* 表示だけの失敗は付与の成否に影響させない */ }
             return true;
         }
 
@@ -706,24 +893,31 @@ class IAPManager {
         const total = item.coins * quantity;
         const unlocksAdFree = this.packUnlocksAdFree(item);
         this.app.coinManager.addCoins(total, `IAP購入: ${item.title}`);
-        if (unlocksAdFree) this.applyAdFree(`pack:${packKey}`);
 
-        // 375px幅でも語の途中で折り返さないよう、意味の切れ目で行を分ける。
-        //   1行目: 「〇〇パック (¥金額) を獲得！」
-        //   2行目: 「広告完全非表示（Ad-Free）も解放しました」
-        // 以前は1文で流していたため「スタンダードパック」の後で折れ、
-        // 2行目が「を獲得。広告…」と単語の途中から始まっていた。
-        const priceLabel = this.getDisplayPrice(packKey) || item.fallbackPrice || '';
-        const packLabel = priceLabel ? `${item.title} (${priceLabel})` : item.title;
-        if (unlocksAdFree) {
-            this.toast(
-                `${packLabel} を獲得！`,
-                '広告完全非表示（Ad-Free）も解放しました'
-            );
-        } else {
-            this.toast(`${packLabel} を獲得しました`);
+        // コインの付与が済んだあとの表示処理で例外が出ても「付与失敗」と誤認しない。
+        // （未付与と判断して再送→二重付与になるのを防ぐ）
+        try {
+            if (unlocksAdFree) this.applyAdFree(`pack:${packKey}`);
+
+            // 375px幅でも語の途中で折り返さないよう、意味の切れ目で行を分ける。
+            //   1行目: 「〇〇パック (¥金額) を獲得！」
+            //   2行目: 「広告完全非表示（Ad-Free）も解放しました」
+            // 以前は1文で流していたため「スタンダードパック」の後で折れ、
+            // 2行目が「を獲得。広告…」と単語の途中から始まっていた。
+            const priceLabel = this.getDisplayPrice(packKey) || item.fallbackPrice || '';
+            const packLabel = priceLabel ? `${item.title} (${priceLabel})` : item.title;
+            if (unlocksAdFree) {
+                this.toast(
+                    `${packLabel} を獲得！`,
+                    '広告完全非表示（Ad-Free）も解放しました'
+                );
+            } else {
+                this.toast(`${packLabel} を獲得しました`);
+            }
+            this.refreshShopUI();
+        } catch (err) {
+            console.warn('[IAP] Post-grant UI update failed (coins were granted):', err);
         }
-        this.refreshShopUI();
         return true;
     }
 

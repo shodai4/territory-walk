@@ -722,3 +722,60 @@ body[data-skin="gold"] #btn-marking-toggle {
     background: rgba(14, 165, 233, 0.18) !important;
     color: #e0f2fe !important;
 }
+
+/* ==========================================================================
+   ドキュメントページ（利用規約 / プライバシーポリシー / サポート）の縦スクロール
+
+   冒頭の「html, body { overflow: hidden !important; position: fixed; }」は
+   マップ画面（index.html）を全画面に固定するためのルール。同じ style.css を
+   読み込んでいる法的ページ3枚では、そのままだと本文が画面からはみ出しても
+   スクロールできなかった（v1.0 実機報告のバグ）。
+
+   そこで3枚の <html> にだけ class="doc-scroll" を付け、このルールで固定を解除する。
+   index.html は無変更なので、マップ画面の全画面固定・操作は従来どおり。
+   iOS のセーフエリアは body の上下 padding で確保する（Web では env() が 0px）。
+   ========================================================================== */
+html.doc-scroll {
+    position: static !important;
+    top: auto !important;
+    left: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    min-height: 100% !important;
+    overflow: visible !important;
+    overscroll-behavior: auto !important;
+}
+
+html.doc-scroll body {
+    position: static !important;
+    top: auto !important;
+    left: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    min-height: 100vh !important;
+    overflow-x: hidden !important;
+    overflow-y: visible !important;
+    overscroll-behavior: auto !important;
+    -webkit-overflow-scrolling: touch;
+    -webkit-user-select: auto;
+    user-select: auto;
+}
+
+/* セーフエリア（Dynamic Island・ホームバー）の上下余白を保つ */
+html.doc-scroll body {
+    padding-top: calc(env(safe-area-inset-top, 0px) + 1rem) !important;
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem) !important;
+}
+
+@media (min-width: 640px) {
+    html.doc-scroll body {
+        padding-top: calc(env(safe-area-inset-top, 0px) + 2rem) !important;
+        padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 2rem) !important;
+    }
+}

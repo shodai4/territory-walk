@@ -358,14 +358,19 @@ test('付与に失敗したら finish せず、次回起動時の再送に委ね
     assert.equal(h.coins.total, 4500);
 });
 
-test('商品カタログにないIDのトランザクションは付与も finish もしない', () => {
+test('商品カタログにないIDだけのトランザクションは付与せず、finish して再送を止める', () => {
     const h = createHarness();
     const tx = h.makeTransaction('com.shodai.territorywalk.unknown', { transactionId: 'tx-10' });
 
     h.emitApproved(tx);
 
-    assert.equal(h.coins.total, 0);
-    assert.equal(tx.finishCalls, 0);
+    assert.equal(h.coins.total, 0, '知らない商品は付与しない');
+    assert.equal(tx.finishCalls, 1, 'finish しないと起動のたびに再送され、失敗トーストが出続ける');
+    assert.equal(
+        h.coins.toasts.filter(t => t[0] === '購入の反映に失敗しました').length,
+        0,
+        '利用者に見せる失敗トーストは出さない'
+    );
 });
 
 /* ------------------------------------------------------------------ *
@@ -780,3 +785,152 @@ test('トースト: 旧文言（購入完了！ +N COIN / を獲得。…）が�
     assert.doesNotMatch(IAP_SOURCE, /を獲得。広告完全非表示/, '単語途中で折れる旧1文を残さない');
 });
 
+
+/* ------------------------------------------------------------------ *
+ * 11. 起動のたびに「購入の反映に失敗しました」が出続ける無限ループ（v1.0 実機報告）
+ *
+ *   v1.0 本番を起動すると毎回同じ失敗トーストが出た。原因は、過去の TestFlight
+ *   課金テストの未完了トランザクションが StoreKit から再送され、商品が空・または
+ *   カタログに無いIDのために deliverTransaction が false を返し、finish されずに
+ *   また次回再送される、という循環。ここでは「付与できないものは完了にして止める」
+ *   ことと、「付与できる商品のコインは絶対に取りこぼさない」ことを固定する。
+ * ------------------------------------------------------------------ */
+
+const flushAsync = () => new Promise(resolve => setImmediate(resolve));
+const countFailureToasts = (coins) =>
+    coins.toasts.filter(t => String(t[0] || '').indexOf('購入の反映に失敗しました') >= 0).length;
+
+test('無限ループ: 商品が空のトランザクションは付与せず finish し、失敗トーストを出さない', () => {
+    const h = createHarness();
+    const tx = h.makeTransaction(PACK_500, { transactionId: 'tx-loop-empty' });
+    tx.products = [];
+
+    h.emitApproved(tx);
+
+    assert.equal(h.coins.total, 0);
+    assert.equal(tx.finishCalls, 1, 'finish しないと起動のたびに再送され続ける');
+    assert.equal(countFailureToasts(h.coins), 0);
+});
+
+test('無限ループ: 何度起動（再送）されても失敗トーストは1回も出ない', () => {
+    const storage = {};
+    for (let launch = 0; launch < 3; launch++) {
+        const h = createHarness({ storage });
+        const tx = h.makeTransaction(PACK_500, { transactionId: 'tx-loop-empty-2' });
+        tx.products = [];
+        h.emitApproved(tx);
+        assert.equal(tx.finishCalls, 1, `${launch + 1}回目の起動でも finish する`);
+        assert.equal(countFailureToasts(h.coins), 0, `${launch + 1}回目の起動でも失敗トーストは出ない`);
+    }
+});
+
+test('無限ループ: 既知と未知の商品が混ざったら、既知のぶんは付与して finish する', () => {
+    const h = createHarness();
+    const tx = h.makeTransaction(PACK_500, { transactionId: 'tx-loop-mixed' });
+    tx.products = [{ id: 'com.example.old.testpack' }, { id: PACK_500 }];
+
+    h.emitApproved(tx);
+
+    assert.equal(h.coins.total, 4500, '知っている商品はきちんと付与する');
+    assert.equal(tx.finishCalls, 1);
+});
+
+test('無限ループ: 付与できない既知商品は上限までは finish せず、失敗トーストも上限-1回で止まる', async () => {
+    const h = createHarness();
+    const savedCoins = h.app.coinManager;
+    h.app.coinManager = null; // 付与先が無い状態（＝grantItem が false）
+
+    const tx = h.makeTransaction(PACK_500, { transactionId: 'tx-loop-cap' });
+    for (let i = 0; i < h.iap.MAX_GRANT_ATTEMPTS; i++) {
+        h.emitApproved(tx);
+        await flushAsync();
+    }
+
+    assert.equal(h.coins.total, 0);
+    assert.equal(tx.finishCalls, 1, '上限に達したら finish して再送ループを止める');
+    assert.equal(
+        countFailureToasts(h.coins),
+        h.iap.MAX_GRANT_ATTEMPTS - 1,
+        '同じ失敗トーストを何度も出さない'
+    );
+
+    h.app.coinManager = savedCoins;
+});
+
+test('無限ループ: 上限で退避した付与は、次に coinManager が使えるとコインとして入る（取りこぼしなし）', async () => {
+    const storage = {};
+    const first = createHarness({ storage });
+    first.app.coinManager = null;
+
+    const tx = first.makeTransaction(PACK_500, { transactionId: 'tx-loop-queue' });
+    for (let i = 0; i < first.iap.MAX_GRANT_ATTEMPTS; i++) {
+        first.emitApproved(tx);
+        await flushAsync();
+    }
+    assert.equal(tx.finishCalls, 1);
+    assert.equal(
+        JSON.parse(storage.tw_iap_pending_grants_v1 || '[]').length,
+        1,
+        '付与できなかった商品は端末に退避される'
+    );
+
+    // 次回起動（coinManager は揃っている）
+    const second = createHarness({ storage });
+    await flushAsync();
+    assert.equal(second.coins.total, 4500, '退避した4,500コインが付与される');
+    assert.equal(
+        JSON.parse(storage.tw_iap_pending_grants_v1 || '[]').length,
+        0,
+        '付与できたら退避を消す（二重付与しない）'
+    );
+
+    // さらに次の起動でも二重付与されない
+    const third = createHarness({ storage });
+    await flushAsync();
+    assert.equal(third.coins.total, 0, '同じ付与は二度行われない');
+});
+
+test('無限ループ: 次の起動でも coinManager が使えなければ、退避は残り続ける（失わない）', () => {
+    const h = createHarness();
+    const savedCoins = h.app.coinManager;
+    h.iap.saveJson(h.iap.PENDING_GRANT_KEY, [{ productId: PACK_500, quantity: 1, at: Date.now() }]);
+
+    h.app.coinManager = null;
+    assert.equal(h.iap.flushPendingGrants(), 0, '付与先が無ければ何もしない');
+    assert.equal(
+        JSON.parse(h.storage.tw_iap_pending_grants_v1 || '[]').length,
+        1,
+        '付与できない間は退避を保持する'
+    );
+
+    // 付与先が戻れば、退避分はきちんとコインになる
+    h.app.coinManager = savedCoins;
+    assert.equal(h.iap.flushPendingGrants(), 1);
+    assert.equal(h.coins.total, 4500);
+    assert.equal(JSON.parse(h.storage.tw_iap_pending_grants_v1 || '[]').length, 0);
+});
+
+test('順序: app.js は coinManager を IAPManager より先に作る', () => {
+    const appSource = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
+    const coinIndex = appSource.indexOf('this.coinManager = new CoinManager');
+    const iapIndex = appSource.indexOf('this.iapManager = new IAPManager');
+    assert.ok(coinIndex >= 0, 'coinManager の生成がある');
+    assert.ok(iapIndex >= 0, 'iapManager の生成がある');
+    assert.ok(coinIndex < iapIndex, 'coinManager が先（付与先が無いまま課金を初期化しない）');
+});
+
+test('順序: initStore は coinManager が揃うまでストアを初期化しない', () => {
+    const h = createHarness();
+    const savedCoins = h.app.coinManager;
+    h.iap.initStarted = false;
+    h.app.coinManager = null;
+
+    h.iap.initStore();
+    assert.equal(h.iap.initStarted, false, 'coinManager が無い間は初期化を待つ');
+    assert.ok(h.timers.length > 0, '少し待ってからやり直す');
+
+    h.app.coinManager = savedCoins;
+    const lastTimer = h.timers[h.timers.length - 1];
+    lastTimer.fn();
+    assert.equal(h.iap.initStarted, true, '揃ったら初期化する');
+});
