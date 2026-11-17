@@ -69,6 +69,22 @@ v1.0 の審査が終わるまでは **変数を入れない**（＝従来どお�
   Safari の Web Inspector から叩き、手首が振動すること（`silent.wav` が効いているか）
 - アプリを閉じている間、月曜9時の結果通知が音を出さずに通知センターへ入ること
 
+## 同期の仕組み（2026-11-17 修正）
+
+実機（Apple Watch SE 3）で「iPhoneと接続中」のまま「ぐるぐる」が止まらない不具合を直した。
+原因は **WCSession で届く数値が `NSNumber`（中身は Double）で、`dict["la"] as? Int` が全部 nil になり**、
+受け取った窓データが毎回捨てられていたこと。データ自体は届いていたのに画面に反映されないため、
+「接続中」の表示と地図の読み込みがそのまま残っていた。
+
+対策（1本が塞がっても地図が出るように3本の道を持たせた）:
+
+| 向き | 仕掛け |
+| --- | --- |
+| iPhone → Watch | 送った状態を `UserDefaults` に残し、`activationDidComplete` / 到達可能になった時 / Watchアプリ導入時に送り直す（`updateApplicationContext` ＋ 到達していれば `sendMessage` の即時送信） |
+| Watch → iPhone | 起動・フォアグラウンド復帰・到達可能で `{"cmd":"sync"}` を送る。iPhone 側は **JSを経由せずネイティブが保存済みの状態を返事**する。iPhone が起きていないときは `transferUserInfo` で要求をためる |
+| 取りこぼし | Watch は 3秒→15秒で自動リトライ。10秒届かなければ「iPhoneのアプリを開いてね」を1行だけ出す |
+| 表示 | 前回の窓を Watch に残して起動直後から地図を出す（`.automatic` だと中身が無い間ずっと読み込み中になるため、必ず具体的な範囲を入れる） |
+
 ## 初回ビルドで落ちやすいところ（切り分けメモ）
 
 | 症状 | 見どころ | 対処 |
@@ -79,6 +95,8 @@ v1.0 の審査が終わるまでは **変数を入れない**（＝従来どお�
 | `Invalid Image ... alpha channel` | Watchアイコン | 生成スクリプトは RGB（アルファ無し）で出力済み |
 | アイコン未設定の警告 | Assets | `python3 scripts/generate-watch-assets.py` を実行したか |
 | プラグインが `undefined` | 自動登録 | `ios/App/App/capacitor.config.json` の `packageClassList` を確認 |
+| 地図が出ず「iPhoneと接続中」のまま | 窓データの型 | 数値は `NSNumber` で届く。`as? Int` ではなく `intValue` で読む（`TileWindow.intValue`） |
+| Watch から同期できない | iPhone が起きているか | `status` プラグインの `hasContext` / `reachable` を Safari の Web Inspector で確認 |
 
 ## 仕様メモ
 

@@ -18,6 +18,8 @@ const path = require('node:path');
 const ROOT = path.resolve(__dirname, '..');
 const {
     WATCH_WINDOW_SIDES,
+    WATCH_SEND_THROTTLE_MS,
+    WATCH_INIT_RETRY_MS,
     buildWatchWindow,
     WatchBridgeClient
 } = require(path.join(ROOT, 'watch-bridge.js'));
@@ -202,6 +204,89 @@ test('受信: Watchの記録を既存の送信キューへ流し込む', async (
     } finally {
         delete global.window;
     }
+});
+
+test('送信: sync / foreground は間引きを無視して必ず送る（Watchが古いまま固まらない）', () => {
+    const sent = [];
+    const plugin = { updateState: async (payload) => { sent.push(payload); } };
+    global.window = { Capacitor: { Plugins: { WatchBridge: plugin } } };
+    try {
+        const app = createAppStub();
+        const client = new WatchBridgeClient(app);
+        assert.equal(client.send('claim'), true);
+        // 直後でも force なら通る
+        assert.equal(client.send('sync', { force: true }), true);
+        assert.equal(client.send('foreground', { force: true }), true);
+        assert.equal(sent.length, 3);
+    } finally {
+        delete global.window;
+    }
+});
+
+test('送信: 歩行中の位置更新は2秒に1回へ間引く', () => {
+    const sent = [];
+    const plugin = { updateState: async (payload) => { sent.push(payload); } };
+    global.window = { Capacitor: { Plugins: { WatchBridge: plugin } } };
+    try {
+        const app = createAppStub();
+        const client = new WatchBridgeClient(app);
+        assert.equal(client.send('position'), true);
+        assert.equal(client.send('position'), false, '2秒以内の2回目は送らない');
+        assert.equal(client.pending, 'position', '保留分は次の送信で送る');
+        assert.equal(client.flushPending(), true);
+        assert.equal(sent.length, 2);
+    } finally {
+        delete global.window;
+    }
+});
+
+test('Watch操作: sync 要求（cmd=sync）で即座に状態を送り直す', () => {
+    const sent = [];
+    let listener = null;
+    const plugin = {
+        updateState: async (payload) => { sent.push(payload); },
+        addListener: (name, handler) => { if (name === 'command') listener = handler; },
+        drainInbox: async () => ({ items: [] })
+    };
+    global.window = { Capacitor: { Plugins: { WatchBridge: plugin } } };
+    try {
+        const app = createAppStub();
+        const client = new WatchBridgeClient(app);
+        client.init();
+        assert.equal(sent.length, 1);
+        listener({ cmd: 'sync' });
+        assert.equal(sent.length, 2, '1秒以内でも sync は必ず返す');
+    } finally {
+        delete global.window;
+    }
+});
+
+test('復帰: onForeground は購読を張り直して強制送信する', () => {
+    const sent = [];
+    const plugin = { updateState: async (payload) => { sent.push(payload); } };
+    global.window = { Capacitor: { Plugins: { WatchBridge: plugin } } };
+    try {
+        const app = createAppStub();
+        const client = new WatchBridgeClient(app);
+        client.onForeground();
+        assert.equal(client.started, true, '未初期化でも初期化される');
+        assert.equal(sent.length >= 1, true);
+    } finally {
+        delete global.window;
+    }
+});
+
+test('未対応環境: プラグインが後から生えても取りこぼさない（init は再試行を予約する）', () => {
+    const app = createAppStub();
+    const client = new WatchBridgeClient(app);
+    assert.equal(client.init(), false);
+    assert.equal(client.started, true);
+    const scheduled = client.initRetryTimer != null || client.initRetryIndex > 0;
+    assert.equal(scheduled, true, 'プラグイン未登録でも初期化をあきらめない');
+    if (client.initRetryTimer) clearTimeout(client.initRetryTimer);
+    if (client.timer) clearInterval(client.timer);
+    assert.ok(WATCH_SEND_THROTTLE_MS.position > WATCH_SEND_THROTTLE_MS.claim, '位置は陣地より緩く間引く');
+    assert.ok(WATCH_INIT_RETRY_MS.length >= 2);
 });
 
 test('配線: index.html と build.js が watch-bridge.js を配布物に含める', () => {

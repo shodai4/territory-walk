@@ -12,6 +12,7 @@ import WatchKit
 
 struct ContentView: View {
     @StateObject private var model = WatchModel()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -37,6 +38,12 @@ struct ContentView: View {
                         .font(.system(size: 18, weight: .bold))
                     Text("iPhoneと接続中")
                         .font(.system(size: 10, weight: .semibold))
+                    // 10秒たっても届かないときだけ、次にやることを1行だけ出す
+                    if model.showHint {
+                        Text("iPhoneのアプリを開いてね")
+                            .font(.system(size: 9))
+                            .opacity(0.8)
+                    }
                 }
                 .foregroundStyle(.white.opacity(0.9))
                 .padding(.bottom, 44)
@@ -79,6 +86,12 @@ struct ContentView: View {
                 .padding(.bottom, 4)
                 .disabled(!model.reachable)
                 .opacity(model.reachable ? 1 : 0.55)
+            }
+        }
+        // 画面がアクティブに戻るたびに取り直す（iPhone が起きていれば即同期）
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                model.onForeground()
             }
         }
     }

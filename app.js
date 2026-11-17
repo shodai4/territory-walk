@@ -2814,6 +2814,11 @@ class TerritoryWalkApp {
     notifyWatchState(reason) {
         if (!this.watchBridge) return;
         try {
+            // 復帰時は間引きを無視して必ず1回送る（Watch が古いまま固まらないように）
+            if (reason === 'foreground' && typeof this.watchBridge.onForeground === 'function') {
+                this.watchBridge.onForeground();
+                return;
+            }
             this.watchBridge.onStateChanged(reason);
         } catch (e) {
             console.warn('[Watch] state push failed:', e);
@@ -3118,6 +3123,9 @@ class TerritoryWalkApp {
                 if (this.syncQueue) this.syncQueue.flush('foreground');
                 // 全国集計（上部％バー）も最新にする
                 this.refreshGlobalTeamCounts({ force: true });
+                // Apple Watch も復帰と同時に追いつかせる
+                this.initWatchBridge();
+                this.notifyWatchState('foreground');
             }
         });
 
@@ -3145,6 +3153,10 @@ class TerritoryWalkApp {
                     this.isAppInBackground = !state.isActive;
                     if (state.isActive && this.syncQueue) this.syncQueue.flush('app-active');
                     if (state.isActive) this.refreshGlobalTeamCounts({ force: true });
+                    if (state.isActive) {
+                        this.initWatchBridge();
+                        this.notifyWatchState('foreground');
+                    }
                 });
             } catch (e) {}
         }
@@ -3189,10 +3201,13 @@ class TerritoryWalkApp {
             this.virtualPos = [latitude, longitude];
             this.updateGPSStatus('GPS: マーキング停止中', 'bg-sky-400', 'text-sky-300');
             if (!this.isAppInBackground) this.updatePlayerMarker([latitude, longitude]);
+            this.notifyWatchState('position');
             return;
         }
 
         this.virtualPos = [latitude, longitude];
+        // 現在地が動いたら Watch の地図も追いつかせる（2秒に1回へ間引きは WatchBridgeClient 側）
+        this.notifyWatchState('position');
 
         this.updateGPSStatus('GPS: 測位中', 'bg-emerald-400', 'text-emerald-400');
 

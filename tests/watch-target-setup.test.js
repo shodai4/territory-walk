@@ -201,6 +201,56 @@ test('ドキュメント: 有効化手順と実機確認が書かれている', 
 });
 
 /* ------------------------------------------------------------------ *
+ * 4.5: 実機で「iPhoneと接続中」のまま止まる不具合の再発防止（2026-11-17）
+ * ------------------------------------------------------------------ */
+
+test('窓データ: WCSession の数値（NSNumber）を型で弾かずに読む', () => {
+    // 実機では la/lo/n が NSNumber(Double) で届き、`as? Int` だけだと全部 nil になって
+    // 窓が捨てられ、地図が出ないまま「iPhoneと接続中」で止まっていた。
+    assert.match(WATCH_MODEL, /static func intValue\(_ any: Any\?\) -> Int\?/);
+    assert.match(WATCH_MODEL, /as\? NSNumber.*intValue/s, 'NSNumber は intValue で読む');
+    assert.match(WATCH_MODEL, /as\? Double/, 'Double でも受ける');
+    assert.match(WATCH_MODEL, /as\? String/, '文字列でも受ける');
+    assert.match(WATCH_MODEL, /TileWindow\.intValue\(dict\["la"\]\)/);
+    assert.doesNotMatch(WATCH_MODEL, /dict\["la"\] as\? Int/, 'as? Int だけで読まない');
+    assert.match(WATCH_MODEL, /static func boolValue\(_ any: Any\?\) -> Bool\?/);
+});
+
+test('Watch: 起動・復帰・到達可能で同期を取りに行き、届かなければリトライする', () => {
+    assert.match(WATCH_MODEL, /sendMessage\(\["cmd": "sync"\]/);
+    assert.match(WATCH_MODEL, /transferUserInfo\(\["cmd": "sync"\]\)/, 'iPhoneが起きていなくても要求をためる');
+    assert.match(WATCH_MODEL, /func onForeground\(\)/);
+    assert.match(WATCH_MODEL, /scheduleSyncRetry\(\)/);
+    assert.match(WATCH_MODEL, /Timer\.scheduledTimer/, 'タイマーで自動リトライ');
+    assert.match(WATCH_MODEL, /Thread\.isMainThread/, 'タイマーは必ずメインスレッドで張る');
+    assert.match(WATCH_MODEL, /func session\(_ session: WCSession, didReceiveMessage message: \[String: Any\]/,
+        'iPhoneからの即時送信も受ける');
+});
+
+test('Watch: 前回の表示を残し、地図が「読み込み中」のままにならない', () => {
+    assert.match(WATCH_MODEL, /enum WatchWindowCache/);
+    assert.match(WATCH_MODEL, /UserDefaults\.standard/, '前回の窓を端末に残す');
+    assert.match(WATCH_MODEL, /WatchWindowCache\.load\(\)/, '起動時に前回の窓を復元');
+    assert.match(WATCH_MODEL, /camera = \.region\(region\(for: fallbackCenter\)\)/,
+        '.automatic のままだと中身が無い間ずっと読み込み中になる');
+    assert.match(WATCH_MODEL, /showHint/, '10秒たったら案内を出す');
+    assert.match(WATCH_APP, /iPhoneのアプリを開いてね/);
+    assert.match(WATCH_APP, /onChange\(of: scenePhase\)/, '画面がアクティブに戻ったら同期');
+    assert.match(WATCH_APP, /model\.onForeground\(\)/);
+});
+
+test('iPhone側: 送った状態を残し、sync にはJSを経由せずネイティブが返事する', () => {
+    assert.match(BRIDGE_SWIFT, /private var pendingContext/, 'activation前の送信を捨てない');
+    assert.match(BRIDGE_SWIFT, /tw\.watch\.lastContext/, '最後の状態を端末に残す');
+    assert.match(BRIDGE_SWIFT, /replyHandler\(payload\)/, 'sync に状態そのものを返す');
+    assert.match(BRIDGE_SWIFT, /func sessionWatchStateDidChange/, 'Watchアプリの導入で送り直す');
+    assert.match(BRIDGE_SWIFT, /func sessionReachabilityDidChange/, '到達可能になったら送る');
+    assert.match(BRIDGE_SWIFT, /if \(userInfo\["cmd"\] as\? String\) == "sync"/, '閉じていた間の要求も拾う');
+    assert.match(BRIDGE_SWIFT, /session\.sendMessage\(payload, replyHandler: nil/, '即時送信も併用');
+    assert.match(BRIDGE_SWIFT, /session\.updateApplicationContext\(payload\)/);
+});
+
+/* ------------------------------------------------------------------ *
  * 5: アセット生成
  * ------------------------------------------------------------------ */
 

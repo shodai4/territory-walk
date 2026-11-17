@@ -14,6 +14,12 @@
 
 const WATCH_WINDOW_SIDES = { 2: 5, 4: 9, 7: 15 };
 
+/** 送信の最短間隔（ms）。陣地獲得の連打・GPS更新の連続を Watch の電池ごと間引く */
+const WATCH_SEND_THROTTLE_MS = { claim: 1000, position: 2000 };
+
+/** プラグインがまだ生えていない・グラフの準備ができていない時の再送（初回だけ） */
+const WATCH_INIT_RETRY_MS = [500, 1500, 4000, 9000];
+
 function watchPlugin() {
     if (typeof window === 'undefined') return null;
     const cap = window.Capacitor;
@@ -56,6 +62,9 @@ class WatchBridgeClient {
         this.pending = null;
         this.timer = null;
         this.started = false;
+        this.initRetryIndex = 0;
+        this.initRetryTimer = null;
+        this.listening = false;
     }
 
     available() {
@@ -64,22 +73,61 @@ class WatchBridgeClient {
 
     /** 起動時に1回。Watchからの操作・ズーム要求を受け取る */
     init() {
-        const plugin = watchPlugin();
-        if (!plugin || this.started) return false;
+        if (this.started) return false;
         this.started = true;
 
-        if (typeof plugin.addListener === 'function') {
-            plugin.addListener('command', (message) => this.handleCommand(message));
+        this.attachListener();
+        if (!this.send('init')) {
+            // プラグインがまだ生えていない／地図の準備ができていない: 少しだけ粘る
+            this.scheduleInitRetry();
         }
-        this.send('init');
         // 歩いていない間も「今の状態」を保つため、30秒に1回は送る（電池負荷はごく小さい）
         if (!this.timer && typeof setInterval === 'function') {
-            this.timer = setInterval(() => this.send('tick'), 30000);
+            this.timer = setInterval(() => {
+                if (!this.send('tick')) {
+                    // まだグラフの準備ができていない等で送れなかった: もう一度だけ粘る
+                    this.initRetryIndex = 0;
+                    this.scheduleInitRetry();
+                }
+                this.flushPending();
+            }, 30000);
             // Node（テスト）でプロセスが終わらないようにする。ブラウザでは unref が無いので何もしない
             if (this.timer && typeof this.timer.unref === 'function') this.timer.unref();
         }
         this.drainInbox();
+        return this.available();
+    }
+
+    /** Watch からの command を購読（プラグインが後から生えた場合に備えて再実行できる） */
+    attachListener() {
+        const plugin = watchPlugin();
+        if (!plugin || this.listening || typeof plugin.addListener !== 'function') return false;
+        this.listening = true;
+        plugin.addListener('command', (message) => this.handleCommand(message));
         return true;
+    }
+
+    /** 起動直後に送れなかったときの短い再試行 */
+    scheduleInitRetry() {
+        if (this.initRetryTimer || typeof setTimeout !== 'function') return false;
+        if (this.initRetryIndex >= WATCH_INIT_RETRY_MS.length) return false;
+        const wait = WATCH_INIT_RETRY_MS[this.initRetryIndex];
+        this.initRetryIndex += 1;
+        this.initRetryTimer = setTimeout(() => {
+            this.initRetryTimer = null;
+            this.attachListener();
+            if (this.send('init')) return;
+            this.scheduleInitRetry();
+        }, wait);
+        if (this.initRetryTimer && typeof this.initRetryTimer.unref === 'function') this.initRetryTimer.unref();
+        return true;
+    }
+
+    /** 画面が戻ってきたとき（iPhone 側のアプリを開いた瞬間に Watch を追いつかせる） */
+    onForeground() {
+        this.attachListener();
+        if (!this.started) this.init();
+        this.send('foreground', { force: true });
     }
 
     handleCommand(message) {
@@ -88,13 +136,13 @@ class WatchBridgeClient {
         if (message.cmd === 'toggle' && typeof app.setMarkingPaused === 'function') {
             const next = typeof message.to === 'boolean' ? message.to : !app.isMarkingPaused();
             app.setMarkingPaused(next, { source: 'watch' });
-            this.send('toggle');
+            this.send('toggle', { force: true });
         } else if (message.cmd === 'window') {
             const requested = Number(message.r);
             this.side = WATCH_WINDOW_SIDES[requested] || 9;
-            this.send('window');
+            this.send('window', { force: true });
         } else if (message.cmd === 'sync') {
-            this.send('sync');
+            this.send('sync', { force: true });
         }
     }
 
@@ -120,17 +168,20 @@ class WatchBridgeClient {
         return window;
     }
 
-    send(reason) {
+    send(reason, options) {
         const plugin = watchPlugin();
         if (!plugin || !this.app) return false;
 
+        const force = !!(options && options.force === true);
         const now = Date.now();
-        // 陣地獲得が続くときは最大1秒に1回へ間引く（Watchの描画と電池を守る）
-        if (reason === 'claim' && now - this.lastSentAt < 1000) {
+        const minInterval = WATCH_SEND_THROTTLE_MS[reason] || 0;
+        // 陣地獲得が続くとき・歩行中のGPS更新は間引く（Watchの描画と電池を守る）
+        if (!force && minInterval > 0 && now - this.lastSentAt < minInterval) {
             this.pending = reason;
             return false;
         }
         this.lastSentAt = now;
+        this.pending = null;
 
         const payload = this.buildPayload();
         if (!payload) return false;
@@ -140,6 +191,14 @@ class WatchBridgeClient {
         } catch (e) {
             return false;
         }
+    }
+
+    /** 間引いて保留した1回分を、次の機会に必ず送る */
+    flushPending() {
+        if (!this.pending) return false;
+        const reason = this.pending;
+        this.pending = null;
+        return this.send(reason, { force: true });
     }
 
     onStateChanged(reason) {
@@ -194,5 +253,11 @@ class WatchBridgeClient {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { WATCH_WINDOW_SIDES, buildWatchWindow, WatchBridgeClient };
+    module.exports = {
+        WATCH_WINDOW_SIDES,
+        WATCH_SEND_THROTTLE_MS,
+        WATCH_INIT_RETRY_MS,
+        buildWatchWindow,
+        WatchBridgeClient
+    };
 }
