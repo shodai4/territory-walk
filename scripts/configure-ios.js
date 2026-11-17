@@ -37,6 +37,17 @@ const PROJECT_PATH = process.env.IOS_PROJECT_PATH
 const MINIMUM_IOS_VERSION = '15.0';
 
 /**
+ * App Store に出すバージョン（CFBundleShortVersionString の元）。
+ *
+ * v1.0 はすでに審査通過・公開済みのため、同じ 1.0 ではアップロードできない
+ * （altool: 90186 "The train version '1.0' is closed" / 90062
+ *  "CFBundleShortVersionString must contain a higher version than the previously approved version"）。
+ * v1.1 以降はここを上げる。Watch アプリのバージョンも add-watch-target.rb が
+ * この値を読んで揃える。
+ */
+const APP_MARKETING_VERSION = '1.1';
+
+/**
  * ホーム画面（アイコンの下）に表示するアプリ名。
  * Xcode の PRODUCT_NAME（英語）とは別に、この日本語表示名を Info.plist に固定する。
  *
@@ -375,6 +386,32 @@ function configureProjectContent(input, minimum = MINIMUM_IOS_VERSION) {
     return { content, modified: content !== source, occurrences, raised };
 }
 
+/**
+ * Xcode プロジェクト（project.pbxproj）の MARKETING_VERSION を version に揃える（純粋関数）。
+ * App / Watch の両ターゲットに入っているので、すべて同じ値にする。
+ * @returns {{content: string, modified: boolean, occurrences: number}}
+ */
+function configureMarketingVersionContent(input, version = APP_MARKETING_VERSION) {
+    const source = String(input == null ? '' : input);
+    let occurrences = 0;
+    const content = source.replace(/(MARKETING_VERSION[ \t]*=[ \t]*)([0-9][0-9.]*)([ \t]*;)/g,
+        (match, head, current, tail) => {
+            occurrences += 1;
+            return current === version ? match : `${head}${version}${tail}`;
+        });
+    return { content, modified: content !== source, occurrences };
+}
+
+/** Xcode プロジェクトの MARKETING_VERSION が version かを点検する */
+function verifyMarketingVersionContent(content, version = APP_MARKETING_VERSION) {
+    const source = String(content == null ? '' : content);
+    const found = [...source.matchAll(/MARKETING_VERSION[ \t]*=[ \t]*([0-9][0-9.]*)[ \t]*;/g)].map((m) => m[1]);
+    if (found.length === 0) return ['project.pbxproj に MARKETING_VERSION がありません'];
+    return found
+        .filter((value) => value !== version)
+        .map((value) => `MARKETING_VERSION が ${value} です（${version} にしてください）`);
+}
+
 /** Xcode プロジェクトの展開先OSが minimum 以上かを点検する */
 function verifyProjectContent(content, minimum = MINIMUM_IOS_VERSION) {
     const source = String(content == null ? '' : content);
@@ -410,13 +447,16 @@ function applyMinimumOS(targets = {}) {
 
     if (fs.existsSync(projectPath)) {
         try {
-            const before = fs.readFileSync(projectPath, 'utf8');
-            const { content, modified, occurrences, raised } = configureProjectContent(before);
-            if (modified) fs.writeFileSync(projectPath, content, 'utf8');
+            let before = fs.readFileSync(projectPath, 'utf8');
+            const os1 = configureProjectContent(before);
+            const mv = configureMarketingVersionContent(os1.content);
+            if (os1.modified || mv.modified) fs.writeFileSync(projectPath, mv.content, 'utf8');
             results.push({
                 file: path.basename(projectPath),
-                action: modified ? 'updated' : (occurrences > 0 ? 'verified' : 'missing'),
-                detail: occurrences > 0 ? `${raised} 件を iOS ${MINIMUM_IOS_VERSION} に引き上げ` : 'IPHONEOS_DEPLOYMENT_TARGET なし'
+                action: (os1.modified || mv.modified) ? 'updated' : (os1.occurrences > 0 ? 'verified' : 'missing'),
+                detail: os1.occurrences > 0
+                    ? `${os1.raised} 件を iOS ${MINIMUM_IOS_VERSION} に引き上げ / MARKETING_VERSION ${mv.occurrences} 件を ${APP_MARKETING_VERSION} に`
+                    : 'IPHONEOS_DEPLOYMENT_TARGET なし'
             });
         } catch (err) {
             results.push({ file: path.basename(projectPath), action: 'failed', detail: err.message });
@@ -568,6 +608,21 @@ function main() {
             }
         });
 
+        // バージョン（CFBundleShortVersionString の元）: v1.0 は公開済みのため 1.1 に上げる
+        if (fs.existsSync(PROJECT_PATH)) {
+            const projectText = fs.readFileSync(PROJECT_PATH, 'utf8');
+            const { occurrences } = configureMarketingVersionContent(projectText);
+            if (occurrences === 0) {
+                // テンプレート差異（MARKETING_VERSION を持たない生成物）では止めない
+                console.warn('[iOS Config] Warning: project.pbxproj に MARKETING_VERSION がありません（テンプレート差異）');
+            } else {
+                const versionProblems = verifyMarketingVersionContent(projectText);
+                versionProblems.forEach((problem) => console.error(`[iOS Config] ${problem}`));
+                if (versionProblems.length > 0) process.exitCode = 1;
+                else console.log(`[iOS Config] MARKETING_VERSION ${APP_MARKETING_VERSION} verified (app + watch).`);
+            }
+        }
+
         const problems = verifyContent(fs.readFileSync(PLIST_PATH, 'utf8'));
         if (problems.length > 0) {
             problems.forEach((problem) => console.error(`[iOS Config] Verification failed: ${problem}`));
@@ -589,6 +644,7 @@ module.exports = {
     CONFIG_ENTRIES,
     APP_DISPLAY_NAME,
     MINIMUM_IOS_VERSION,
+    APP_MARKETING_VERSION,
     PLIST_PATH,
     PODFILE_PATH,
     PROJECT_PATH,
@@ -596,6 +652,8 @@ module.exports = {
     configureStringsContent,
     configurePodfileContent,
     configureProjectContent,
+    configureMarketingVersionContent,
+    verifyMarketingVersionContent,
     verifyStringsContent,
     verifyContent,
     verifyPodfileContent,
