@@ -241,10 +241,9 @@ export function pickBuild(builds, buildNumber) {
 }
 
 /**
- * GET /v1/apps/{appId}/builds からビルド番号が一致するビルドを取る。
- * フィルタの対応状況に依存しないよう、一覧を取ってから手元で照合する。
+ * GET /v1/apps/{appId}/builds からビルド一覧を取る（フィルタの対応状況に依存しないよう手元で照合する）
  */
-export async function fetchBuildByNumber(client, { appId, buildNumber }) {
+export async function fetchBuildList(client, { appId }) {
   const result = await client.request('GET', `/apps/${encodeURIComponent(appId)}/builds`, {
     query: { limit: 100, 'fields[builds]': BUILD_FIELDS },
   });
@@ -254,7 +253,13 @@ export async function fetchBuildByNumber(client, { appId, buildNumber }) {
       : '';
     throw new Error(`ビルド一覧の取得に失敗: ${describeApiError(result)}${hint}`);
   }
-  return pickBuild(result.data?.data, buildNumber);
+  return result.data?.data || [];
+}
+
+/** ビルド番号が一致するビルドを取り出す（無ければ null） */
+export async function fetchBuildByNumber(client, { appId, buildNumber }) {
+  const builds = await fetchBuildList(client, { appId });
+  return pickBuild(builds, buildNumber);
 }
 
 /**
@@ -297,9 +302,22 @@ export async function waitForBuildValid(
     }
 
     if (now() + intervalMs > deadline) {
+      // タイムアウト時は「実際にどんなビルド番号が並んでいるか」を添えて原因を分かるようにする
+      let recent = '';
+      try {
+        const builds = await fetchBuildList(client, { appId });
+        const versions = builds
+          .sort((a, b) => uploadedTime(b) - uploadedTime(a))
+          .slice(0, 5)
+          .map((item) => `${item.attributes?.version}(${item.attributes?.processingState})`);
+        recent = versions.length ? ` 直近のビルド: ${versions.join(', ')}` : ' ビルド一覧は空でした';
+      } catch {
+        /* 診断情報が取れなくても元のエラーを優先する */
+      }
       throw new Error(
         `ビルド ${buildNumber} が ${Math.round(timeoutMs / 60000)}分以内に VALID になりませんでした。` +
-          'App Store Connect の TestFlight 画面で処理状況を確認してください。',
+          'App Store Connect の TestFlight 画面で処理状況を確認してください。' +
+          recent,
       );
     }
     await sleep(intervalMs);
