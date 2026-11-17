@@ -18,7 +18,7 @@
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
     <!-- Custom CSS -->
-    <link rel="stylesheet" href="style.css?v=20261115v49">
+    <link rel="stylesheet" href="style.css?v=20261116v50">
 </head>
 <body class="bg-black text-white overflow-hidden overflow-x-hidden h-screen w-screen max-w-full flex flex-col m-0 p-0 select-none" data-theme="black" data-skin="default">
 
@@ -54,14 +54,18 @@
 
         <!-- 2行目（全幅左右対称対戦バー・インラインパーセント・自陣営YOUマーク） -->
         <div class="w-full flex flex-col gap-1 select-none">
-            <!-- バー上部：左上固定YOUインジケーター（自陣営） -->
-            <div class="flex items-center px-1 text-[10px] font-mono font-bold leading-none">
+            <!-- バー上部：左端にYOU（自陣営）、右端にPROサポーターバッジ（MENU下の空き） -->
+            <div class="w-full flex items-center justify-between gap-1 px-1 text-[10px] font-mono font-bold leading-none">
                 <div id="you-indicator" class="flex items-center gap-1 text-amber-400 transition-all">
                     <span id="you-indicator-badge" class="px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/50 text-[9px] tracking-wider font-mono">YOU (黒陣営)</span>
                 </div>
-                <div id="sync-queue-badge" class="ml-auto hidden items-center gap-1 text-[9px] text-zinc-400 font-normal">
-                    <span id="sync-queue-dot" class="w-1.5 h-1.5 rounded-full bg-sky-400"></span>
-                    <span id="sync-queue-count">0マス同期待ち</span>
+                <div class="ml-auto flex items-center gap-1">
+                    <div id="sync-queue-badge" class="hidden items-center gap-1 text-[9px] text-zinc-400 font-normal">
+                        <span id="sync-queue-dot" class="w-1.5 h-1.5 rounded-full bg-sky-400"></span>
+                        <span id="sync-queue-count">0マス同期待ち</span>
+                    </div>
+                    <!-- PRO SUPPORTER（Proのときだけ中身が入る） -->
+                    <div id="pro-badge-slot" class="flex items-center"></div>
                 </div>
             </div>
 
@@ -348,6 +352,12 @@
                 <span>ランキング・マイ戦績</span>
             </button>
 
+            <!-- 2. 非表示ピン（プライバシーゾーン） -->
+            <button id="btn-open-privacy" class="w-full py-2.5 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 border border-zinc-700 text-sky-300 font-mono text-xs font-bold rounded-xl shadow transition-all active:scale-95 flex items-center justify-between px-3 shrink-0">
+                <span>非表示ピン（自宅・職場）</span>
+                <span id="privacy-summary-text" class="text-[10px] font-normal text-zinc-400">未登録</span>
+            </button>
+
             <!-- 3. 統合アコーディオン: テーマ・マップ設定 -->
             <details class="group bg-zinc-950/80 border border-zinc-800 rounded-xl shrink-0">
                 <summary class="flex items-center justify-between p-2.5 cursor-pointer text-xs font-bold text-white select-none list-none">
@@ -491,6 +501,14 @@
                     <button id="btn-open-weekly-result" class="w-full mt-2 py-1.5 px-2 bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-700 border border-zinc-700 text-[11px] font-mono text-amber-400 rounded-lg flex items-center justify-center gap-1 shadow transition-all active:scale-95">
                         <span>前週の勝敗リザルトを見る</span>
                     </button>
+                    <!-- 月曜リセット後の結果発表を無音で知らせる（既定OFF・ONにした時だけ権限を要求） -->
+                    <button id="btn-toggle-weekly-notify" type="button" data-state="off" aria-pressed="false" class="w-full mt-1 py-1.5 px-2 bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-700 border border-zinc-700 text-[11px] font-mono text-zinc-200 rounded-lg flex items-center justify-between gap-1 shadow transition-all active:scale-95">
+                        <span class="flex items-center gap-1.5">
+                            <span id="weekly-notify-dot" class="w-2 h-2 rounded-full bg-zinc-600"></span>
+                            <span>月曜の結果通知（無音）</span>
+                        </span>
+                        <span id="weekly-notify-text" class="text-[10px] text-zinc-400">OFF</span>
+                    </button>
                     <div class="border-t border-zinc-800/80 pt-2 space-y-1.5 font-mono text-[11px]">
                         <div class="flex items-center justify-between">
                             <span class="text-zinc-400">所属陣営:</span>
@@ -532,6 +550,60 @@
                 <span>•</span>
                 <a href="support.html" class="hover:text-zinc-300 underline">サポート</a>
             </div>
+        </div>
+    </div>
+
+    <!-- 非表示ピン（プライバシーゾーン）モーダル -->
+    <div id="privacy-modal" class="fixed inset-0 z-[2000] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 overflow-x-hidden box-border hidden">
+        <div class="bg-zinc-900 border border-zinc-700/90 rounded-2xl max-w-[calc(100vw-2rem)] sm:max-w-sm w-full p-4 shadow-2xl flex flex-col gap-3 text-zinc-200 box-border overflow-x-hidden max-h-[85vh] overflow-y-auto">
+            <div class="flex items-center justify-between border-b border-zinc-800 pb-2 shrink-0">
+                <div class="flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-sky-400"></span>
+                    <h2 class="font-bold text-sm tracking-wider text-white">非表示ピン</h2>
+                    <span id="privacy-zone-count" class="font-mono text-[10px] text-zinc-400">0 / 5</span>
+                </div>
+                <button id="btn-close-privacy-icon" class="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-all active:scale-95" aria-label="閉じる">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+
+            <p class="text-[10px] leading-relaxed text-zinc-400 shrink-0">
+                自宅や職場など、歩いた跡を見せたくない場所を半径で隠します。区域の中は<b class="text-zinc-200">自分にも塗られず、スコアにも入りません</b>。座標は少しずらしてこの端末だけに保存し、サーバーには送りません。
+            </p>
+
+            <div class="space-y-1.5 shrink-0">
+                <div class="text-[11px] font-bold text-zinc-300">半径</div>
+                <div class="grid grid-cols-2 gap-2">
+                    <button type="button" data-privacy-radius="300" aria-pressed="true" class="py-2 rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-200 font-mono text-xs font-bold transition-all active:scale-95">300m</button>
+                    <button type="button" data-privacy-radius="500" aria-pressed="false" class="py-2 rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-200 font-mono text-xs font-bold transition-all active:scale-95">500m</button>
+                </div>
+            </div>
+
+            <div class="space-y-1.5 shrink-0">
+                <div class="text-[11px] font-bold text-zinc-300">名前</div>
+                <input id="input-privacy-label" type="text" maxlength="12" placeholder="自宅" class="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-white font-mono text-xs focus:outline-none focus:border-sky-400">
+                <div class="flex flex-wrap gap-1.5">
+                    <button type="button" data-privacy-label="自宅" class="px-2 py-1 rounded bg-zinc-800 border border-zinc-700 text-[10px] font-mono text-zinc-300 active:scale-95 transition-all">自宅</button>
+                    <button type="button" data-privacy-label="職場" class="px-2 py-1 rounded bg-zinc-800 border border-zinc-700 text-[10px] font-mono text-zinc-300 active:scale-95 transition-all">職場</button>
+                    <button type="button" data-privacy-label="学校" class="px-2 py-1 rounded bg-zinc-800 border border-zinc-700 text-[10px] font-mono text-zinc-300 active:scale-95 transition-all">学校</button>
+                    <button type="button" data-privacy-label="実家" class="px-2 py-1 rounded bg-zinc-800 border border-zinc-700 text-[10px] font-mono text-zinc-300 active:scale-95 transition-all">実家</button>
+                </div>
+            </div>
+
+            <div id="privacy-pending-center" class="hidden text-[10px] font-mono text-sky-300 bg-sky-950/40 border border-sky-800/60 rounded-lg px-2 py-1"></div>
+
+            <div class="grid grid-cols-2 gap-2 shrink-0">
+                <button id="btn-privacy-add-current" type="button" class="py-2.5 bg-sky-500 hover:bg-sky-400 active:bg-sky-600 text-black font-mono text-xs font-bold rounded-xl shadow transition-all active:scale-95">現在地で登録</button>
+                <button id="btn-privacy-add-map" type="button" class="py-2.5 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 border border-zinc-700 text-zinc-100 font-mono text-xs font-bold rounded-xl shadow transition-all active:scale-95">地図タップで登録</button>
+            </div>
+
+            <div class="space-y-1.5">
+                <div class="text-[11px] font-bold text-zinc-300">登録済み</div>
+                <div id="privacy-zone-list" class="space-y-1.5"></div>
+                <p id="privacy-zone-empty" class="text-[10px] text-zinc-500">まだ登録はありません（最大5個まで無料）</p>
+            </div>
+
+            <button id="btn-close-privacy" class="w-full py-2.5 bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-700 border border-zinc-800 text-zinc-400 font-mono text-xs font-bold rounded-xl shadow transition-all active:scale-95 shrink-0">閉じる</button>
         </div>
     </div>
 
@@ -1054,12 +1126,15 @@
     <script src="iap.js?v=20261115v50"></script>
     <script src="stats.js?v=20261115v53"></script>
     <script src="supabase.js?v=20261114v35"></script>
-    <script src="grid.js?v=20261114v38"></script>
+    <script src="grid.js?v=20261116v39"></script>
     <script src="outbox.js?v=20261114v36"></script>
+    <script src="privacy.js?v=20261116v1"></script>
+    <script src="notifications.js?v=20261116v1"></script>
+    <script src="watch-bridge.js?v=20261116v1"></script>
     <!-- Main Application Logic -->
     <script src="startup-gate.js?v=20261114v41"></script>
     <script src="permission.js?v=20261115v47"></script>
     <script src="debug-tools.js?v=20261114v39"></script>
-    <script src="app.js?v=20261115v55"></script>
+    <script src="app.js?v=20261116v56"></script>
 </body>
 </html>

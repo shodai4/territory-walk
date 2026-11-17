@@ -4,8 +4,10 @@
  */
 
 const CONFIG = {
-    DEFAULT_CENTER: [35.658034, 139.701636], // 渋谷（渋谷駅周辺）— 起動時の初期表示位置
+    DEFAULT_CENTER: [35.658034, 139.701636], // 渋谷（フォールバック座標。前回の現在地が無い初回起動で使う）
     DEFAULT_ZOOM: 17,
+    // 前回の現在地が無い初回起動の初期倍率（日本全体が見える広域表示で測位を待つ）
+    WIDE_ZOOM: 5,
     MIN_ZOOM: 2,
     MAX_ZOOM: 20,
     // 広域表示（低ズーム）時のDB取得・描画を抑制するしきい値
@@ -43,10 +45,19 @@ class TerritoryWalkApp {
         this.proManager = null;
         this.posterGenerator = null;
 
+        // v1.1: 非表示ピン / 月曜の結果通知 / Apple Watch 連携（未定義の環境では null のまま）
+        this.privacyZones = null;
+        this.weeklyNotifier = null;
+        this.watchBridge = null;
+
         this.userMarker = null;
         this.watchId = null;
         this.currentMeshId = null;
         this.virtualPos = [...CONFIG.DEFAULT_CENTER];
+        // v1.1: 前回の現在地が保存されているなら、そちらを初期位置にする。
+        // （毎回渋谷から始まらない。初回だけは渋谷を広域表示のフォールバックに使う）
+        this.savedPosition = this.loadSavedPosition();
+        if (this.savedPosition) this.virtualPos = [...this.savedPosition];
         // 実GPSの最新座標（デバッグの仮想散歩を終えたときに戻す先）
         this.lastRealPosition = null;
         // デバッグの白紙リセット直後の再マージ防止（grid.js が参照）
@@ -98,10 +109,12 @@ class TerritoryWalkApp {
         this.initDOM();
         this.initMap();
         this.initGrid();
+        this.initPrivacyZones();
         this.initSkinSelector();
         this.initMapThemeSelector();
         this.initStatsModal();
         this.initWeeklyResultModal();
+        this.initWeeklyResultNotifier();
         this.initProModal();
         this.initExportButton();
         // 初回起動はルール説明の「ゲームをはじめる」まで位置情報・ATTの許可要求を待たせる
@@ -196,6 +209,7 @@ class TerritoryWalkApp {
         const modalIds = [
             'shop-modal',
             'menu-modal',
+            'privacy-modal',
             'rules-modal',
             'stats-modal',
             'weekly-result-modal',
@@ -217,6 +231,7 @@ class TerritoryWalkApp {
         const modalIds = [
             'shop-modal',
             'menu-modal',
+            'privacy-modal',
             'rules-modal',
             'stats-modal',
             'weekly-result-modal',
@@ -499,10 +514,13 @@ class TerritoryWalkApp {
         // 対戦バー上部の「YOU」インジケーターを左上に完全固定 ＆ 対戦バーの自陣営「左側」固定
         const youIndicator = document.getElementById('you-indicator');
         const barContainer = document.getElementById('battle-bar-container');
+        // v1.1: PRO SUPPORTER は2段目の右端（MENU の下の空き）へ右寄せで置く。
+        //       非表示のときも YOU が左端に残るよう、別の入れ物に入れる。
+        const proBadgeSlot = document.getElementById('pro-badge-slot');
 
         if (this.currentTeam === 'white') {
             if (youIndicator) {
-                youIndicator.innerHTML = `${supporterBadge}<span class="px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/50 text-[9px] tracking-wider font-mono">YOU (白陣営)</span>`;
+                youIndicator.innerHTML = `<span class="px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/50 text-[9px] tracking-wider font-mono">YOU (白陣営)</span>`;
             }
             if (barContainer) {
                 barContainer.className = 'w-full h-7 bg-zinc-950 rounded-xl overflow-hidden flex flex-row-reverse border border-zinc-700 shadow-inner relative';
@@ -516,7 +534,7 @@ class TerritoryWalkApp {
             if (this.menuTeamText) this.menuTeamText.textContent = 'White Team';
         } else {
             if (youIndicator) {
-                youIndicator.innerHTML = `${supporterBadge}<span class="px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/50 text-[9px] tracking-wider font-mono">YOU (黒陣営)</span>`;
+                youIndicator.innerHTML = `<span class="px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/50 text-[9px] tracking-wider font-mono">YOU (黒陣営)</span>`;
             }
             if (barContainer) {
                 barContainer.className = 'w-full h-7 bg-zinc-950 rounded-xl overflow-hidden flex flex-row border border-zinc-700 shadow-inner relative';
@@ -528,6 +546,10 @@ class TerritoryWalkApp {
                 this.barWhiteEl.className = 'bg-white transition-all duration-500 flex items-center justify-center overflow-hidden shrink-0';
             }
             if (this.menuTeamText) this.menuTeamText.textContent = 'Black Team';
+        }
+
+        if (proBadgeSlot) {
+            proBadgeSlot.innerHTML = supporterBadge;
         }
 
         if (this.teamBadgeContainer) {
@@ -560,9 +582,12 @@ class TerritoryWalkApp {
     }
 
     initMap() {
+        // 前回の現在地があればそこを中心に開く。無ければ広域表示で測位を待つ。
+        const startCenter = this.savedPosition || CONFIG.DEFAULT_CENTER;
+        const startZoom = this.savedPosition ? CONFIG.DEFAULT_ZOOM : CONFIG.WIDE_ZOOM;
         this.map = L.map('map', {
-            center: CONFIG.DEFAULT_CENTER,
-            zoom: CONFIG.DEFAULT_ZOOM,
+            center: startCenter,
+            zoom: startZoom,
             minZoom: CONFIG.MIN_ZOOM,
             maxZoom: CONFIG.MAX_ZOOM,
             zoomControl: false,
@@ -593,7 +618,14 @@ class TerritoryWalkApp {
         }
 
         this.updateMapVisibilityUI();
-        this.updatePlayerMarker(CONFIG.DEFAULT_CENTER);
+        if (this.savedPosition) {
+            // 前回の現在地にピン（測位が取れたら handlePositionUpdate が更新する）
+            this.updatePlayerMarker(this.savedPosition);
+        } else {
+            // 初回起動: 渋谷に自分のピンを刺さず、測位が取れてから現在地へ飛ぶ
+            this.updatePlayerMarker(CONFIG.DEFAULT_CENTER);
+            this.hidePlayerMarker();
+        }
 
         // Sync tiles on map pan/zoom
         this.map.on('moveend', () => {
@@ -607,6 +639,63 @@ class TerritoryWalkApp {
             this.loadRemoteTiles();
         } else {
             console.warn('GridManager is not defined.');
+        }
+    }
+
+    /**
+     * v1.1: 非表示ピン（プライバシーゾーン）。
+     * 端末内（localStorage）だけで完結し、サーバーには何も送らない。
+     */
+    initPrivacyZones() {
+        if (typeof PrivacyZoneManager === 'undefined') return;
+        try {
+            this.privacyZones = new PrivacyZoneManager(this);
+            this.privacyZones.initUI();
+            this.renderPrivacySummary();
+        } catch (e) {
+            console.warn('Failed to initialize privacy zones:', e);
+            this.privacyZones = null;
+        }
+    }
+
+    /** メニュー内の「非表示ピン」の件数表示 */
+    renderPrivacySummary() {
+        const el = document.getElementById('privacy-summary-text');
+        if (!el || !this.privacyZones) return;
+        const count = this.privacyZones.getZones().length;
+        el.textContent = count > 0 ? `${count}件登録中（端末内のみ）` : '未登録';
+    }
+
+    /** 地図タップで中心を指定するときに、開いている画面を閉じる */
+    closeModalsForPrivacyPick() {
+        ['menu-modal', 'privacy-modal'].forEach((id) => {
+            const el = document.getElementById(id);
+            if (el) el.classList.add('hidden');
+        });
+    }
+
+    /** v1.1: 月曜リセット後の結果発表を、音を出さずに知らせるローカル通知 */
+    initWeeklyResultNotifier() {
+        if (typeof WeeklyResultNotifier === 'undefined') return;
+        try {
+            this.weeklyNotifier = new WeeklyResultNotifier(this);
+            this.weeklyNotifier.bindUI();
+            this.weeklyNotifier.renderUI();
+        } catch (e) {
+            console.warn('Failed to initialize weekly notifier:', e);
+            this.weeklyNotifier = null;
+        }
+    }
+
+    /** v1.1: Apple Watch（コンパニオン）への状態送出。プラグインが無い環境では何もしない */
+    initWatchBridge() {
+        if (this.watchBridge || typeof WatchBridgeClient === 'undefined') return;
+        try {
+            this.watchBridge = new WatchBridgeClient(this);
+            this.watchBridge.init();
+        } catch (e) {
+            console.warn('Failed to initialize watch bridge:', e);
+            this.watchBridge = null;
         }
     }
 
@@ -1468,6 +1557,96 @@ class TerritoryWalkApp {
         this.updateGPSStatus('GPS: 測位中', 'bg-emerald-400', 'text-emerald-400');
     }
 
+    /**
+     * 「現在地」ボタン（v1.1）。
+     * 以前は virtualPos を setView するだけだったため、virtualPos がまだフォールバック
+     * （渋谷）のままだと「押しても渋谷のまま」になっていた。
+     * 今は必ず GPS を取り直し、その結果へ地図とピンを移す。
+     */
+    recenterToCurrentPosition() {
+        if (this.searchManager) {
+            this.searchManager.clearSearchMarker();
+            this.searchManager.closeSearchBar();
+        }
+
+        // デバッグの仮想散歩中は仮想座標が正（GPSで取り消さない）
+        if (this.isVirtualWalkActive()) {
+            this.moveToCurrentPositionView(this.virtualPos);
+            this.showToast('仮想散歩中の位置に戻りました');
+            return;
+        }
+
+        // すでに分かっている位置があれば先に寄せる（測位を待たせない）
+        const known = this.lastRealPosition || this.savedPosition || null;
+        if (known) this.moveToCurrentPositionView(known);
+
+        // その上で必ず測位を取り直す（押すたびに最新の現在地へ）
+        this.requestFreshPosition()
+            .then((pos) => {
+                if (!pos) return;
+                this.moveToCurrentPositionView(pos);
+                this.showToast('現在地に戻りました');
+            })
+            .catch(() => {
+                if (known) {
+                    this.showToast('最新の現在地を取得できませんでした', '最後に分かっている位置に戻しました');
+                } else {
+                    this.showToast('現在地を取得できませんでした', '位置情報の許可をご確認ください');
+                }
+            });
+    }
+
+    /** 地図・ピンを指定座標へ移す（現在地ボタン用。倍率は通常表示） */
+    moveToCurrentPositionView(pos) {
+        if (!pos) return;
+        const lat = Number(pos[0]);
+        const lng = Number(pos[1]);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+        const center = [lat, lng];
+        this.virtualPos = [...center];
+        this.updatePlayerMarker(center);
+        if (this.map) this.map.setView(center, CONFIG.DEFAULT_ZOOM, { animate: true });
+    }
+
+    /**
+     * 最新の現在地を1回だけ取得する（現在地ボタン用）。
+     * ネイティブの Geolocation プラグイン → Web の getCurrentPosition の順。
+     * @returns {Promise<[number, number]|null>}
+     */
+    requestFreshPosition() {
+        const options = { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 };
+
+        const toLatLng = (position) => {
+            if (!position || !position.coords) return null;
+            this.handlePositionUpdate(position, false);
+            const lat = Number(position.coords.latitude);
+            const lng = Number(position.coords.longitude);
+            if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+            return [lat, lng];
+        };
+
+        return new Promise((resolve, reject) => {
+            const nativeGeo = this.getNativeGeolocation();
+            if (nativeGeo) {
+                Promise.resolve(nativeGeo.getCurrentPosition(options))
+                    .then((position) => resolve(toLatLng(position)))
+                    .catch(reject);
+                return;
+            }
+
+            if (typeof navigator === 'undefined' || !navigator.geolocation) {
+                reject(new Error('geolocation unavailable'));
+                return;
+            }
+
+            navigator.geolocation.getCurrentPosition(
+                (position) => resolve(toLatLng(position)),
+                (error) => reject(error),
+                options
+            );
+        });
+    }
+
     /** D-Pad 下部の状態表示（塗れたマス・送信待ち件数） */
     updateDpadStatus(text) {
         this.dpadStatusText = text;
@@ -1650,6 +1829,12 @@ class TerritoryWalkApp {
         if (this.adMobManager && typeof this.adMobManager.init === 'function') {
             this.adMobManager.init();
         }
+
+        // 歩き始めてから Watch 連携と通知の予約を始める（起動直後の許可要求を増やさない）
+        this.initWatchBridge();
+        if (this.weeklyNotifier && typeof this.weeklyNotifier.init === 'function') {
+            Promise.resolve(this.weeklyNotifier.init()).catch(() => {});
+        }
         return true;
     }
 
@@ -1659,6 +1844,7 @@ class TerritoryWalkApp {
         const openModal = () => {
             this.menuModal.classList.remove('hidden');
             this.updateAutoBalanceUI();
+            this.renderPrivacySummary();
             this.resetViewportScroll();
         };
 
@@ -1996,6 +2182,19 @@ class TerritoryWalkApp {
     }
 
     /**
+     * Watch（コンパニオン）へ状態を知らせる。
+     * 未定義・プラグイン未登録・Watch未ペアリングのいずれでも黙って何もしない。
+     */
+    notifyWatchState(reason) {
+        if (!this.watchBridge) return;
+        try {
+            this.watchBridge.onStateChanged(reason);
+        } catch (e) {
+            console.warn('[Watch] state push failed:', e);
+        }
+    }
+
+    /**
      * ON / OFF を確定する。
      * @param {boolean} paused true で停止、false で再開
      * @param {{ silent?: boolean, source?: string }} options
@@ -2023,6 +2222,8 @@ class TerritoryWalkApp {
         }
 
         this.renderMarkingPauseUI();
+        // WatchのON/OFF表示を合わせる（Watch側の操作で変わった場合もここで同期）
+        this.notifyWatchState('marking');
 
         if (changed && options.silent !== true) {
             this.showToast(next ? 'マーキングを一時停止しました' : 'マーキングを再開しました');
@@ -2234,6 +2435,8 @@ class TerritoryWalkApp {
         const longitude = parseFloat(rawLng.toFixed(5));
         // 実GPSの最新座標は常に保持（デバッグ終了時にここへ戻す）
         this.lastRealPosition = [latitude, longitude];
+        // 次回起動の初期表示用に端末へ保存（サーバー送信なし）
+        this.saveLastPosition(latitude, longitude);
 
         // デバッグの仮想散歩中は、実GPSで仮想座標・マーカー・塗りを上書きしない。
         // ここで return しないと D-Pad の1歩が数秒で実際の位置に戻ってしまい、
@@ -2355,6 +2558,48 @@ class TerritoryWalkApp {
         }
     }
 
+    /**
+     * プレイヤーピンを地図から外す（v1.1: 初回起動で渋谷にピンを残さないため）。
+     * 次の updatePlayerMarker で作り直される。
+     */
+    hidePlayerMarker() {
+        if (this.userMarker && this.map && typeof this.userMarker.remove === 'function') {
+            this.userMarker.remove();
+        }
+        this.userMarker = null;
+    }
+
+    // ---------------------------------------------------------------
+    // 前回の現在地（v1.1）
+    //   初期表示を渋谷固定から「前回いた場所」に変える。保存は端末内のみで、
+    //   サーバーには送らない（非表示ピンと同じくプライバシー設計に沿う）。
+    // ---------------------------------------------------------------
+
+    /** 保存済みの現在地を読む（無い・壊れている・範囲外なら null） */
+    loadSavedPosition() {
+        try {
+            const raw = localStorage.getItem('tw_last_position');
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            const lat = Number(parsed && parsed.lat);
+            const lng = Number(parsed && parsed.lng);
+            if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+            if (lat < -85 || lat > 85 || lng < -180 || lng > 180) return null;
+            return [lat, lng];
+        } catch (e) {
+            return null;
+        }
+    }
+
+    /** 実GPSの座標を端末に保存する（次回起動の初期表示に使う） */
+    saveLastPosition(lat, lng) {
+        try {
+            localStorage.setItem('tw_last_position', JSON.stringify({ lat, lng, at: Date.now() }));
+        } catch (e) {
+            /* 保存できないだけで、測位・塗りには影響しない */
+        }
+    }
+
     async processMeshAndClaim(lat, lng, options = {}) {
         if (!this.gridManager) return { changed: false, meshId: null };
 
@@ -2368,6 +2613,25 @@ class TerritoryWalkApp {
 
         const { meshId, latIdx, lngIdx } = this.gridManager.getMeshIdFromLatLng(lat, lng);
         const cachedTeam = this.gridManager.claimedTilesCache.get(meshId);
+
+        // 【v1.1 非表示ピン】区域の中は「塗らない・送らない・数えない」（設置した本人の画面でも同じ）。
+        // 他人の画面でも初期配置のままなので、区域の存在や住まいの位置は見えない。
+        const privacyZone = (this.privacyZones && typeof this.gridManager.getPrivacyZone === 'function')
+            ? this.gridManager.getPrivacyZone(latIdx, lngIdx)
+            : null;
+        if (privacyZone) {
+            this.lastPrivacyBlockAt = Date.now();
+            return {
+                changed: false,
+                meshId,
+                latIdx,
+                lngIdx,
+                blocked: true,
+                reason: 'privacy-zone',
+                team: cachedTeam || null,
+                isReclaimed: false
+            };
+        }
 
         if (this.currentMeshId === meshId && cachedTeam === this.currentTeam) {
             // すでに現在地かつ自陣：塗り直しも送信もしない
@@ -2387,19 +2651,22 @@ class TerritoryWalkApp {
             // 1. Immediate local UI update
             this.gridManager.claimedTilesCache.set(meshId, this.currentTeam);
             this.gridManager.saveTilesToStorage();
+            // 自分が今週踏んだマス（自分の画面だけの枠線用・サーバーには送らない）
+            if (typeof this.gridManager.recordFootprint === 'function') {
+                this.gridManager.recordFootprint(meshId);
+            }
 
             if (!this.isAppInBackground) {
-                if (this.gridManager.renderedMeshes.has(meshId)) {
-                    this.gridManager.renderedMeshes.get(meshId).setStyle(this.gridManager.getTileStyle(this.currentTeam));
-                } else {
-                    this.gridManager.renderSingleTile(meshId, latIdx, lngIdx, this.currentTeam);
-                }
+                this.gridManager.renderSingleTile(meshId, latIdx, lngIdx);
                 this.updateScoreUI();
                 this.playClaimSound();
                 this.triggerHaptic();
             } else {
                 this.updateScoreUI();
             }
+
+            // Watch（コンパニオン）へ今の状態を送る。プラグイン未登録なら何もしない
+            this.notifyWatchState('claim');
 
             // 2. Stats logging
             if (this.statsManager) {
@@ -2631,14 +2898,7 @@ class TerritoryWalkApp {
 
         if (this.btnRecenter) {
             this.btnRecenter.addEventListener('click', () => {
-                if (this.map && this.virtualPos) {
-                    this.map.setView(this.virtualPos, CONFIG.DEFAULT_ZOOM, { animate: true });
-                    if (this.searchManager) {
-                        this.searchManager.clearSearchMarker();
-                        this.searchManager.closeSearchBar();
-                    }
-                    this.showToast('現在地に戻りました');
-                }
+                this.recenterToCurrentPosition();
             });
         }
 

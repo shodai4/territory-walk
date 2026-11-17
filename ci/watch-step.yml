@@ -1,0 +1,20 @@
+# Apple Watch（コンパニオン）を CI のビルドに組み込むステップ
+#
+# 挿入位置: 「Verify iOS Project Pods / Workspace」（pod install を含む）の直後、
+#           「Compile & Verify iOS Build (Clean Build)」の前。
+#           理由: pod install は App ターゲットの build phase を触るため、
+#                 Watch ターゲット追加は pod install の後に実行する。
+#
+# 挿入は scripts/apply-watch-workflow-step.js が行う（冪等）。
+#   node scripts/apply-watch-workflow-step.js
+#
+# このステップはリポジトリ変数 ENABLE_WATCH_TARGET が true のときだけ走る。
+# 変数が無い / false のあいだは、従来どおり iOS 単体でクリーンビルド＆配信する。
+# Watch 用 Bundle ID（com.oekaki.territorywalk.watchkitapp）を ASC に登録したあとに
+# 変数を true にすること（未登録のままアップロードまで進むと署名・検証で落ちる）。
+#
+# 実処理は ci/watch-setup.sh に置く（ワークフロー側は3行だけに保つ）。
+
+      - name: "Add watchOS companion target (optional, vars.ENABLE_WATCH_TARGET=true)"
+        if: vars.ENABLE_WATCH_TARGET == 'true'
+        run: bash ci/watch-setup.sh

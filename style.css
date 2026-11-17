@@ -660,3 +660,122 @@ body[data-skin="neon"] #btn-marking-toggle {
 body[data-skin="gold"] #btn-marking-toggle {
     border-color: rgba(234, 179, 8, 0.6) !important;
 }
+
+/* ------------------------------------------------------------------ *
+ * v1.1 非表示ピン（プライバシーゾーン）
+ * ------------------------------------------------------------------ */
+.privacy-zone-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.5rem 0.625rem;
+    background: #09090b;
+    border: 1px solid #27272a;
+    border-radius: 0.625rem;
+}
+
+.privacy-zone-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    min-width: 0;
+}
+
+.privacy-zone-name {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+    font-weight: 700;
+    color: #e4e4e7;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.privacy-zone-meta {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 9px;
+    color: #a1a1aa;
+    white-space: nowrap;
+}
+
+.privacy-zone-delete {
+    flex-shrink: 0;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.5rem;
+    border: 1px solid #7f1d1d;
+    background: rgba(127, 29, 29, 0.35);
+    color: #fca5a5;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 10px;
+    font-weight: 700;
+    transition: transform 0.1s ease;
+}
+
+.privacy-zone-delete:active {
+    transform: scale(0.95);
+}
+
+/* 半径・名前の選択状態（JS が privacy-selected を付ける） */
+[data-privacy-radius].privacy-selected {
+    border-color: #38bdf8 !important;
+    background: rgba(14, 165, 233, 0.18) !important;
+    color: #e0f2fe !important;
+}
+
+/* ==========================================================================
+   ドキュメントページ（利用規約 / プライバシーポリシー / サポート）の縦スクロール
+
+   冒頭の「html, body { overflow: hidden !important; position: fixed; }」は
+   マップ画面（index.html）を全画面に固定するためのルール。同じ style.css を
+   読み込んでいる法的ページ3枚では、そのままだと本文が画面からはみ出しても
+   スクロールできなかった（v1.0 実機報告のバグ）。
+
+   そこで3枚の <html> にだけ class="doc-scroll" を付け、このルールで固定を解除する。
+   index.html は無変更なので、マップ画面の全画面固定・操作は従来どおり。
+   iOS のセーフエリアは body の上下 padding で確保する（Web では env() が 0px）。
+   ========================================================================== */
+html.doc-scroll {
+    position: static !important;
+    top: auto !important;
+    left: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    min-height: 100% !important;
+    overflow: visible !important;
+    overscroll-behavior: auto !important;
+}
+
+html.doc-scroll body {
+    position: static !important;
+    top: auto !important;
+    left: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    min-height: 100vh !important;
+    overflow-x: hidden !important;
+    overflow-y: visible !important;
+    overscroll-behavior: auto !important;
+    -webkit-overflow-scrolling: touch;
+    -webkit-user-select: auto;
+    user-select: auto;
+}
+
+/* セーフエリア（Dynamic Island・ホームバー）の上下余白を保つ */
+html.doc-scroll body {
+    padding-top: calc(env(safe-area-inset-top, 0px) + 1rem) !important;
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem) !important;
+}
+
+@media (min-width: 640px) {
+    html.doc-scroll body {
+        padding-top: calc(env(safe-area-inset-top, 0px) + 2rem) !important;
+        padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 2rem) !important;
+    }
+}

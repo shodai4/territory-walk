@@ -149,8 +149,10 @@ test('初期位置: デバッグ機能のマスタースイッチは提出ビル
  * ------------------------------------------------------------------ */
 test('初期表示: 地図 center・プレイヤーマーカー・D-Pad出発点がすべて DEFAULT_CENTER を参照', () => {
     assert.match(APP_SOURCE, /DEFAULT_CENTER:\s*\[/, 'CONFIG に DEFAULT_CENTER がある');
-    assert.match(APP_SOURCE, /center:\s*CONFIG\.DEFAULT_CENTER/, 'L.map の center に使う');
-    assert.match(APP_SOURCE, /updatePlayerMarker\(CONFIG\.DEFAULT_CENTER\)/, '初期マーカー位置に使う');
+    assert.match(APP_SOURCE, /const startCenter = this\.savedPosition \|\| CONFIG\.DEFAULT_CENTER/,
+        'v1.1: 前回の現在地を優先し、無いときだけ DEFAULT_CENTER（渋谷）にフォールバックする');
+    assert.match(APP_SOURCE, /center:\s*startCenter/, 'L.map の center に使う');
+    assert.match(APP_SOURCE, /updatePlayerMarker\(CONFIG\.DEFAULT_CENTER\)/, '初期マーカーのフォールバックに使う');
     assert.match(APP_SOURCE, /this\.virtualPos\s*=\s*\[\.\.\.CONFIG\.DEFAULT_CENTER\]/, 'D-Pad の出発点に使う');
 });
 

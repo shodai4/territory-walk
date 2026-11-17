@@ -63,15 +63,13 @@ test('文言: 動かない外部決済ボタン（Stripe等）を残していな
     assert.doesNotMatch(html, /Stripe/i, 'App Store ではデジタル商品を外部決済で販売できない（3.1.1）');
 });
 
-test('文言: サポーターコードの実例を画面に出していない', () => {
+test('文言: サポーターコードの実例を画面にもソースにも置いていない', () => {
     const html = read('index.html');
     const proSource = read('pro.js');
-    const codes = [...proSource.matchAll(/VALID_CODES\s*=\s*\[([^\]]*)\]/g)]
-        .flatMap((m) => m[1].split(',').map((s) => s.trim().replace(/^['"]|['"]$/g, '')))
-        .filter(Boolean);
-    codes.forEach((code) => {
-        assert.ok(!html.includes(code), `有効なコード「${code}」が index.html に出ている`);
-    });
+    // v1.1: 有効コードは Supabase の RPC だけが知る（アプリに埋め込まない）
+    assert.doesNotMatch(proSource, /VALID_CODES/, '固定コードの配列を残さない');
+    assert.doesNotMatch(proSource, /TW-[A-Z0-9]{4}-[A-Z0-9]{4}/, 'コードの実例を書かない');
+    assert.doesNotMatch(html, /TW-[A-Z0-9]{4}-[A-Z0-9]{4}/, '画面にコードの実例を出さない');
 });
 
 /* ------------------------------------------------------------------ *
