@@ -147,6 +147,12 @@ class TerritoryWalkApp {
         }
 
         this.initToastSystem();
+        // iOS Keychain から匿名IDを復元した場合は一度だけ知らせる
+        if (typeof window !== 'undefined' && window.__twIdentityBootstrap && window.__twIdentityBootstrap.restored) {
+            setTimeout(() => {
+                this.showToast('前回のデータを復元しました', 'アプリを削除しても同じユーザーIDで続けられます');
+            }, 1600);
+        }
         this.initTeam();
         this.initDOM();
         this.initMap();
@@ -448,18 +454,103 @@ class TerritoryWalkApp {
     async initTeam() {
         let savedTeam = localStorage.getItem('player_team');
         if (!savedTeam || (savedTeam !== 'white' && savedTeam !== 'black')) {
-            const urlParams = new URLSearchParams(window.location.search);
-            const teamParam = urlParams.get('team');
-            if (teamParam === 'white' || teamParam === 'black') {
-                savedTeam = teamParam;
-            } else {
-                savedTeam = Math.random() < 0.5 ? 'white' : 'black';
-            }
+            // 初回起動（新規ユーザー）: 人数の少ないチームへ自動配属。
+            // 同数・オフライン・集計失敗は 50% ランダムにフォールバックする。
+            savedTeam = await this.decideInitialTeam();
             localStorage.setItem('player_team', savedTeam);
         }
         this.currentTeam = savedTeam;
         this.applyTheme();
         this.updateTeamStatusUI();
+        // チーム決定画面が既に開いている場合（初回起動で通信を待たずに進んだ場合）は描き直す
+        if (this.teamDecisionModalShown && this.teamDecisionModal) {
+            this.showTeamDecisionModal();
+        }
+        // 匿名ID・チームを Keychain（Web は localStorage）へ控える
+        this.persistIdentity();
+        // 初回起動でも territory_users に行を作り、引き継ぎコードを登録できるようにする
+        if (this.statsManager && typeof this.statsManager.syncUserProfileImmediate === 'function') {
+            Promise.resolve(this.statsManager.syncUserProfileImmediate()).catch(() => {});
+        }
+    }
+
+    /**
+     * 初回起動時のチーム決定。
+     *   1. URL の ?team=black|white を優先（デバッグ・共有リンク）
+     *   2. territory_users の黒・白の人数を比べ、少ない方へ配属
+     *   3. 同数・オフライン・集計失敗は 50% ランダム
+     * @returns {Promise<'black'|'white'>}
+     */
+    async decideInitialTeam() {
+        this.teamAssignedByBalance = false;
+
+        try {
+            const urlParams = new URLSearchParams(window.location.search);
+            const teamParam = urlParams.get('team');
+            if (teamParam === 'white' || teamParam === 'black') return teamParam;
+        } catch (e) { /* URL が読めない環境では無視 */ }
+
+        try {
+            const counts = this.supabaseManager && typeof this.supabaseManager.fetchUserTeamCounts === 'function'
+                ? await this.supabaseManager.fetchUserTeamCounts()
+                : null;
+            const balanced = typeof chooseBalancedTeam === 'function'
+                ? chooseBalancedTeam(counts)
+                : TerritoryWalkApp.chooseBalancedTeam(counts);
+            if (balanced === 'black' || balanced === 'white') {
+                this.teamAssignedByBalance = true;
+                this.teamBalanceCounts = counts;
+                return balanced;
+            }
+        } catch (e) {
+            console.warn('[Team] Balanced assignment skipped:', e);
+        }
+
+        return Math.random() < 0.5 ? 'white' : 'black';
+    }
+
+    /** 人数の少ないチームを選ぶ（supabase.js 未読込時のための同内容フォールバック） */
+    static chooseBalancedTeam(counts) {
+        if (!counts || typeof counts !== 'object') return null;
+        const black = Number(counts.black);
+        const white = Number(counts.white);
+        if (!Number.isFinite(black) || !Number.isFinite(white) || black < 0 || white < 0) return null;
+        if (black === white) return null;
+        return black < white ? 'black' : 'white';
+    }
+
+    /** identity.js 未読込でも落ちないようにするためのストレージキー定義 */
+    static identityKeys() {
+        if (typeof TW_IDENTITY_STORAGE_KEYS !== 'undefined' && TW_IDENTITY_STORAGE_KEYS) {
+            return TW_IDENTITY_STORAGE_KEYS;
+        }
+        return {
+            userId: 'tw_user_id',
+            team: 'player_team',
+            nickname: 'tw_nickname',
+            transferCode: 'tw_transfer_code'
+        };
+    }
+
+    /**
+     * 匿名ID・チーム・表示名・引き継ぎコードを Keychain（Web は localStorage）へ保存する。
+     * 失敗してもゲーム進行は止めない。
+     */
+    persistIdentity() {
+        if (typeof TWIdentity === 'undefined' || !TWIdentity || typeof TWIdentity.persistCurrent !== 'function') return;
+        try {
+            const storage = (typeof localStorage !== 'undefined') ? localStorage : null;
+            TWIdentity.persistCurrent({
+                userId: this.statsManager ? this.statsManager.userId : (storage ? storage.getItem('tw_user_id') : null),
+                team: this.currentTeam,
+                nickname: storage ? storage.getItem('tw_nickname') : null,
+                transferCode: this.statsManager && typeof this.statsManager.getOrCreateTransferCode === 'function'
+                    ? this.statsManager.getOrCreateTransferCode()
+                    : (storage ? storage.getItem('tw_transfer_code') : null)
+            });
+        } catch (e) {
+            console.warn('[Identity] persist skipped:', e);
+        }
     }
 
     isUnderdogTeam() {
@@ -545,6 +636,8 @@ class TerritoryWalkApp {
         this.initRulesModal();
         this.initTeamDecisionModal();
         this.initMenuModal();
+        // 引き継ぎコード（機種変更・再インストール対策）の表示と入力
+        this.initTransferCodeUI();
         // マーキング ON/OFF トグル（前回状態の復元 → UI反映 → 操作の配線）
         this.initMarkingToggle();
     }
@@ -1916,6 +2009,7 @@ class TerritoryWalkApp {
     /** 決定した陣営（Black / White）を描き込んでチーム決定画面を開く */
     showTeamDecisionModal() {
         const isWhite = this.currentTeam === 'white';
+        this.teamDecisionModalShown = true;
 
         if (this.teamDecisionBadge) {
             this.teamDecisionBadge.className = isWhite
@@ -1947,6 +2041,7 @@ class TerritoryWalkApp {
      * チーム決定画面の「ゲーム開始」。既読を確定し、位置情報と AdMob/ATT を開始する。
      */
     confirmTeamDecision() {
+        this.teamDecisionModalShown = false;
         if (this.teamDecisionModal) {
             this.teamDecisionModal.classList.add('hidden');
             this.resetViewportScroll();
@@ -2019,6 +2114,7 @@ class TerritoryWalkApp {
             this.menuModal.classList.remove('hidden');
             this.updateAutoBalanceUI();
             this.renderPrivacySummary();
+            this.refreshTransferCodeUI();
             this.resetViewportScroll();
         };
 
@@ -2049,6 +2145,212 @@ class TerritoryWalkApp {
         if (this.btnToggleDebug) {
             this.btnToggleDebug.addEventListener('click', () => this.toggleDebugMode());
         }
+    }
+
+    /* ------------------------------------------------------------------ *
+     * 引き継ぎコード（機種変更・再インストール対策）
+     *   MENU の中の「引き継ぎコード」セクションを配線する。
+     *   自分のコードの表示・コピーと、他端末から引き継ぐためのコード入力。
+     * ------------------------------------------------------------------ */
+
+    initTransferCodeUI() {
+        this.transferCodeDisplay = document.getElementById('display-my-transfer-code');
+        this.transferCodeStatus = document.getElementById('transfer-code-status');
+        this.transferCodeInput = document.getElementById('input-transfer-code');
+        this.btnCopyTransferCode = document.getElementById('btn-copy-my-transfer-code');
+        this.btnApplyTransferCode = document.getElementById('btn-apply-transfer-code');
+
+        if (this.btnCopyTransferCode) {
+            this.btnCopyTransferCode.addEventListener('click', () => this.copyTransferCode());
+        }
+        if (this.btnApplyTransferCode) {
+            this.btnApplyTransferCode.addEventListener('click', () => this.handleTransferCodeApply());
+        }
+        if (this.transferCodeInput) {
+            this.transferCodeInput.addEventListener('keydown', (event) => {
+                if (event && event.key === 'Enter') {
+                    event.preventDefault();
+                    this.handleTransferCodeApply();
+                }
+            });
+        }
+
+        this.refreshTransferCodeUI();
+    }
+
+    /** 自分の引き継ぎコードを画面に出す（必要なら DB への同期も試す） */
+    refreshTransferCodeUI() {
+        if (!this.statsManager || typeof this.statsManager.getOrCreateTransferCode !== 'function') return;
+
+        const code = this.statsManager.getOrCreateTransferCode();
+        const display = this.transferCodeDisplay || document.getElementById('display-my-transfer-code');
+        if (display) {
+            display.textContent = (typeof TWIdentity !== 'undefined' && TWIdentity && typeof TWIdentity.formatCode === 'function')
+                ? TWIdentity.formatCode(code)
+                : code;
+        }
+
+        // 自分のコードをサーバーへ登録しておく（未登録だと別端末から引き継げない）
+        if (typeof this.statsManager.syncTransferCode === 'function') {
+            Promise.resolve(this.statsManager.syncTransferCode()).then((result) => {
+                this.updateTransferCodeStatus(result);
+            }).catch(() => {});
+        }
+    }
+
+    /** 引き継ぎコードの状態表示（サーバー登録済みか / SQL 未実行か） */
+    updateTransferCodeStatus(result) {
+        const status = this.transferCodeStatus || document.getElementById('transfer-code-status');
+        if (!status) return;
+
+        const reason = result && result.reason;
+        if (result && result.ok) {
+            status.textContent = 'このコードはサーバーに登録済みです。機種変更時にこのコードを新しい端末で入力してください。';
+            status.className = 'text-[10px] leading-snug text-zinc-500';
+            return;
+        }
+        if (reason === 'not_ready') {
+            status.textContent = '引き継ぎコードのサーバー登録がまだ有効になっていません（supabase/transfer_code.sql の実行待ち）。端末内のデータは保持されます。';
+            status.className = 'text-[10px] leading-snug text-amber-400';
+            return;
+        }
+        if (reason === 'offline') {
+            status.textContent = 'オフラインのため、コードのサーバー登録は通信回復後に自動で行われます。';
+            status.className = 'text-[10px] leading-snug text-zinc-500';
+            return;
+        }
+        if (reason === 'no_row') {
+            status.textContent = '初回のプレイ（オンライン）後にコードがサーバーへ登録されます。';
+            status.className = 'text-[10px] leading-snug text-zinc-500';
+            return;
+        }
+        status.textContent = 'コードのサーバー登録を確認できませんでした。通信状況をご確認ください。';
+        status.className = 'text-[10px] leading-snug text-zinc-500';
+    }
+
+    /** 自分の引き継ぎコードをクリップボードへコピー */
+    copyTransferCode() {
+        if (!this.statsManager) return;
+        const code = (typeof TWIdentity !== 'undefined' && TWIdentity && typeof TWIdentity.formatCode === 'function')
+            ? TWIdentity.formatCode(this.statsManager.getOrCreateTransferCode())
+            : this.statsManager.getOrCreateTransferCode();
+
+        const done = () => {
+            if (this.showToast) this.showToast(`引き継ぎコード [${code}] をコピーしました`);
+        };
+
+        if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(code).then(done).catch(() => {
+                try { prompt('引き継ぎコードをコピーしてください:', code); } catch (e) { /* ignore */ }
+            });
+            return;
+        }
+        try { prompt('引き継ぎコードをコピーしてください:', code); } catch (e) { /* ignore */ }
+    }
+
+    /** 入力欄のコードを読み取って引き継ぎを実行する（UI 側の入口） */
+    async handleTransferCodeApply() {
+        const input = this.transferCodeInput || document.getElementById('input-transfer-code');
+        const raw = input ? input.value : '';
+        if (this.btnApplyTransferCode) this.btnApplyTransferCode.disabled = true;
+
+        let message = '';
+        try {
+            const result = await this.applyTransferCode(raw);
+            message = result.message || '';
+            if (this.showToast) this.showToast(message, result.success ? 'アプリを再起動します' : null);
+            if (this.transferCodeStatus) {
+                this.transferCodeStatus.textContent = message;
+                this.transferCodeStatus.className = result.success
+                    ? 'text-[10px] leading-snug text-emerald-400'
+                    : 'text-[10px] leading-snug text-rose-400';
+            }
+        } finally {
+            if (this.btnApplyTransferCode) this.btnApplyTransferCode.disabled = false;
+        }
+        return message;
+    }
+
+    /**
+     * 引き継ぎコードを検証し、この端末を相手の匿名ID・チーム・戦績へ切り替える。
+     * @param {string} rawCode
+     * @returns {Promise<{success:boolean, message:string, reload?:boolean}>}
+     */
+    async applyTransferCode(rawCode) {
+        const normalize = (typeof TWIdentity !== 'undefined' && TWIdentity && typeof TWIdentity.normalizeCode === 'function')
+            ? TWIdentity.normalizeCode
+            : (value) => String(value == null ? '' : value).toUpperCase().replace(/[^A-Z0-9]/g, '');
+        const code = normalize(rawCode);
+
+        if (!code) return { success: false, message: '引き継ぎコードを入力してください' };
+        if (code.length < 6 || code.length > 10) {
+            return { success: false, message: '引き継ぎコードは英数字6〜10文字です' };
+        }
+
+        const myCode = this.statsManager && typeof this.statsManager.getOrCreateTransferCode === 'function'
+            ? normalize(this.statsManager.getOrCreateTransferCode())
+            : '';
+        if (myCode && code === myCode) {
+            return { success: false, message: 'このコードはこの端末自身のものです' };
+        }
+
+        if (!this.supabaseManager || typeof this.supabaseManager.fetchUserByTransferCode !== 'function') {
+            return { success: false, message: '引き継ぎ機能を利用できません（アプリを最新版に更新してください）' };
+        }
+
+        const found = await this.supabaseManager.fetchUserByTransferCode(code);
+        if (!found.ok) {
+            if (found.reason === 'offline') {
+                return { success: false, message: 'オフラインのため引き継ぎできません。通信できる場所でお試しください' };
+            }
+            if (found.reason === 'not_ready') {
+                return { success: false, message: '引き継ぎコードのサーバー登録がまだ有効になっていません（運営側の準備待ち）' };
+            }
+            if (found.reason === 'not_found') {
+                return { success: false, message: 'そのコードは見つかりませんでした。コードをご確認ください（初回はオンラインで一度プレイすると登録されます）' };
+            }
+            return { success: false, message: '引き継ぎに失敗しました。通信状況をご確認のうえ、もう一度お試しください' };
+        }
+
+        const writes = (typeof TWIdentity !== 'undefined' && TWIdentity && typeof TWIdentity.buildTransferStorageWrites === 'function')
+            ? TWIdentity.buildTransferStorageWrites(found.user, { code })
+            : null;
+        if (!writes) return { success: false, message: '引き継ぎデータを読み取れませんでした' };
+
+        const keys = TerritoryWalkApp.identityKeys();
+
+        if (typeof TWIdentity !== 'undefined' && TWIdentity && typeof TWIdentity.applyStorageWrites === 'function') {
+            TWIdentity.applyStorageWrites(writes);
+        } else {
+            Object.keys(writes.set || {}).forEach((key) => { try { localStorage.setItem(key, writes.set[key]); } catch (e) { /* ignore */ } });
+            (writes.remove || []).forEach((key) => { try { localStorage.removeItem(key); } catch (e) { /* ignore */ } });
+        }
+
+        // Keychain（Web は localStorage）にも同じIDを控え、再起動後も同じIDで再開できるようにする
+        try {
+            if (typeof TWIdentity !== 'undefined' && TWIdentity && typeof TWIdentity.persist === 'function') {
+                await TWIdentity.persist({
+                    userId: found.user.user_id,
+                    team: writes.set[keys.team],
+                    nickname: writes.set[keys.nickname] || null,
+                    transferCode: writes.set[keys.transferCode] || code
+                });
+            }
+        } catch (e) {
+            console.warn('[Transfer] Keychain persist failed:', e);
+        }
+
+        const teamLabel = writes.set[keys.team] === 'white' ? 'White（白）' : 'Black（黒）';
+        const message = `引き継ぎが完了しました（${teamLabel}陣営）。アプリを再起動して反映します`;
+
+        // 画面を再起動して全モジュールを新しいIDで初期化する（状態の取りこぼしを防ぐ）
+        if (typeof location !== 'undefined' && typeof location.reload === 'function') {
+            setTimeout(() => {
+                try { location.reload(); } catch (e) { /* テスト環境など */ }
+            }, 1200);
+        }
+
+        return { success: true, message, reload: true };
     }
 
     initGeolocation() {
@@ -3600,6 +3902,29 @@ class TerritoryWalkApp {
 }
 
 // Auto-start on DOMContentLoaded
+//   iOS ではアプリを削除→再インストールしても Keychain に匿名IDが残る。
+//   StatsManager は生成時に localStorage のIDを読むため、先に Keychain から復元して
+//   localStorage へ書き戻してから TerritoryWalkApp を生成する。
+//   （Web では localStorage をそのまま使うので、ここは何もしない安全なフォールバック）
 document.addEventListener('DOMContentLoaded', () => {
-    window.app = new TerritoryWalkApp();
+    const start = () => {
+        window.app = new TerritoryWalkApp();
+    };
+
+    if (typeof TWIdentity === 'undefined' || !TWIdentity || typeof TWIdentity.bootstrap !== 'function') {
+        start();
+        return;
+    }
+
+    TWIdentity.bootstrap()
+        .then((result) => {
+            window.__twIdentityBootstrap = result || null;
+            if (result && result.restored) {
+                console.log('[Identity] Restored anonymous identity from', result.source);
+            }
+            start();
+        })
+        .catch(() => {
+            start();
+        });
 });

@@ -22,6 +22,23 @@ function parseContentRangeTotal(headerValue) {
     return Number.isFinite(total) ? total : null;
 }
 
+/**
+ * 新規ユーザーを「人数の少ない方のチーム」へ配属するか決める（純粋関数）。
+ *   ・黒が少ない → 'black' / 白が少ない → 'white'
+ *   ・同数・集計失敗（null）・不正値 → null（呼び出し側が 50% ランダムへフォールバック）
+ * @param {{black:number, white:number}|null} counts territory_users の人数
+ * @returns {'black'|'white'|null}
+ */
+function chooseBalancedTeam(counts) {
+    if (!counts || typeof counts !== 'object') return null;
+    const black = Number(counts.black);
+    const white = Number(counts.white);
+    if (!Number.isFinite(black) || !Number.isFinite(white)) return null;
+    if (black < 0 || white < 0) return null;
+    if (black === white) return null;
+    return black < white ? 'black' : 'white';
+}
+
 class SupabaseManager {
     constructor() {
         this.client = null;
@@ -261,6 +278,139 @@ class SupabaseManager {
     }
 
     /**
+     * territory_users の指定チームの人数を数える。
+     * territory_tiles の集計と同じく HEAD + `Prefer: count=exact` で
+     * Content-Range の総件数だけを読む（RLS は SELECT 公開なので RPC 不要）。
+     * @param {'black'|'white'} team
+     * @returns {Promise<number|null>} 取得できなければ null
+     */
+    async fetchUserTeamCount(team) {
+        if (!this.client) return null;
+        if (typeof fetch !== 'function') return null;
+        if (team !== 'black' && team !== 'white') return null;
+
+        const params = new URLSearchParams({ select: 'team', team: `eq.${team}` });
+
+        try {
+            const res = await fetch(`${SUPABASE_URL}/rest/v1/territory_users?${params.toString()}`, {
+                method: 'HEAD',
+                headers: {
+                    apikey: SUPABASE_ANON_KEY,
+                    Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+                    Prefer: 'count=exact',
+                    Accept: 'application/json'
+                },
+                cache: 'no-store'
+            });
+            if (!res || !res.ok) return null;
+            const header = res.headers && typeof res.headers.get === 'function'
+                ? res.headers.get('content-range')
+                : null;
+            return parseContentRangeTotal(header);
+        } catch (err) {
+            console.warn('[Supabase] Failed to count users:', err && err.message ? err.message : err);
+            return null;
+        }
+    }
+
+    /**
+     * 黒・白それぞれの登録人数を並列で取得する（チーム均等配属の判定材料）。
+     * オフライン・通信エラー・片方でも取れなかった場合は null（従来の 50% ランダム）。
+     * @returns {Promise<{black:number, white:number, fetchedAt:number}|null>}
+     */
+    async fetchUserTeamCounts() {
+        if (!this.client) return null;
+        if (typeof navigator !== 'undefined' && navigator && navigator.onLine === false) return null;
+
+        try {
+            const [black, white] = await Promise.all([
+                this.fetchUserTeamCount('black'),
+                this.fetchUserTeamCount('white')
+            ]);
+            if (black === null || white === null) return null;
+            return { black, white, fetchedAt: Date.now() };
+        } catch (err) {
+            console.warn('[Supabase] Failed to fetch user team counts:', err);
+            return null;
+        }
+    }
+
+    /**
+     * 引き継ぎコードから territory_users の1行を取得する。
+     * @param {string} code 正規化済みの引き継ぎコード
+     * @returns {Promise<{ok:boolean, reason?:string, user?:object, error?:object}>}
+     *   reason: 'offline' | 'invalid' | 'not_ready'（列未作成）| 'not_found' | 'error'
+     */
+    async fetchUserByTransferCode(code) {
+        if (!this.client) return { ok: false, reason: 'offline' };
+        const normalized = String(code == null ? '' : code).toUpperCase().replace(/[^A-Z0-9]/g, '');
+        if (!normalized) return { ok: false, reason: 'invalid' };
+
+        try {
+            const { data, error } = await this.client
+                .from('territory_users')
+                .select('user_id, nickname, team, lifetime_tiles, lifetime_reclaimed, battles_won, battles_lost, coins, transfer_code')
+                .eq('transfer_code', normalized)
+                .limit(1);
+
+            if (error) {
+                const message = String(error.message || '');
+                if (error.code === '42703' || /transfer_code/i.test(message)) {
+                    // supabase/transfer_code.sql が未実行の環境
+                    return { ok: false, reason: 'not_ready', error };
+                }
+                console.warn('[Supabase] fetchUserByTransferCode error:', message);
+                return { ok: false, reason: 'error', error };
+            }
+
+            if (!Array.isArray(data) || data.length === 0) {
+                return { ok: false, reason: 'not_found' };
+            }
+            return { ok: true, user: data[0] };
+        } catch (err) {
+            console.warn('[Supabase] Exception in fetchUserByTransferCode:', err);
+            return { ok: false, reason: 'error', error: err };
+        }
+    }
+
+    /**
+     * 自分の引き継ぎコードを territory_users へ保存する。
+     * 列が無い環境（SQL 未実行）では reason:'not_ready' を返すだけで、
+     * 呼び出し側は端末内のコード表示を続けられる。
+     * @param {string} userId
+     * @param {string} code
+     */
+    async saveTransferCode(userId, code) {
+        if (!this.client || !userId) return { ok: false, reason: 'offline' };
+        const normalized = String(code == null ? '' : code).toUpperCase().replace(/[^A-Z0-9]/g, '');
+        if (!normalized) return { ok: false, reason: 'invalid' };
+
+        try {
+            const { data, error } = await this.client
+                .from('territory_users')
+                .update({ transfer_code: normalized, updated_at: new Date().toISOString() })
+                .eq('user_id', userId)
+                .select('user_id');
+
+            if (error) {
+                const message = String(error.message || '');
+                if (error.code === '42703' || /transfer_code/i.test(message)) {
+                    return { ok: false, reason: 'not_ready', error };
+                }
+                return { ok: false, reason: 'error', error };
+            }
+
+            // まだ territory_users に行が無い新規ユーザー（初回起動直後）は 0 件更新になる
+            if (!Array.isArray(data) || data.length === 0) {
+                return { ok: false, reason: 'no_row' };
+            }
+            return { ok: true };
+        } catch (err) {
+            return { ok: false, reason: 'error', error: err };
+        }
+    }
+
+    /**
      * Fetch all tiles within bounds and current week from Supabase
      */
     async fetchTilesInBounds(minLat, maxLat, minLng, maxLng, weekId = this.getCurrentWeekId()) {
@@ -307,6 +457,12 @@ class SupabaseManager {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { SupabaseManager, parseContentRangeTotal, SUPABASE_URL, SUPABASE_ANON_KEY };
+    module.exports = {
+        SupabaseManager,
+        parseContentRangeTotal,
+        chooseBalancedTeam,
+        SUPABASE_URL,
+        SUPABASE_ANON_KEY
+    };
 }
 

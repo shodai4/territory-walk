@@ -72,6 +72,9 @@ class StatsManager {
         this.stats = this.loadLocalStats();
         this.pendingSyncTiles = 0;
         this.pendingSyncReclaimed = 0;
+        // 引き継ぎコードの DB 同期状態（supabase/transfer_code.sql 未実行の環境では false のまま）
+        this.transferCodeSynced = false;
+        this.transferCodeNotReady = false;
 
         this.checkMilestoneTitles();
         
@@ -261,6 +264,58 @@ class StatsManager {
         return code;
     }
 
+    /**
+     * 機種変更用の引き継ぎコード（8文字）を取得（無ければ作成）する。
+     * 友達招待コード（referral_code）とは別物。招待コードはSNSで公開される前提なので、
+     * アカウント引き継ぎには専用のコードを使う。端末（と iOS では Keychain）に保存する。
+     */
+    getOrCreateTransferCode() {
+        let code = '';
+        try {
+            code = localStorage.getItem('tw_transfer_code') || '';
+        } catch (e) {
+            code = '';
+        }
+        if (!code) {
+            code = (typeof TWIdentity !== 'undefined' && TWIdentity && typeof TWIdentity.generateCode === 'function')
+                ? TWIdentity.generateCode()
+                : this._generateFallbackTransferCode();
+            try {
+                localStorage.setItem('tw_transfer_code', code);
+            } catch (e) { /* 保存できなくても表示はできる */ }
+        }
+        return code;
+    }
+
+    _generateFallbackTransferCode() {
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+        let res = '';
+        for (let i = 0; i < 8; i++) {
+            res += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return res;
+    }
+
+    /**
+     * 自分の引き継ぎコードを territory_users へ保存する（機種変更の受け側が検索できるように）。
+     * 列が未作成の環境では DB には書かず、端末内のコード表示だけを続ける。
+     * @returns {Promise<{ok:boolean, reason?:string}>}
+     */
+    async syncTransferCode() {
+        if (this.transferCodeSynced) return { ok: true, reason: 'cached' };
+        if (!this.supabaseManager || typeof this.supabaseManager.saveTransferCode !== 'function') {
+            return { ok: false, reason: 'offline' };
+        }
+        const code = this.getOrCreateTransferCode();
+        const result = await this.supabaseManager.saveTransferCode(this.userId, code);
+        if (result && result.ok) {
+            this.transferCodeSynced = true;
+        } else if (result && result.reason === 'not_ready') {
+            this.transferCodeNotReady = true;
+        }
+        return result || { ok: false, reason: 'error' };
+    }
+
     async applyReferralCode(rawCode) {
         if (!rawCode || typeof rawCode !== 'string') {
             return { success: false, message: '招待コードを入力してください' };
@@ -350,11 +405,31 @@ class StatsManager {
                 referral_code: this.getOrCreateReferralCode(),
                 updated_at: new Date().toISOString()
             };
-            try {
-                await this.supabaseManager.client.from('territory_users').upsert(upsertPayload, { onConflict: 'user_id' });
-            } catch (err) {
-                delete upsertPayload.referral_code;
-                await this.supabaseManager.client.from('territory_users').upsert(upsertPayload, { onConflict: 'user_id' });
+            // 引き継ぎコード（列が無い環境では付けずに再試行する）
+            if (this.transferCodeNotReady !== true) {
+                upsertPayload.transfer_code = this.getOrCreateTransferCode();
+            }
+            // supabase-js は通信・SQLエラーを throw せず { error } で返すため、戻り値で判定する
+            let { error: upsertError } = await this.supabaseManager.client
+                .from('territory_users')
+                .upsert(upsertPayload, { onConflict: 'user_id' });
+
+            if (upsertError) {
+                const message = String(upsertError.message || '');
+                if (upsertError.code === '42703' || /transfer_code/i.test(message)) {
+                    // supabase/transfer_code.sql 未実行の環境：列を外して再送（機能は端末内のみで継続）
+                    this.transferCodeNotReady = true;
+                }
+                const retryPayload = { ...upsertPayload };
+                delete retryPayload.transfer_code;
+                if (upsertError.code === '42703' || /referral_code|transfer_code/i.test(message)) {
+                    delete retryPayload.referral_code;
+                }
+                await this.supabaseManager.client
+                    .from('territory_users')
+                    .upsert(retryPayload, { onConflict: 'user_id' });
+            } else if (upsertPayload.transfer_code) {
+                this.transferCodeSynced = true;
             }
 
             // 2. Update territory_weekly_rankings
@@ -364,6 +439,11 @@ class StatsManager {
             }).eq('week_id', weekId).eq('user_id', this.userId);
 
             console.log('[Stats] Nickname and stats synced to Supabase:', formattedName);
+
+            // 表示名・タイトルの変更も Keychain の控えへ反映する
+            if (this.app && typeof this.app.persistIdentity === 'function') {
+                this.app.persistIdentity();
+            }
         } catch (e) {
             console.warn('[Stats] Failed to sync nickname immediately:', e);
         }

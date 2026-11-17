@@ -30,6 +30,7 @@ const ASSETS_TO_COPY = [
     'poster.js',
     'pro.js',
     'search.js',
+    'identity.js',
     'stats.js',
     'supabase.js',
     'favicon.png',

@@ -467,6 +467,150 @@ function applyMinimumOS(targets = {}) {
 }
 
 /* ------------------------------------------------------------------ *
+ * 匿名IDの永続化（iOS Keychain）プラグイン
+ *   ios-plugins/tw-keychain/ のローカル Pod を Podfile に1行追加し、
+ *   Capacitor のプラグイン登録表（ios/App/App/capacitor.config.json の
+ *   packageClassList）へ TWKeychainPlugin を追記する。
+ *   → アプリを削除して再インストールしても、Keychain に残った匿名IDで
+ *     同じユーザー・同じチームのまま再開できる（チームの選び直し防止）。
+ *   どちらも冪等（何度実行しても重複しない）。
+ * ------------------------------------------------------------------ */
+
+const KEYCHAIN_POD_NAME = 'TWKeychain';
+const KEYCHAIN_POD_PATH = '../../ios-plugins/tw-keychain';
+const KEYCHAIN_POD_LINE = `pod '${KEYCHAIN_POD_NAME}', :path => '${KEYCHAIN_POD_PATH}'`;
+const KEYCHAIN_PLUGIN_CLASS = 'TWKeychainPlugin';
+const CAPACITOR_CONFIG_PATH = process.env.IOS_CAPACITOR_CONFIG_PATH
+    ? path.resolve(process.env.IOS_CAPACITOR_CONFIG_PATH)
+    : path.join(ROOT_DIR, 'ios', 'App', 'App', 'capacitor.config.json');
+
+/**
+ * Podfile にローカル Pod（TWKeychain）を追加する（純粋関数）。
+ * `capacitor_pods` の直後（target 'App' の中）へ差し込む。
+ * @returns {{content:string, modified:boolean, added:boolean}}
+ */
+function configurePodfileKeychain(input) {
+    const source = String(input == null ? '' : input);
+    if (new RegExp(`pod ['"]${KEYCHAIN_POD_NAME}['"]`).test(source)) {
+        return { content: source, modified: false, added: false };
+    }
+
+    const anchor = /^([ \t]*)capacitor_pods[ \t]*$/m;
+    if (anchor.test(source)) {
+        const content = source.replace(anchor, (match, indent) => `${match}\n${indent}${KEYCHAIN_POD_LINE}`);
+        return { content, modified: true, added: true };
+    }
+
+    const target = /^([ \t]*)target ['"]App['"] do[ \t]*$/m;
+    if (target.test(source)) {
+        const content = source.replace(target, (match, indent) => `${match}\n${indent}${KEYCHAIN_POD_LINE}`);
+        return { content, modified: true, added: true };
+    }
+
+    // どのみち Podfile が想定外の形：末尾に追記せず、呼び出し側が警告する
+    return { content: source, modified: false, added: false };
+}
+
+/** Podfile に TWKeychain が入っているかを点検する */
+function verifyPodfileKeychain(content) {
+    if (!new RegExp(`pod ['"]${KEYCHAIN_POD_NAME}['"]`).test(String(content == null ? '' : content))) {
+        return [`Podfile に ${KEYCHAIN_POD_NAME} の pod 行がありません`];
+    }
+    return [];
+}
+
+/**
+ * capacitor.config.json（Capacitor が生成）の packageClassList へ
+ * TWKeychainPlugin を追記する（純粋関数）。
+ * @returns {{content:string, modified:boolean, list?:string[], error?:string}}
+ */
+function configureCapacitorConfigContent(input, className = KEYCHAIN_PLUGIN_CLASS) {
+    const source = String(input == null ? '' : input);
+    let config;
+    try {
+        config = JSON.parse(source);
+    } catch (err) {
+        return { content: source, modified: false, error: 'invalid-json' };
+    }
+    if (!config || typeof config !== 'object') {
+        return { content: source, modified: false, error: 'invalid-json' };
+    }
+
+    const list = Array.isArray(config.packageClassList) ? config.packageClassList.slice() : [];
+    if (list.includes(className)) {
+        return { content: source, modified: false, list };
+    }
+
+    list.push(className);
+    config.packageClassList = list;
+    const trailingNewline = /\n$/.test(source) ? '\n' : '';
+    return { content: `${JSON.stringify(config, null, '\t')}${trailingNewline}`, modified: true, list };
+}
+
+/** capacitor.config.json に TWKeychainPlugin が入っているかを点検する */
+function verifyCapacitorConfigContent(content, className = KEYCHAIN_PLUGIN_CLASS) {
+    let config;
+    try {
+        config = JSON.parse(String(content == null ? '' : content));
+    } catch (err) {
+        return ['capacitor.config.json を JSON として読めません'];
+    }
+    const list = config && Array.isArray(config.packageClassList) ? config.packageClassList : [];
+    if (!list.includes(className)) {
+        return [`capacitor.config.json の packageClassList に ${className} がありません`];
+    }
+    return [];
+}
+
+/**
+ * 実ファイルに Pod 行とプラグイン登録を適用する。存在しないファイルは黙って飛ばす。
+ * @returns {Array<{file:string, action:string, detail?:string}>}
+ */
+function applyKeychainPlugin(targets = {}) {
+    const podfilePath = targets.podfilePath || PODFILE_PATH;
+    const configPath = targets.configPath || CAPACITOR_CONFIG_PATH;
+    const results = [];
+
+    if (fs.existsSync(podfilePath)) {
+        try {
+            const before = fs.readFileSync(podfilePath, 'utf8');
+            const { content, modified, added } = configurePodfileKeychain(before);
+            if (modified) fs.writeFileSync(podfilePath, content, 'utf8');
+            const problems = verifyPodfileKeychain(content);
+            results.push({
+                file: path.basename(podfilePath),
+                action: problems.length > 0 ? 'failed' : (added ? 'added' : 'verified'),
+                detail: problems.length > 0 ? problems.join(' / ') : KEYCHAIN_POD_LINE
+            });
+        } catch (err) {
+            results.push({ file: path.basename(podfilePath), action: 'failed', detail: err.message });
+        }
+    }
+
+    if (fs.existsSync(configPath)) {
+        try {
+            const before = fs.readFileSync(configPath, 'utf8');
+            const { content, modified, error } = configureCapacitorConfigContent(before);
+            if (error) {
+                results.push({ file: path.basename(configPath), action: 'failed', detail: error });
+            } else {
+                if (modified) fs.writeFileSync(configPath, content, 'utf8');
+                const problems = verifyCapacitorConfigContent(content);
+                results.push({
+                    file: path.basename(configPath),
+                    action: problems.length > 0 ? 'failed' : (modified ? 'registered' : 'verified'),
+                    detail: KEYCHAIN_PLUGIN_CLASS
+                });
+            }
+        } catch (err) {
+            results.push({ file: path.basename(configPath), action: 'failed', detail: err.message });
+        }
+    }
+
+    return results;
+}
+
+/* ------------------------------------------------------------------ *
  * 表示名（InfoPlist.strings）ヘルパー
  * ------------------------------------------------------------------ */
 
@@ -623,6 +767,24 @@ function main() {
             }
         }
 
+        // Keychain（匿名IDの永続化）: ローカル Pod + プラグイン登録
+        applyKeychainPlugin().forEach((item) => {
+            switch (item.action) {
+                case 'added':
+                    console.log(`[iOS Config] ${item.file}: ${item.detail} を追記しました`);
+                    break;
+                case 'registered':
+                    console.log(`[iOS Config] ${item.file}: ${item.detail} を packageClassList に登録しました`);
+                    break;
+                case 'verified':
+                    console.log(`[iOS Config] ${item.file}: ${item.detail} を確認しました`);
+                    break;
+                default:
+                    console.warn(`[iOS Config] ${item.file}: Keychain プラグインの設定に失敗しました (${item.detail})`);
+                    process.exitCode = 1;
+            }
+        });
+
         const problems = verifyContent(fs.readFileSync(PLIST_PATH, 'utf8'));
         if (problems.length > 0) {
             problems.forEach((problem) => console.error(`[iOS Config] Verification failed: ${problem}`));
@@ -648,6 +810,15 @@ module.exports = {
     PLIST_PATH,
     PODFILE_PATH,
     PROJECT_PATH,
+    CAPACITOR_CONFIG_PATH,
+    KEYCHAIN_POD_NAME,
+    KEYCHAIN_POD_LINE,
+    KEYCHAIN_PLUGIN_CLASS,
+    configurePodfileKeychain,
+    verifyPodfileKeychain,
+    configureCapacitorConfigContent,
+    verifyCapacitorConfigContent,
+    applyKeychainPlugin,
     configureContent,
     configureStringsContent,
     configurePodfileContent,
