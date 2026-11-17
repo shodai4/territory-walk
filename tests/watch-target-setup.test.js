@@ -123,6 +123,15 @@ test('CI: Watch 組み込みステップは変数ONのときだけ走る形で�
     assert.match(setup, /CURRENT_PROJECT_VERSION/, 'iPhone と同じビルド番号を渡す');
 });
 
+test('Watchアプリ: Map/MapPolygon/MapCircle を使うので MapKit を import している', () => {
+    // CI で「cannot find 'Map' in scope」によりアーカイブが落ちた（v1.1）
+    assert.match(WATCH_APP, /^import MapKit\b/m, 'MapKit の import が無いと Map 系が解決できない');
+    assert.match(WATCH_APP, /import SwiftUI/);
+    assert.match(WATCH_APP, /Map\(position:/, 'SwiftUI の Map を使う');
+    assert.match(WATCH_MODEL, /^import MapKit\b/m, 'モデル側も MapCameraPosition に MapKit が要る');
+    assert.match(WATCH_MODEL, /^import SwiftUI\b/m, 'withAnimation / @Published に SwiftUI（Combine）が要る');
+});
+
 test('ターゲット: Watchグループに実パスを与え、参照が TerritoryWatch/ 配下に解決される', () => {
     // これが無いと ios/App/Assets.xcassets に解決され、actool が
     // 「AppIcon が見つからない / No such file or directory」でアーカイブに失敗する（v1.1 で実際に発生）

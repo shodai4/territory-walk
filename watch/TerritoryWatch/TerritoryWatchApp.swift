@@ -7,6 +7,7 @@
 //
 
 import SwiftUI
+import MapKit          // Map / MapPolygon / MapCircle / .mapStyle は MapKit の SwiftUI API
 import WatchKit
 
 struct ContentView: View {
