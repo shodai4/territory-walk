@@ -582,9 +582,9 @@ test('CSS: 375px幅で崩れない固定サイズと状態別の配色がある'
     assert.match(CSS, /\.marking-toggle-btn\[data-state="paused"\] \{[^}]*background: rgba\(8, 47, 73, 0\.92\);[^}]*border-color: rgba\(56, 189, 248, 0\.85\);/);
 });
 
-test('キャッシュバスター: 変更した app.js は v63、style.css は v51 を参照する', () => {
+test('キャッシュバスター: 変更した app.js は v63、style.css は v52 を参照する', () => {
     assert.match(HTML, /app\.js\?v=20261119v63/);
-    assert.match(HTML, /style\.css\?v=20261116v51/);
+    assert.match(HTML, /style\.css\?v=20261119v52/);
 });
 
 test('ビルド: www/ の index.html / style.css / app.js がルートと一致する', () => {

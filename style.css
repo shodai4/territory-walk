@@ -619,13 +619,22 @@ button, a, input, select, .btn-action {
     color: #7dd3fc;
 }
 
+/* アイコンの表示は「状態に応じて1つだけ」。
+   v1.2 の不具合: .marking-toggle-icons svg の display: block（詳細度 0,1,1）が
+   .marking-icon-off の display: none（0,1,0）に勝ち、ON のときにペンと一時停止が
+   2つ並んでいた。svg の寸法指定から display を外し、表示/非表示は
+   クラス2つのセレクタ（詳細度 0,2,0 以上）だけで決める。 */
 .marking-toggle-icons svg {
     width: 14px;
     height: 14px;
+    flex: 0 0 auto;
+}
+
+.marking-toggle-icons .marking-icon-on {
     display: block;
 }
 
-.marking-icon-off {
+.marking-toggle-icons .marking-icon-off {
     display: none;
 }
 
