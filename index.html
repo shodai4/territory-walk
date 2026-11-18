@@ -366,7 +366,19 @@
                 <span id="privacy-summary-text" class="text-[10px] font-normal text-zinc-400">未登録</span>
             </button>
 
-            <!-- 3. 統合アコーディオン: テーマ・マップ設定 -->
+            <!-- 3. 省電力モード（v1.2）: 測位の更新間隔を広げ、静止中の再処理も抑える -->
+            <div class="flex items-center justify-between gap-2 bg-zinc-950/80 border border-zinc-800 rounded-xl px-3 py-2.5 shrink-0">
+                <div class="min-w-0">
+                    <div class="font-bold text-xs text-white">省電力モード</div>
+                    <div id="power-save-detail" class="text-[10px] text-zinc-400 leading-snug">更新間隔 40m・電池を節約</div>
+                </div>
+                <button id="btn-toggle-power-save" type="button" data-state="off" aria-pressed="false" aria-label="省電力モード OFF（タップで ON）" title="省電力モード: OFF（タップで ON）" class="px-3 py-1.5 rounded-lg border text-xs font-mono font-bold flex items-center gap-1.5 transition-all active:scale-95 bg-zinc-900 border-zinc-700 text-zinc-400 shrink-0">
+                    <span id="power-save-dot" class="w-2 h-2 rounded-full bg-zinc-600"></span>
+                    <span id="power-save-text">OFF</span>
+                </button>
+            </div>
+
+            <!-- 4. 統合アコーディオン: テーマ・マップ設定 -->
             <details class="group bg-zinc-950/80 border border-zinc-800 rounded-xl shrink-0">
                 <summary class="flex items-center justify-between p-2.5 cursor-pointer text-xs font-bold text-white select-none list-none">
                     <span>テーマ・マップ設定</span>
@@ -1173,6 +1185,6 @@
     <script src="startup-gate.js?v=20261114v41"></script>
     <script src="permission.js?v=20261115v47"></script>
     <script src="debug-tools.js?v=20261114v39"></script>
-    <script src="app.js?v=20261117v60"></script>
+    <script src="app.js?v=20261118v61"></script>
 </body>
 </html>

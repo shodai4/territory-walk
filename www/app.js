@@ -32,6 +32,32 @@ const CONFIG = {
 const MARKING_PAUSE_STORAGE_KEY = 'tw_marking_paused';
 const BACKGROUND_GEOLOCATION_PLUGIN_NAME = 'BackgroundGeolocation';
 const NATIVE_GEOLOCATION_PLUGIN_NAME = 'Geolocation';
+/* ================================================================== *
+ * v1.2 省電力設定
+ *
+ * 実測したプラグイン仕様（@capacitor-community/background-geolocation 1.3.1）:
+ *   definitions.d.ts の WatcherOptions は
+ *     backgroundMessage / backgroundTitle / requestPermissions / stale / distanceFilter
+ *   の5つだけ。desiredAccuracy や pausesLocationUpdatesAutomatically という口は無い。
+ *   iOS ネイティブ（ios/Plugin/Swift/Plugin.swift の addWatcher）は
+ *     manager.desiredAccuracy = 充電中 ? kCLLocationAccuracyBestForNavigation : kCLLocationAccuracyBest
+ *     manager.pausesLocationUpdatesAutomatically = false
+ *     manager.allowsBackgroundLocationUpdates = (backgroundMessage が有るか)
+ *   を固定で設定している。だから JS から省電力を調整できるのは distanceFilter だけ
+ *   （存在しないオプションを書くと黙って無視されるので、ここに増やさないこと）。
+ *
+ * マスは約100m四方（grid.js の latStep=0.0009 / lngStep=0.0011）。
+ * distanceFilter は「これ以上動いたら次の更新」なので、100m未満に保てば
+ * 直進中は1マスにつき最低1回は更新が届く。既定40m・省電力60m。
+ * ================================================================== */
+const DISTANCE_FILTER_STANDARD_M = 40;
+const DISTANCE_FILTER_POWER_SAVE_M = 60;
+// 同じマスに留まっている間、これ未満の移動はGPS誤差とみなして再処理を省く（m）
+const STATIONARY_SKIP_STANDARD_M = 5;
+const STATIONARY_SKIP_POWER_SAVE_M = 12;
+// 省電力モードの ON/OFF を保存するキー（端末内のみ）
+const POWER_SAVE_STORAGE_KEY = 'tw_power_save';
+
 const BACKGROUND_GEOLOCATION_OPTIONS = {
     // backgroundMessage を定義すると、画面消灯・バックグラウンド中も位置更新が届く
     backgroundMessage: '画面を消灯しても陣地を塗り続けます',
@@ -40,8 +66,44 @@ const BACKGROUND_GEOLOCATION_OPTIONS = {
     // 古い測位結果で別のマスを塗らないようにする
     stale: false,
     // 100mマスを取りこぼさず、電池消費も抑える距離フィルタ（m）
-    distanceFilter: 20
+    distanceFilter: DISTANCE_FILTER_STANDARD_M
 };
+
+/** 省電力モードに応じた距離フィルタ（m）。プラグインに実際に渡せる唯一の省電力つまみ */
+function resolveDistanceFilter(powerSaveMode) {
+    return powerSaveMode === true ? DISTANCE_FILTER_POWER_SAVE_M : DISTANCE_FILTER_STANDARD_M;
+}
+
+/** 省電力モードに応じた「静止中スキップ」のしきい値（m） */
+function resolveStationarySkipDistance(powerSaveMode) {
+    return powerSaveMode === true ? STATIONARY_SKIP_POWER_SAVE_M : STATIONARY_SKIP_STANDARD_M;
+}
+
+/** addWatcher へ渡すオプション一式（存在するキーだけを載せる） */
+function buildBackgroundGeolocationOptions(powerSaveMode) {
+    return Object.assign({}, BACKGROUND_GEOLOCATION_OPTIONS, {
+        distanceFilter: resolveDistanceFilter(powerSaveMode === true)
+    });
+}
+
+/**
+ * 同一マス滞在中の位置更新を「捨ててよい」か（純粋関数・テスト対象）。
+ * 捨てるのは、同じマス・そこは既に自陣・移動が誤差レベル、が全部そろったときだけ。
+ * 初回取得 / 明示的な再取得(force) / 誤差の大きい測位(skipClaim) / チーム変更や未取得マス
+ * （cellAlreadyMine が false）は必ず処理する。
+ */
+function shouldSkipStationaryUpdate(params) {
+    const p = params || {};
+    if (p.isFirst === true || p.force === true) return false;
+    if (p.skipClaim === true) return false;
+    if (p.sameMesh !== true || p.cellAlreadyMine !== true) return false;
+    const distance = Number(p.distanceMeters);
+    if (!Number.isFinite(distance)) return false;
+    const threshold = Number.isFinite(Number(p.thresholdMeters))
+        ? Number(p.thresholdMeters)
+        : STATIONARY_SKIP_STANDARD_M;
+    return distance < threshold;
+}
 
 // Web（navigator.geolocation）測位のオプション。
 // 衛星測位（enableHighAccuracy: true）は室内・ビルの谷間だと10秒以内に返らず
@@ -108,6 +170,9 @@ class TerritoryWalkApp {
         // 起動ゲート通過（startDeferredServices）より前に復元しておき、
         // 停止中なら位置情報ウォッチャーを最初から張らない。
         this.markingPaused = this.readMarkingPausePreference();
+        // 省電力モード（v1.2）。distanceFilter と静止中の再処理しきい値を切り替える。
+        // 既定は OFF（40m）。トグルは MENU の中（initPowerSaveToggle）。
+        this.powerSaveMode = this.readPowerSavePreference();
         // 測位ウォッチャーを開始済みか（停止→再開で二重起動しないためのフラグ）
         this.geolocationStarted = false;
 
@@ -629,6 +694,10 @@ class TerritoryWalkApp {
         this.markingPausedBanner = document.getElementById('marking-paused-banner');
         this.btnMarkingResume = document.getElementById('btn-marking-resume');
         this.markingToggleLabel = document.getElementById('marking-toggle-label');
+        this.btnTogglePowerSave = document.getElementById('btn-toggle-power-save');
+        this.powerSaveDot = document.getElementById('power-save-dot');
+        this.powerSaveText = document.getElementById('power-save-text');
+        this.powerSaveDetail = document.getElementById('power-save-detail');
         this.btnSwapTeam = document.getElementById('btn-swap-team');
         this.swapTeamIcon = document.getElementById('swap-team-icon');
         this.swapTeamText = document.getElementById('swap-team-text');
@@ -640,6 +709,8 @@ class TerritoryWalkApp {
         this.initTransferCodeUI();
         // マーキング ON/OFF トグル（前回状態の復元 → UI反映 → 操作の配線）
         this.initMarkingToggle();
+        // 省電力モードのトグル（v1.2・前回状態の復元 → UI反映 → 操作の配線）
+        this.initPowerSaveToggle();
     }
 
     renderTeamBadge() {
@@ -1835,7 +1906,8 @@ class TerritoryWalkApp {
     requestFreshPosition() {
         const toLatLng = (position) => {
             if (!position || !position.coords) return null;
-            this.handlePositionUpdate(position, false);
+            // 明示的な再取得（現在地ボタン）は stationary skip を通さず必ず反映する
+            this.handlePositionUpdate(position, false, { force: true });
             const lat = Number(position.coords.latitude);
             const lng = Number(position.coords.longitude);
             if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
@@ -2598,7 +2670,9 @@ class TerritoryWalkApp {
 
         let watching;
         try {
-            watching = plugin.addWatcher(BACKGROUND_GEOLOCATION_OPTIONS, (location, error) => {
+            // 省電力モードの ON/OFF に合わせて distanceFilter を差し替える（v1.2）
+            const watcherOptions = buildBackgroundGeolocationOptions(this.isPowerSaveMode());
+            watching = plugin.addWatcher(watcherOptions, (location, error) => {
                 if (error) {
                     // NOT_AUTHORIZED 等の拒否も handlePositionError でバナーへ繋ぐ
                     this.handlePositionError(error);
@@ -2836,6 +2910,151 @@ class TerritoryWalkApp {
             this.showToast(next ? 'マーキングを一時停止しました' : 'マーキングを再開しました');
         }
         return changed;
+    }
+
+    /* ================================================================== *
+     * 省電力モード（v1.2）
+     *   - ON: 測位の更新間隔を 40m → 60m、静止中の再処理しきい値を 5m → 12m
+     *   - 選んだ状態は localStorage に保存し、次回起動でも同じ設定で始まる
+     *   - 測位中に切り替えたら watcher を張り直す（distanceFilter は
+     *     addWatcher の時点で固定され、あとから変えられないため）
+     * ================================================================== */
+
+    /** 保存された省電力モードを読む（未設定・読めない時は OFF） */
+    readPowerSavePreference() {
+        try {
+            if (typeof localStorage === 'undefined' || !localStorage) return false;
+            const raw = localStorage.getItem(POWER_SAVE_STORAGE_KEY);
+            return raw === '1' || raw === 'true';
+        } catch (e) {
+            return false;
+        }
+    }
+
+    /** 省電力モードを保存する（端末内のみ） */
+    savePowerSavePreference(on) {
+        try {
+            if (typeof localStorage === 'undefined' || !localStorage) return false;
+            localStorage.setItem(POWER_SAVE_STORAGE_KEY, on ? '1' : '0');
+            return true;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    /** 省電力モード中か */
+    isPowerSaveMode() {
+        return this.powerSaveMode === true;
+    }
+
+    /** 現在の設定で addWatcher へ渡すオプション */
+    getBackgroundGeolocationOptions() {
+        return buildBackgroundGeolocationOptions(this.isPowerSaveMode());
+    }
+
+    /** 省電力モードのトグル配線（initDOM から1回だけ） */
+    initPowerSaveToggle() {
+        if (this.powerSaveToggleBound) return false;
+        this.powerSaveToggleBound = true;
+
+        const doc = typeof document !== 'undefined' ? document : null;
+        const btn = this.btnTogglePowerSave || (doc ? doc.getElementById('btn-toggle-power-save') : null);
+        if (btn && typeof btn.addEventListener === 'function') {
+            btn.addEventListener('click', (event) => {
+                if (event && typeof event.preventDefault === 'function') event.preventDefault();
+                this.togglePowerSaveMode();
+            });
+        }
+
+        this.renderPowerSaveUI();
+        return true;
+    }
+
+    togglePowerSaveMode() {
+        return this.setPowerSaveMode(!this.isPowerSaveMode());
+    }
+
+    /**
+     * ON / OFF を確定する。
+     * @param {boolean} on
+     * @param {{ silent?: boolean, restartWatcher?: boolean }} options
+     * @returns {boolean} 実際に状態が変わったか
+     */
+    setPowerSaveMode(on, options = {}) {
+        const next = !!on;
+        const changed = next !== this.isPowerSaveMode();
+        this.powerSaveMode = next;
+        this.savePowerSavePreference(next);
+        this.renderPowerSaveUI();
+
+        // 測位中なら、新しい distanceFilter で watcher を張り直す
+        if (changed && options.restartWatcher !== false) this.restartGeolocationWatcher();
+
+        if (changed && options.silent !== true) {
+            this.showToast(
+                next ? '省電力モードを ON にしました' : '省電力モードを OFF にしました',
+                next
+                    ? `測位の更新間隔を ${DISTANCE_FILTER_POWER_SAVE_M}m に広げます`
+                    : `測位の更新間隔を ${DISTANCE_FILTER_STANDARD_M}m に戻します`
+            );
+        }
+        return changed;
+    }
+
+    /** distanceFilter を反映するために watcher を張り直す（未起動・Web では何もしない） */
+    restartGeolocationWatcher() {
+        const plugin = this.backgroundGeolocationPlugin || this.getBackgroundGeolocationPlugin();
+        if (!plugin || this.backgroundWatcherStarted !== true) return false;
+        if (this.isMarkingPaused()) return false;
+        this.stopBackgroundGeolocation();
+        return this.startBackgroundGeolocation(plugin);
+    }
+
+    /** トグルの見た目と説明文を現在の状態に合わせる */
+    renderPowerSaveUI() {
+        const on = this.isPowerSaveMode();
+        const doc = typeof document !== 'undefined' ? document : null;
+
+        const btn = this.btnTogglePowerSave || (doc ? doc.getElementById('btn-toggle-power-save') : null);
+        if (btn) {
+            if (btn.dataset) btn.dataset.state = on ? 'on' : 'off';
+            if (typeof btn.setAttribute === 'function') {
+                btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+                btn.setAttribute('aria-label', on
+                    ? '省電力モード ON（タップで OFF）'
+                    : '省電力モード OFF（タップで ON）');
+            }
+            if (btn.classList) {
+                btn.classList.toggle('bg-emerald-500/10', on);
+                btn.classList.toggle('border-emerald-500/60', on);
+                btn.classList.toggle('text-emerald-300', on);
+                btn.classList.toggle('bg-zinc-900', !on);
+                btn.classList.toggle('border-zinc-700', !on);
+                btn.classList.toggle('text-zinc-400', !on);
+            }
+            btn.title = on ? '省電力モード: ON（タップで OFF）' : '省電力モード: OFF（タップで ON）';
+        }
+
+        const dot = this.powerSaveDot || (doc ? doc.getElementById('power-save-dot') : null);
+        if (dot && dot.classList) {
+            dot.classList.toggle('bg-emerald-400', on);
+            dot.classList.toggle('bg-zinc-600', !on);
+        }
+
+        const label = this.powerSaveText || (doc ? doc.getElementById('power-save-text') : null);
+        if (label) label.textContent = on ? 'ON' : 'OFF';
+
+        const detail = this.powerSaveDetail || (doc ? doc.getElementById('power-save-detail') : null);
+        if (detail) {
+            detail.textContent = on
+                ? `更新間隔 ${DISTANCE_FILTER_POWER_SAVE_M}m・静止中は ${STATIONARY_SKIP_POWER_SAVE_M}m まで無視`
+                : `更新間隔 ${DISTANCE_FILTER_STANDARD_M}m・電池を節約`;
+        }
+
+        if (doc && doc.body && doc.body.dataset) {
+            doc.body.dataset.powerSave = on ? 'on' : 'off';
+        }
+        return on;
     }
 
     /**
@@ -3182,22 +3401,44 @@ class TerritoryWalkApp {
         }
 
         this.virtualPos = [latitude, longitude];
-        // 現在地が動いたら Watch の地図も追いつかせる（2秒に1回へ間引きは WatchBridgeClient 側）
-        this.notifyWatchState('position');
+
+        // 【v1.2】同じマスに留まっている間の GPS 誤差更新を捨てる。
+        //   同じ latIdx/lngIdx・そこはもう自陣・移動が誤差レベルのときだけ、
+        //   再描画 / Supabase 送信 / Watch への重複送信をまとめて省く。
+        //   初回取得・チーム変更・未取得マス・明示的な再取得(force)は落とさない。
+        const mesh = (this.gridManager && typeof this.gridManager.getMeshIdFromLatLng === 'function')
+            ? this.gridManager.getMeshIdFromLatLng(latitude, longitude)
+            : null;
+        const distanceMoved = (this.lastProcessedLat != null && this.lastProcessedLng != null)
+            ? this.calculateDistanceMeters(this.lastProcessedLat, this.lastProcessedLng, latitude, longitude)
+            : Infinity;
+        const cellTeam = (mesh && this.gridManager && this.gridManager.claimedTilesCache)
+            ? this.gridManager.claimedTilesCache.get(mesh.meshId)
+            : null;
+        const skipStationary = shouldSkipStationaryUpdate({
+            isFirst,
+            force: options.force === true,
+            skipClaim: options.skipClaim === true,
+            distanceMeters: distanceMoved,
+            sameMesh: !!(mesh && mesh.meshId === this.currentMeshId),
+            cellAlreadyMine: !!(mesh && cellTeam === this.currentTeam && cellTeam != null),
+            thresholdMeters: resolveStationarySkipDistance(this.isPowerSaveMode())
+        });
 
         this.updateGPSStatus('GPS: 測位中', 'bg-emerald-400', 'text-emerald-400');
 
-        // Battery / Noise Filter: Ignore stationary jitter < 5m unless tile index changed
-        let shouldProcessMesh = true;
-        if (!isFirst && this.lastProcessedLat !== null && this.lastProcessedLng !== null) {
-            const dist = this.calculateDistanceMeters(this.lastProcessedLat, this.lastProcessedLng, latitude, longitude);
-            if (dist < 5 && this.gridManager) {
-                const { meshId } = this.gridManager.getMeshIdFromLatLng(latitude, longitude);
-                if (meshId === this.currentMeshId) {
-                    shouldProcessMesh = false;
-                }
-            }
+        if (skipStationary) {
+            // 位置は同じマスの中で揺れているだけ。地図・通信・Watch を触らない
+            this.lastSkippedPositionAt = Date.now();
+            return { skipped: true, meshId: mesh.meshId, latIdx: mesh.latIdx, lngIdx: mesh.lngIdx };
         }
+
+        // 現在地が動いたら Watch の地図も追いつかせる（2秒に1回へ間引きは WatchBridgeClient 側）
+        this.notifyWatchState('position');
+
+        // Battery / Noise Filter: 同じマスにいる間の誤差レベルの揺れは捨てる
+        // （マスが変わった/チームが変わった場合は必ず処理する）
+        const shouldProcessMesh = !(mesh && mesh.meshId === this.currentMeshId && cellTeam === this.currentTeam && cellTeam != null);
 
         if (shouldProcessMesh && options.skipClaim !== true) {
             this.lastProcessedLat = latitude;
@@ -3266,23 +3507,31 @@ class TerritoryWalkApp {
         const pulseColor = this.currentTeam === 'white' ? '#ffffff' : '#000000';
         const ringBorder = this.currentTeam === 'white' ? '#000000' : '#ffffff';
 
-        const customIcon = L.divIcon({
-            className: 'custom-player-marker',
-            html: `
+        // 【v1.2 省電力】陣営が変わっていない限りアイコンは作り直さない（DOM再生成の節約）
+        if (!this.playerMarkerIcon || this.playerMarkerIconTeam !== this.currentTeam) {
+            this.playerMarkerIcon = L.divIcon({
+                className: 'custom-player-marker',
+                html: `
                 <div class="relative flex items-center justify-center w-6 h-6">
                     <span class="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style="background-color: ${pulseColor};"></span>
                     <span class="relative inline-flex rounded-full h-4 w-4 shadow-md" style="background-color: ${pulseColor}; border: 2px solid ${ringBorder};"></span>
                 </div>
             `,
-            iconSize: [24, 24],
-            iconAnchor: [12, 12]
-        });
+                iconSize: [24, 24],
+                iconAnchor: [12, 12]
+            });
+            this.playerMarkerIconTeam = this.currentTeam;
+        }
+        const customIcon = this.playerMarkerIcon;
 
         if (!this.userMarker) {
             this.userMarker = L.marker(latlng, { icon: customIcon, zIndexOffset: 1000 }).addTo(this.map);
         } else {
             this.userMarker.setLatLng(latlng);
-            this.userMarker.setIcon(customIcon);
+            if (this.userMarkerIconTeam !== this.currentTeam) {
+                this.userMarker.setIcon(customIcon);
+                this.userMarkerIconTeam = this.currentTeam;
+            }
         }
     }
 
@@ -3295,6 +3544,7 @@ class TerritoryWalkApp {
             this.userMarker.remove();
         }
         this.userMarker = null;
+        this.userMarkerIconTeam = null;
     }
 
     // ---------------------------------------------------------------

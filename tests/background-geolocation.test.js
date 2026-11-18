@@ -595,7 +595,7 @@ test('配線: index.html が最新 app.js を読み、www/ と同期されてい
 
     assert.match(html, /app\.js\?v=\d{8}v\d+/);
     assert.match(app, /registerPlugin\(BACKGROUND_GEOLOCATION_PLUGIN_NAME\)/);
-    assert.match(app, /addWatcher\(BACKGROUND_GEOLOCATION_OPTIONS/);
+    assert.match(app, /addWatcher\(watcherOptions|addWatcher\(BACKGROUND_GEOLOCATION_OPTIONS/);
     assert.match(app, /removeWatcher\(\{ id: watcherId \}\)/);
     assert.equal(wwwApp, app, 'www/app.js は app.js と同一（npm run build で同期）');
 });
