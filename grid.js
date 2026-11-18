@@ -11,10 +11,14 @@
  *
  * v1.1 ズーム別の描画（居場所の手がかりを残さない3段階）:
  *   - zoom >= 16（近距離）: 100mマス。初期配置＋実績＋自分の足跡枠線。
- *   - 13 <= zoom < 16（中距離）: 100mマスは描かず、10×10マス（約1km四方）のブロックに集計して薄く塗る。
+ *   - 11 <= zoom < 16（中〜広域）: 100mマスは描かず、10×10マス（約1km四方）のブロックに集計して薄く塗る。
  *     ブロック内の色は多数決なので、細かな歩行経路は分からない。
- *   - zoom < 13（広域）: マスもブロックも一切描かない。
+ *   - zoom < 11（広域）: マスもブロックも一切描かない。
  *   スコア（勝敗）は従来どおり claimedTilesCache だけで集計し、描画とは無関係。
+ *
+ * v1.2 ブロック表示を県レベル（zoom 11）まで拡張。
+ *   375×812 の画面あたりブロック数は約1,400なので、描画上限を
+ *   ブロック用に BLOCK_RENDER_MAX_COUNT で別に持つ。
  */
 
 /** 塗りの濃さ（初期配置・実際に塗ったマスで同じにする＝見分けが付かない） */
@@ -33,8 +37,22 @@ const FOOTPRINT_MAX_TILES = 3000;
 const BLOCK_TILES = 10;
 /** 100mマス（近距離）を描く下限ズーム */
 const TILE_DETAIL_MIN_ZOOM = 16;
-/** 1kmブロック（中距離）を描く下限ズーム。これ未満は何も描かない */
-const BLOCK_RENDER_MIN_ZOOM = 13;
+/** 1kmブロック（中〜広域）を描く下限ズーム。これ未満は何も描かない */
+const BLOCK_RENDER_MIN_ZOOM = 11;
+/** 画面に描く1kmブロックの上限（375×812 / zoom 11 で約1,400枚。全部埋まる上限） */
+const BLOCK_RENDER_MAX_COUNT = 2000;
+/**
+ * 100mマスを取得する下限ズーム。
+ * ブロック表示は zoom 11 からだが、1マス単位のDB取得は13から（画面全体が15kmを超えるため）。
+ */
+const REMOTE_FETCH_MIN_ZOOM = 13;
+/**
+ * 週IDの再計算間隔（ms）。
+ * getCurrentWeekId() は toLocaleString(Asia/Tokyo) を使うため1回が重く、
+ * 県レベル（zoom 11）の1,400ブロック描画で数千回呼ぶと数十msかかる。
+ * 週は月曜0時（JST）にしか変わらないので、数秒のキャッシュで十分。
+ */
+const WEEK_ID_CACHE_MS = 2000;
 /**
  * 1kmブロックの描画スタイル。
  * 地図の文字・道路が読めるように薄く塗り、枠線はごく薄くする（＝細かな経路を見せない）。
@@ -106,8 +124,8 @@ function zoomThresholds() {
 /**
  * 現在のズームの表示モード。
  *   'tiles'  : 100mマス（zoom >= 16）
- *   'blocks' : 1kmブロック（13 <= zoom < 16）
- *   'none'   : 何も描かない（zoom < 13）
+ *   'blocks' : 1kmブロック（11 <= zoom < 16）
+ *   'none'   : 何も描かない（zoom < 11）
  */
 function displayModeForZoom(zoom) {
     const { detailMin, blockMin } = zoomThresholds();
@@ -131,6 +149,11 @@ class GridManager {
         this.claimedTilesCache = new Map(); // meshId -> 'white' | 'black'
         this.renderedMeshes = new Map();     // meshId -> L.Rectangle layer
         this.renderedBlocks = new Map();     // blockId -> L.Rectangle layer（中距離表示）
+        // ブロックの色（100マスの多数決）のキャッシュ。
+        //   県レベル（zoom 11）は画面に約1,400ブロック＝約14万マスの集計が必要で、
+        //   パンのたびに数え直すと数十msかかる。ブロック単位で覚えておき、
+        //   陣地・非表示ピン・週が変わったときにその分だけ捨てる。
+        this.blockTeamCache = new Map();     // `${weekId}|${latBlock}_${lngBlock}` -> 'white' | 'black'
 
         // 自分の足跡（今週踏んだマス）。端末内のみ・サーバーへは送らない
         this.footprintWeek = null;
@@ -141,13 +164,31 @@ class GridManager {
         this.weekId = null;
 
         // Use Canvas renderer for low memory footprint and high 60fps performance
-        this.canvasRenderer = (typeof L !== 'undefined' && L.canvas) ? L.canvas({ padding: 0.5 }) : null;
+        // （地図が preferCanvas: true なら同じキャンバスを使い回し、キャンバスを二重に持たない）
+        this.canvasRenderer = (typeof L !== 'undefined' && L.canvas) ? this.resolveCanvasRenderer() : null;
         this.gridLayerGroup = L.layerGroup().addTo(this.map);
 
         this.checkWeekReset();
         this.loadTilesFromStorage();
         this.loadFootprint();
         this.initEventListeners();
+    }
+
+    /**
+     * マス描画用の Canvas レンダラ。
+     * L.map が preferCanvas: true なら地図の共通レンダラを返し、画面サイズ分の
+     * キャンバスをもう1枚作らない（グリッドもプライバシー円も同じキャンバスに描く）。
+     */
+    resolveCanvasRenderer() {
+        try {
+            const map = this.map;
+            if (map && map.options && map.options.preferCanvas === true
+                && typeof map.getRenderer === 'function') {
+                const shared = map.getRenderer({ options: {} });
+                if (shared) return shared;
+            }
+        } catch (e) { /* 共通レンダラが取れない環境では自前で作る */ }
+        return L.canvas({ padding: 0.5 });
     }
 
     /**
@@ -211,28 +252,38 @@ class GridManager {
     }
 
     /**
-     * ブロック内の100マスを resolveTileTeam で数える。
+     * ブロック内の100マスを数える。
      * 非表示ピンの中のマスは「中立」として数えない（区域の存在を色に滲ませない）。
+     * 県レベル（zoom 11）は画面あたり約1,400ブロック＝約14万マスを数えるので、
+     * 1マスあたりの処理を最小限にする（文字列生成とメソッド呼び出しを減らす）。
      */
     tallyBlock(latBlock, lngBlock) {
         const weekId = this.getWeekId();
         const latBase = latBlock * BLOCK_TILES;
         const lngBase = lngBlock * BLOCK_TILES;
+        const cache = this.claimedTilesCache;
+        // 非表示ピンが1件も無い（大多数の端末）なら、マスごとの判定自体を省く
+        const hasPrivacy = !!(this.app && this.app.privacyZones
+            && typeof this.app.privacyZones.containsMesh === 'function');
         let white = 0;
         let black = 0;
         let masked = 0;
 
         for (let dLat = 0; dLat < BLOCK_TILES; dLat += 1) {
+            const latIdx = latBase + dLat;
             for (let dLng = 0; dLng < BLOCK_TILES; dLng += 1) {
-                const latIdx = latBase + dLat;
                 const lngIdx = lngBase + dLng;
-                if (this.getPrivacyZone(latIdx, lngIdx)) {
+                if (hasPrivacy && this.getPrivacyZone(latIdx, lngIdx)) {
                     masked += 1;
                     continue;
                 }
-                const team = this.resolveTileTeam(this.getMeshId(latIdx, lngIdx), latIdx, lngIdx, weekId);
+                // 実績があればそれが色、無ければ週と座標で決まる初期配置（resolveTileTeam と同じ規則）
+                const claimed = cache.get(`tile_${latIdx}_${lngIdx}`);
+                const team = (claimed === 'white' || claimed === 'black')
+                    ? claimed
+                    : deterministicInitialTeam(weekId, latIdx, lngIdx);
                 if (team === 'white') white += 1;
-                else if (team === 'black') black += 1;
+                else black += 1;
             }
         }
 
@@ -249,13 +300,54 @@ class GridManager {
         return deterministicBlockTeam(this.getWeekId(), latBlock, lngBlock);
     }
 
-    /** 現在の週ID（初期配置のハッシュ種） */
+    /* ---------------- ブロック色のキャッシュ（県レベルの描画を軽くする） ---------------- */
+
+    /** キャッシュキー。週が変われば別キーになるので古い週の値は使われない */
+    blockTeamCacheKey(latBlock, lngBlock) {
+        return `${this.getWeekId()}|${latBlock}_${lngBlock}`;
+    }
+
+    /** キャッシュ付きの resolveBlockTeam（描画はこちらを使う） */
+    resolveBlockTeamCached(latBlock, lngBlock) {
+        if (!this.blockTeamCache || typeof this.blockTeamCache.get !== 'function') {
+            return this.resolveBlockTeam(latBlock, lngBlock);
+        }
+        const key = this.blockTeamCacheKey(latBlock, lngBlock);
+        const cached = this.blockTeamCache.get(key);
+        if (cached === 'white' || cached === 'black') return cached;
+        const team = this.resolveBlockTeam(latBlock, lngBlock);
+        this.blockTeamCache.set(key, team);
+        return team;
+    }
+
+    /** 1マスが塗り替わった → そのマスが属するブロックのキャッシュだけを捨てる */
+    invalidateBlockTeamAt(latIdx, lngIdx) {
+        if (!this.blockTeamCache || typeof this.blockTeamCache.delete !== 'function') return false;
+        if (!Number.isFinite(latIdx) || !Number.isFinite(lngIdx)) return false;
+        const { latBlock, lngBlock } = this.getBlockIndices(latIdx, lngIdx);
+        return this.blockTeamCache.delete(this.blockTeamCacheKey(latBlock, lngBlock));
+    }
+
+    /** 広い範囲の陣地が変わった（リモート取り込み・非表示ピン・週リセット） → 全部捨てる */
+    clearBlockTeamCache() {
+        const size = this.blockTeamCache.size;
+        this.blockTeamCache.clear();
+        return size;
+    }
+
+    /** 現在の週ID（初期配置のハッシュ種）。短時間キャッシュして描画中の再計算を避ける */
     getWeekId() {
-        if (this.app && this.app.supabaseManager) {
+        const now = Date.now();
+        if (this.weekId && this.weekIdCachedAt && (now - this.weekIdCachedAt) < WEEK_ID_CACHE_MS) {
+            return this.weekId;
+        }
+        if (this.app && this.app.supabaseManager
+            && typeof this.app.supabaseManager.getCurrentWeekId === 'function') {
             this.weekId = this.app.supabaseManager.getCurrentWeekId();
         } else if (!this.weekId) {
             this.weekId = isoWeekIdJst();
         }
+        this.weekIdCachedAt = now;
         return this.weekId || isoWeekIdJst();
     }
 
@@ -292,6 +384,8 @@ class GridManager {
         } catch (e) {
             console.warn('Failed to load tiles from localStorage:', e);
         }
+        // 保存分を読んだので、古いブロック色のキャッシュがあれば捨てる
+        this.clearBlockTeamCache();
     }
 
     saveTilesToStorage() {
@@ -410,10 +504,12 @@ class GridManager {
     async fetchAndSyncTiles() {
         if (!this.app || !this.app.supabaseManager) return;
 
-        // 広域表示（zoom < 13）では取得しない：そのズームではマスもブロックも描かないため意味がなく、
-        // 大範囲クエリによるDB負荷・描画負荷も防ぐ。
+        // 広域表示（zoom < 13）では取得しない：そのズームではマスを描かず、
+        // 大範囲クエリによるDB負荷・描画負荷も防ぐ（zoom 11〜12 は初期配置だけでブロックを描く）。
         const zoom = this.map ? this.map.getZoom() : 0;
-        const minZoom = (typeof CONFIG !== 'undefined' && CONFIG.REMOTE_FETCH_MIN_ZOOM) ? CONFIG.REMOTE_FETCH_MIN_ZOOM : BLOCK_RENDER_MIN_ZOOM;
+        const minZoom = (typeof CONFIG !== 'undefined' && CONFIG && Number.isFinite(CONFIG.REMOTE_FETCH_MIN_ZOOM))
+            ? CONFIG.REMOTE_FETCH_MIN_ZOOM
+            : REMOTE_FETCH_MIN_ZOOM;
         if (zoom < minZoom) return;
 
         try {
@@ -441,6 +537,8 @@ class GridManager {
                     }
                 });
                 if (updated) {
+                    // リモートで陣地が変わった → ブロック色のキャッシュも捨てる
+                    this.clearBlockTeamCache();
                     this.updateGrids();
                     this.saveTilesToStorage();
                     if (this.app) this.app.updateScoreUI();
@@ -538,6 +636,8 @@ class GridManager {
      * Redraw all rendered tiles / blocks based on current skin
      */
     redrawTiles() {
+        // 見た目を作り直すので、ブロック色のキャッシュも捨ててから数え直す
+        this.clearBlockTeamCache();
         for (const [meshId, rectangle] of this.renderedMeshes.entries()) {
             const parts = meshId.split('_');
             if (parts.length !== 3) continue;
@@ -546,6 +646,8 @@ class GridManager {
             rectangle.setStyle(this.getTileStyle(this.resolveTileTeam(meshId, latIdx, lngIdx), {
                 ownFootprint: this.isOwnFootprint(meshId)
             }));
+            // 直接 setStyle したので、次の描画で差分判定をやり直す
+            rectangle._twStyleKey = null;
         }
         for (const [blockId, rectangle] of this.renderedBlocks.entries()) {
             const parts = blockId.split('_');
@@ -553,6 +655,7 @@ class GridManager {
             const latBlock = parseInt(parts[1], 10);
             const lngBlock = parseInt(parts[2], 10);
             rectangle.setStyle(this.getBlockStyle(this.resolveBlockTeam(latBlock, lngBlock)));
+            rectangle._twStyleKey = null;
         }
     }
 
@@ -563,6 +666,7 @@ class GridManager {
     clearAllTiles() {
         const cleared = this.claimedTilesCache.size;
         this.claimedTilesCache.clear();
+        this.clearBlockTeamCache();
         this.footprintIds = [];
         this.footprintSet = new Set();
         this.saveFootprint();
@@ -584,8 +688,8 @@ class GridManager {
     /**
      * 画面内を描く。ズームで3段階に切り替える（updateGrids の唯一の入口）。
      *   zoom >= 16 : 100mマス
-     *   13 <= zoom < 16 : 1kmブロック
-     *   zoom < 13 : 何も描かない（画面上のマス・ブロックをすべて消す）
+     *   11 <= zoom < 16 : 1kmブロック（県レベルまで）
+     *   zoom < 11 : 何も描かない（画面上のマス・ブロックをすべて消す）
      */
     updateGrids() {
         const bounds = this.map.getBounds();
@@ -602,7 +706,7 @@ class GridManager {
             this.updateBlockGrids(bounds);
             return;
         }
-        // 広域（zoom < 13）: 過疎地で「誰かが歩いた場所」が浮き上がらないよう、何も描かない
+        // 広域（zoom < 11）: 過疎地で「誰かが歩いた場所」が浮き上がらないよう、何も描かない
         this.clearRenderedTiles();
         this.clearRenderedBlocks();
     }
@@ -663,7 +767,7 @@ class GridManager {
         }
     }
 
-    /** 中距離（13 <= zoom < 16）: 10×10マスをまとめた1kmブロック */
+    /** 中〜広域（11 <= zoom < 16）: 10×10マスをまとめた1kmブロック */
     updateBlockGrids(bounds) {
         const minLatIdx = Math.floor(bounds.getSouth() / this.LAT_GRID);
         const maxLatIdx = Math.floor(bounds.getNorth() / this.LAT_GRID);
@@ -675,7 +779,10 @@ class GridManager {
         const minLngBlock = Math.floor(minLngIdx / BLOCK_TILES);
         const maxLngBlock = Math.floor(maxLngIdx / BLOCK_TILES);
 
-        const maxRender = (typeof CONFIG !== 'undefined' && CONFIG.MAX_TILES_PER_RENDER) ? CONFIG.MAX_TILES_PER_RENDER : 1200;
+        // ブロックは県レベル（zoom 11）で約1,400枚になるので、マス用の上限とは別に持つ
+        const maxRender = (typeof CONFIG !== 'undefined' && CONFIG.BLOCK_RENDER_MAX_COUNT)
+            ? CONFIG.BLOCK_RENDER_MAX_COUNT
+            : (typeof CONFIG !== 'undefined' && CONFIG.MAX_TILES_PER_RENDER ? Math.max(CONFIG.MAX_TILES_PER_RENDER, BLOCK_RENDER_MAX_COUNT) : BLOCK_RENDER_MAX_COUNT);
         const currentVisibleBlocks = new Set();
         let renderedCount = 0;
 
@@ -731,8 +838,19 @@ class GridManager {
         return null;
     }
 
+    /** 現在のスキン（データ属性）。見た目の差分判定に使う */
+    currentSkin() {
+        try {
+            if (typeof document !== 'undefined' && document.body && document.body.dataset) {
+                return document.body.dataset.skin || 'default';
+            }
+        } catch (e) { /* ignore */ }
+        return 'default';
+    }
+
     /**
      * 1マス描く。色は resolveTileTeam が決める（初期配置 / 実績 / 非表示ピン）。
+     * 見た目が前回と同じなら setStyle しない（Canvas の描き直しを減らす）。
      */
     renderSingleTile(meshId, latIdx, lngIdx) {
         if (latIdx === undefined || lngIdx === undefined) {
@@ -741,19 +859,23 @@ class GridManager {
             lngIdx = parseInt(parts[2], 10);
         }
 
-        const style = this.getTileStyle(this.resolveTileTeam(meshId, latIdx, lngIdx), {
-            ownFootprint: this.isOwnFootprint(meshId)
-        });
+        const team = this.resolveTileTeam(meshId, latIdx, lngIdx);
+        const ownFootprint = this.isOwnFootprint(meshId);
+        const styleKey = `${team}|${ownFootprint ? 1 : 0}|${this.currentSkin()}`;
 
         if (this.renderedMeshes.has(meshId)) {
             const rect = this.renderedMeshes.get(meshId);
-            rect.setStyle(style);
+            if (rect._twStyleKey === styleKey) return rect;
+            rect.setStyle(this.getTileStyle(team, { ownFootprint }));
+            rect._twStyleKey = styleKey;
             return rect;
         }
 
+        const style = this.getTileStyle(team, { ownFootprint });
         const bounds = this.getMeshBounds(latIdx, lngIdx);
         const options = this.canvasRenderer ? { ...style, renderer: this.canvasRenderer } : style;
         const rect = L.rectangle(bounds, options);
+        rect._twStyleKey = styleKey;
         rect.addTo(this.gridLayerGroup);
         this.renderedMeshes.set(meshId, rect);
         return rect;
@@ -776,20 +898,26 @@ class GridManager {
     }
 
     /**
-     * 1ブロック（約1km四方）描く。色は resolveBlockTeam（ブロック内100マスの多数決）。
+     * 1ブロック（約1km四方）描く。色は resolveBlockTeamCached（ブロック内100マスの多数決）。
+     * 見た目が前回と同じなら setStyle しない（1,400枚の再描画を防ぐ）。
      */
     renderSingleBlock(blockId, latBlock, lngBlock) {
-        const style = this.getBlockStyle(this.resolveBlockTeam(latBlock, lngBlock));
+        const team = this.resolveBlockTeamCached(latBlock, lngBlock);
+        const styleKey = `${team}|${this.currentSkin()}`;
 
         if (this.renderedBlocks.has(blockId)) {
             const rect = this.renderedBlocks.get(blockId);
-            rect.setStyle(style);
+            if (rect._twStyleKey === styleKey) return rect;
+            rect.setStyle(this.getBlockStyle(team));
+            rect._twStyleKey = styleKey;
             return rect;
         }
 
+        const style = this.getBlockStyle(team);
         const bounds = this.getBlockBounds(latBlock, lngBlock);
         const options = this.canvasRenderer ? { ...style, renderer: this.canvasRenderer } : style;
         const rect = L.rectangle(bounds, options);
+        rect._twStyleKey = styleKey;
         rect.addTo(this.gridLayerGroup);
         this.renderedBlocks.set(blockId, rect);
         return rect;
@@ -810,6 +938,8 @@ if (typeof module !== 'undefined' && module.exports) {
         BLOCK_FILL_OPACITY,
         TILE_DETAIL_MIN_ZOOM,
         BLOCK_RENDER_MIN_ZOOM,
+        BLOCK_RENDER_MAX_COUNT,
+        REMOTE_FETCH_MIN_ZOOM,
         FOOTPRINT_STROKE_COLOR,
         FOOTPRINT_STORAGE_KEY
     };

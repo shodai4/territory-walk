@@ -7,7 +7,7 @@
  *   4) 停止中は実GPS由来の塗りを二重ガードで止める（D-Pad の手動操作は除く）
  *   5) 再開で測位を張り直す（OS権限拒否時は既存バナー導線が生きる）
  *   6) UI（トグルボタン・一時停止バー・タップ再開・積み上げレイアウト）
- *   7) index.html / style.css / www の配線とキャッシュバスター v49
+ *   7) index.html / style.css / www の配線とキャッシュバスター
  *
  * 実行: npm test （node --test tests/）
  */
@@ -580,8 +580,8 @@ test('CSS: 375px幅で崩れない固定サイズと状態別の配色がある'
     assert.match(CSS, /\.marking-toggle-btn\[data-state="paused"\] \{[^}]*background: rgba\(8, 47, 73, 0\.92\);[^}]*border-color: rgba\(56, 189, 248, 0\.85\);/);
 });
 
-test('キャッシュバスター: 変更した app.js は v53、未変更の style.css は v49 を参照する', () => {
-    assert.match(HTML, /app\.js\?v=20261118v61/);
+test('キャッシュバスター: 変更した app.js は v62、未変更の style.css は v50 を参照する', () => {
+    assert.match(HTML, /app\.js\?v=20261119v62/);
     assert.match(HTML, /style\.css\?v=20261116v50/);
 });
 

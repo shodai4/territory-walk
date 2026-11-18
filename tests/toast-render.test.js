@@ -194,9 +194,9 @@ test('描画: renderToast は文言を innerHTML に埋め込まない', () => {
     assert.match(APP_SOURCE, /line\.style\.whiteSpace = 'pre-line'/, 'pre-line で改行を描画する');
 });
 
-test('描画: キャッシュバスター v53 と www/ 同期', () => {
+test('描画: キャッシュバスター v62 と www/ 同期', () => {
     const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
-    assert.match(html, /app\.js\?v=20261118v61/, 'app.js は v56');
+    assert.match(html, /app\.js\?v=20261119v62/, 'app.js は v62');
     assert.match(html, /iap\.js\?v=20261115v50/, 'iap.js は v50');
 
     const wwwApp = path.join(ROOT, 'www', 'app.js');

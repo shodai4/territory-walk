@@ -2,8 +2,8 @@
  * TERRITORY WALK - Node tests
  * v1.1 ズーム別の描画（3段階）:
  *   1) zoom >= 16 … 100mマス（従来どおり初期配置＋実績＋自分の足跡）
- *   2) 13 <= zoom < 16 … 10×10マス（約1km四方）のブロックに集計して薄く描く
- *   3) zoom < 13 … マスもブロックも一切描かない（広域で居場所が分からない）
+ *   2) 11 <= zoom < 16 … 10×10マス（約1km四方）のブロックに集計して薄く描く（v1.2で県レベルまで拡張）
+ *   3) zoom < 11 … マスもブロックも一切描かない（広域で居場所が分からない）
  *   4) ブロックの色は白黒の多数決。同数は week_id とブロック座標の決定論的ハッシュ
  *   5) 非表示ピンの中のマスは集計から除外（中立）
  *   6) スコア（％バー）と歩行判定は claimedTilesCache だけを見る（描画と非干渉）
@@ -17,7 +17,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const ROOT = path.resolve(__dirname, '..');
-const { GridManager, deterministicBlockTeam, displayModeForZoom, BLOCK_TILES, BLOCK_FILL_OPACITY } =
+const { GridManager, deterministicBlockTeam, displayModeForZoom, BLOCK_TILES, BLOCK_FILL_OPACITY, BLOCK_RENDER_MAX_COUNT } =
     require(path.join(ROOT, 'grid.js'));
 
 const LAT_GRID = 0.0009;
@@ -112,15 +112,16 @@ function createRealGrid({ claimed = [], zones = null, weekId = WEEK, zoom = 17, 
  * 1. ズームの3段階
  * ------------------------------------------------------------------ */
 
-test('ズーム: 16以上は100mマス、13〜15は1kmブロック、12以下は何も描かない', () => {
+test('ズーム: 16以上は100mマス、11〜15は1kmブロック、10以下は何も描かない', () => {
     assert.equal(displayModeForZoom(20), 'tiles');
     assert.equal(displayModeForZoom(17), 'tiles');
     assert.equal(displayModeForZoom(16), 'tiles');
     assert.equal(displayModeForZoom(15.9), 'blocks');
     assert.equal(displayModeForZoom(15), 'blocks');
     assert.equal(displayModeForZoom(13), 'blocks');
-    assert.equal(displayModeForZoom(12.9), 'none');
-    assert.equal(displayModeForZoom(12), 'none');
+    assert.equal(displayModeForZoom(11), 'blocks', '県レベル（zoom 11）でもブロックを描く');
+    assert.equal(displayModeForZoom(10.9), 'none');
+    assert.equal(displayModeForZoom(10), 'none');
     assert.equal(displayModeForZoom(5), 'none');
     assert.equal(displayModeForZoom(2), 'none');
 });
@@ -139,11 +140,11 @@ test('ズーム: しきい値は CONFIG で上書きできる（アプリ側の�
     }
 });
 
-test('設定: app.js の CONFIG がこの仕様（100m=16以上 / ブロック=13以上 / 取得も13以上）と一致する', () => {
+test('設定: app.js の CONFIG がこの仕様（100m=16以上 / ブロック=11以上 / マス取得は13以上）と一致する', () => {
     const source = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
     const configBlock = source.slice(source.indexOf('const CONFIG = {'), source.indexOf('};', source.indexOf('const CONFIG = {')));
     assert.match(configBlock, /TILE_DETAIL_MIN_ZOOM:\s*16/);
-    assert.match(configBlock, /TILE_RENDER_MIN_ZOOM:\s*13/);
+    assert.match(configBlock, /TILE_RENDER_MIN_ZOOM:\s*11/);
     assert.match(configBlock, /REMOTE_FETCH_MIN_ZOOM:\s*13/);
     // 古い「zoom 5 から描く」記述が残っていない
     assert.doesNotMatch(configBlock, /TILE_RENDER_MIN_ZOOM:\s*5/);
@@ -309,21 +310,25 @@ test('描画: zoom 14 では1kmブロックだけを描き、100mマスは残さ
     assert.ok(grid.renderedBlocks.size <= 200, `画面あたりのブロック数は200以下（実際: ${grid.renderedBlocks.size}）`);
 });
 
-test('描画: zoom 11 では何も描かない（マスもブロックも消える）', () => {
+test('描画: zoom 11（県レベル）では1kmブロックを描き、zoom 10 では何も描かない', () => {
     const { grid, map } = createRealGrid({ zoom: 17 });
     map.state.zoom = 14;
     grid.updateGrids();
     assert.ok(grid.renderedBlocks.size > 0);
 
-    map.state.zoom = 12;
-    grid.updateGrids();
-    assert.equal(grid.renderedMeshes.size, 0);
-    assert.equal(grid.renderedBlocks.size, 0, 'zoom 12 でブロックも消える');
-
+    // zoom 14 → 11（県レベル）へ引く: 依然としてブロックを描く
+    map.state.bounds = viewportBounds(34.6, 135.6, 11);
     map.state.zoom = 11;
     grid.updateGrids();
+    assert.equal(grid.renderedMeshes.size, 0, '100mマスは描かない');
+    assert.ok(grid.renderedBlocks.size > 0, 'zoom 11 でもブロックを描く');
+
+    // zoom 11 → 10 で全部消える（過疎地の浮き上がり防止）
+    map.state.bounds = viewportBounds(34.6, 135.6, 10);
+    map.state.zoom = 10;
+    grid.updateGrids();
     assert.equal(grid.renderedMeshes.size, 0);
-    assert.equal(grid.renderedBlocks.size, 0);
+    assert.equal(grid.renderedBlocks.size, 0, 'zoom 10 でブロックも消える');
 });
 
 test('描画: ブロックは薄い半透明で、細かな経路が見えない濃さにする', () => {
@@ -350,8 +355,9 @@ test('描画: 中距離では塗った直後でもマスではなくブロック
     const { latBlock, lngBlock } = grid.getBlockIndices(latIdx, lngIdx);
     assert.ok(grid.renderedBlocks.has(grid.getBlockId(latBlock, lngBlock)));
 
-    // 広域では新しく何も描かない（既存のレイヤーは次の updateGrids で消える）
-    map.state.zoom = 11;
+    // 広域（zoom 10 以下）では新しく何も描かない（既存のレイヤーは次の updateGrids で消える）
+    map.state.bounds = viewportBounds(34.6, 135.6, 10);
+    map.state.zoom = 10;
     assert.equal(grid.renderTileForCurrentZoom(grid.getMeshId(latIdx, lngIdx), latIdx, lngIdx), null);
     assert.equal(grid.renderedMeshes.size, 0, '100mマスは追加しない');
     assert.equal(grid.renderedBlocks.size, 1, 'ブロックを新たに増やさない');
@@ -405,7 +411,7 @@ test('歩行判定: 塗る処理は従来どおり実績マスだけを書き換
  * 5. 広域で何も出さないことの担保（privacy の穴を戻さない）
  * ------------------------------------------------------------------ */
 
-test('広域: 実績マスが大量にあっても zoom 12 以下では1枚も描かない', () => {
+test('広域: 実績マスが大量にあっても zoom 10 以下では1枚も描かない', () => {
     const claimed = [];
     const latBase = Math.floor(34.6 / LAT_GRID);
     const lngBase = Math.floor(135.6 / LNG_GRID);
@@ -414,11 +420,56 @@ test('広域: 実績マスが大量にあっても zoom 12 以下では1枚も�
             claimed.push([`tile_${latBase + dLat}_${lngBase + dLng}`, dLat % 2 === 0 ? 'white' : 'black']);
         }
     }
-    const { grid, map } = createRealGrid({ claimed, zoom: 12 });
-    map.state.zoom = 12;
+    const { grid, map } = createRealGrid({ claimed, zoom: 10 });
+    map.state.zoom = 10;
     grid.updateGrids();
 
     assert.equal(grid.renderedMeshes.size, 0);
     assert.equal(grid.renderedBlocks.size, 0);
     assert.equal(grid.renderedMeshes.size + grid.renderedBlocks.size, 0, '過疎地でも歩いた場所が浮き上がらない');
+});
+
+/* ------------------------------------------------------------------ *
+ * 6. zoom 11（県レベル）のブロック描画（v1.2）
+ * ------------------------------------------------------------------ */
+
+test('描画: zoom 11（375×812）はブロックが全面に並び、上限1枚も欠けない', () => {
+    const { grid, map } = createRealGrid({ zoom: 11 });
+    grid.updateGrids();
+
+    assert.equal(grid.renderedMeshes.size, 0);
+    assert.ok(grid.renderedBlocks.size >= 1000, `県レベルでは1,000枚以上のブロック（実際: ${grid.renderedBlocks.size}）`);
+    assert.ok(
+        grid.renderedBlocks.size <= BLOCK_RENDER_MAX_COUNT,
+        `描画上限 ${BLOCK_RENDER_MAX_COUNT} 以内（実際: ${grid.renderedBlocks.size}）`
+    );
+
+    // 画面の四隅までブロックが届いている（上限で下側が欠けていない）
+    const bounds = map.getBounds();
+    const corners = [
+        grid.getMeshIndices(bounds.getSouth(), bounds.getWest()),
+        grid.getMeshIndices(bounds.getNorth(), bounds.getEast())
+    ].map(({ latIdx, lngIdx }) => {
+        const { latBlock, lngBlock } = grid.getBlockIndices(latIdx, lngIdx);
+        return grid.getBlockId(latBlock, lngBlock);
+    });
+    for (const id of corners) {
+        assert.ok(grid.renderedBlocks.has(id), `画面の四隅のブロック ${id} も描く`);
+    }
+});
+
+test('性能: zoom 11（県レベル）の初回描画は400ms以内、再描画はキャッシュで30ms以内', () => {
+    const { grid } = createRealGrid({ zoom: 11 });
+
+    const firstStart = process.hrtime.bigint();
+    grid.updateGrids();
+    const firstMs = Number(process.hrtime.bigint() - firstStart) / 1e6;
+
+    const cachedStart = process.hrtime.bigint();
+    grid.updateGrids();
+    const cachedMs = Number(process.hrtime.bigint() - cachedStart) / 1e6;
+
+    assert.ok(firstMs < 400, `初回（1,400ブロックの集計）が400ms以内（実際: ${firstMs.toFixed(1)}ms）`);
+    assert.ok(cachedMs < 30, `再描画はキャッシュで30ms以内（実際: ${cachedMs.toFixed(1)}ms）`);
+    assert.ok(cachedMs < firstMs, 'キャッシュで必ず軽くなる');
 });

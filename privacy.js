@@ -312,6 +312,8 @@ class PrivacyZoneManager {
     refreshTiles() {
         const grid = this.app ? this.app.gridManager : null;
         if (!grid) return;
+        // 区域が変わるとブロックの多数決も変わるので、色キャッシュを捨ててから描き直す
+        if (typeof grid.clearBlockTeamCache === 'function') grid.clearBlockTeamCache();
         if (typeof grid.updateGrids === 'function') grid.updateGrids();
     }
 

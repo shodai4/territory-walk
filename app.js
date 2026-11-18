@@ -12,13 +12,16 @@ const CONFIG = {
     MAX_ZOOM: 20,
     // 地図の描画はズームで3段階（grid.js の displayModeForZoom）:
     //   zoom >= 16 … 100mマス（初期配置＋実績＋自分の足跡）
-    //   13〜15 … 10×10マス（約1km四方）のブロックに集計して薄く描く
-    //   12以下 … マスもブロックも一切描かない（広域での居場所特定を防ぐ）
+    //   11〜15 … 10×10マス（約1km四方）のブロックに集計して薄く描く（県レベルまで）
+    //   10以下 … マスもブロックも一切描かない（広域での居場所特定を防ぐ）
     // 100mマスを描く下限ズーム
     TILE_DETAIL_MIN_ZOOM: 16,
     // 何かを描く下限ズーム（1kmブロック）。これ未満は何も描かない
-    TILE_RENDER_MIN_ZOOM: 13,
-    // 13未満は何も描かないので、DB取得もここ以上に限る（大範囲クエリの負荷も防ぐ）
+    TILE_RENDER_MIN_ZOOM: 11,
+    // 100mマスの取得下限ズーム。
+    //   zoom 11〜12 はブロック表示だが、画面全体が15km四方を超えて
+    //   supabase.js の MAX_INDEX_SPAN（150マス≒15km）を超えるため、そもそも取得しない。
+    //   そのズームでは初期配置と自分の実績だけでブロックを描く（1マス単位の取得は12以下で禁止）。
     REMOTE_FETCH_MIN_ZOOM: 13,
     MAX_TILES_PER_RENDER: 1200,
     // デバッグ機能（D-PAD・コイン操作・プレビュー・チーム切替等）のマスタースイッチ
@@ -57,6 +60,26 @@ const STATIONARY_SKIP_STANDARD_M = 5;
 const STATIONARY_SKIP_POWER_SAVE_M = 12;
 // 省電力モードの ON/OFF を保存するキー（端末内のみ）
 const POWER_SAVE_STORAGE_KEY = 'tw_power_save';
+
+/* ================================================================== *
+ * v1.2 画面表示中だけ動く定期処理（電池対策）
+ *
+ *   ・8秒ごとの loadRemoteTiles()（他プレイヤーの陣地の取り込み）
+ *   ・1秒ごとのリセットまでのカウントダウン
+ * は、どちらも「画面に見えている」ときだけ意味がある処理。
+ * document.hidden の間は setInterval ごと止め（タイマー起床もゼロ）、
+ * visibilitychange で戻ってきた瞬間にカウントダウンを即更新し、
+ * 陣地の取得は1回だけやり直す。
+ *
+ * 注意：歩行記録用のバックグラウンド測位（BackgroundGeolocation の watcher）は
+ * 画面が見えていなくても塗り続けるのが仕様なので、ここでは止めない。
+ * ================================================================== */
+// 他プレイヤーの陣地を取り込むポーリング間隔（ms）
+const REMOTE_TILES_POLL_MS = 8000;
+// 週リセットまでのカウントダウンを刻む間隔（ms）
+const RESET_COUNTDOWN_TICK_MS = 1000;
+// 復帰時に陣地を取り直す最短間隔（ms）。画面の連続切替で通信を重ねない
+const FOREGROUND_REFRESH_MIN_INTERVAL_MS = 1000;
 
 const BACKGROUND_GEOLOCATION_OPTIONS = {
     // backgroundMessage を定義すると、画面消灯・バックグラウンド中も位置更新が届く
@@ -175,6 +198,13 @@ class TerritoryWalkApp {
         this.powerSaveMode = this.readPowerSavePreference();
         // 測位ウォッチャーを開始済みか（停止→再開で二重起動しないためのフラグ）
         this.geolocationStarted = false;
+        // 画面表示中だけ動く定期処理のタイマー ID（非表示中は null）
+        this.remoteTilesPollTimer = null;
+        this.resetCountdownTimer = null;
+        // リセットまでのカウントダウンを即時更新する関数（initResetCountdown が差し込む）
+        this.updateResetCountdown = null;
+        // 復帰時の陣地取り直しを連打で重ねないための最終実行時刻
+        this.lastForegroundRefreshAt = 0;
 
         // Background location & iOS optimization state
         // ネイティブのバックグラウンド位置情報（watcher は常に1本だけ）
@@ -254,10 +284,8 @@ class TerritoryWalkApp {
         // Check Season / Weekly Reset Result
         this.checkWeeklyResetResult();
 
-        // Periodic polling fallback (every 8s) to ensure other players' tiles appear even without map drag
-        setInterval(() => {
-            this.loadRemoteTiles();
-        }, 8000);
+        // 他プレイヤーの陣地のポーリング（画面が見えている間だけ動く）
+        this.startRemoteTilesPolling();
 
         // 前回オフライン中に溜まった未送信分を起動時に再送
         setTimeout(() => {
@@ -798,6 +826,9 @@ class TerritoryWalkApp {
             maxZoom: CONFIG.MAX_ZOOM,
             zoomControl: false,
             attributionControl: false,
+            // v1.2: マス・ブロック・プライバシー円などのベクター描画を Canvas に統一する
+            // （SVG の数だけDOMノードを作らないので、タップ・ズームの引っかかりとメモリを抑える）
+            preferCanvas: true,
             // ズームアウト時に世界地図が横方向に繰り返さないように1枚で収める
             worldCopyJump: false,
             maxBounds: [[-85, -180], [85, 180]],
@@ -2663,6 +2694,9 @@ class TerritoryWalkApp {
      * @returns {boolean} ネイティブ経路で開始できたか（false なら Web フォールバックへ）
      */
     startBackgroundGeolocation(plugin) {
+        // マーキング停止中はバックグラウンド測位を起こさない（起動時の復元・設定変更・
+        // 位置情報バナーの「再確認」など、どの導線から呼ばれてもGPS消費をゼロに保つ）
+        if (this.isMarkingPaused()) return false;
         if (this.backgroundWatcherStarted) return true;
         if (!plugin || typeof plugin.addWatcher !== 'function') return false;
 
@@ -3296,32 +3330,117 @@ class TerritoryWalkApp {
         if (this.locationBanner) this.locationBanner.refreshPermissionState();
     }
 
+    /* ================================================================== *
+     * v1.2 画面表示中だけ動く定期処理（電池対策）
+     *   - document.hidden の間は setInterval 自体を止める（タイマー起床ゼロ）
+     *   - 復帰した瞬間にカウントダウンを即更新し、陣地の取得を1回だけやり直す
+     *   - 歩行記録用のバックグラウンド測位 watcher は止めない（別物・下の visibilitychange を参照）
+     * ================================================================== */
+
+    /** 画面が非表示（バックグラウンド・ロック中）か */
+    isScreenHidden() {
+        return typeof document !== 'undefined' && document.hidden === true;
+    }
+
+    /** 8秒ポーリング（他プレイヤーの陣地の取り込み）を開始する。二重起動しない */
+    startRemoteTilesPolling() {
+        if (this.remoteTilesPollTimer != null) return false;
+        this.remoteTilesPollTimer = setInterval(() => {
+            // 非表示に切り替わった直後の1回分も念のためスキップする（二重ガード）
+            if (this.isScreenHidden()) return;
+            this.loadRemoteTiles();
+        }, REMOTE_TILES_POLL_MS);
+        return true;
+    }
+
+    /** 8秒ポーリングを止める */
+    stopRemoteTilesPolling() {
+        if (this.remoteTilesPollTimer == null) return false;
+        clearInterval(this.remoteTilesPollTimer);
+        this.remoteTilesPollTimer = null;
+        return true;
+    }
+
+    /** リセットまでのカウントダウン（1秒刻み）を開始する。二重起動しない */
+    startResetCountdown() {
+        if (this.resetCountdownTimer != null) return false;
+        if (typeof this.updateResetCountdown !== 'function') return false;
+        this.resetCountdownTimer = setInterval(() => {
+            if (this.isScreenHidden()) return;
+            this.updateResetCountdown();
+        }, RESET_COUNTDOWN_TICK_MS);
+        return true;
+    }
+
+    /** カウントダウンを止める */
+    stopResetCountdown() {
+        if (this.resetCountdownTimer == null) return false;
+        clearInterval(this.resetCountdownTimer);
+        this.resetCountdownTimer = null;
+        return true;
+    }
+
+    /**
+     * 画面が見えていない間の処理を止める。
+     * 止めるのは「画面表示用」の定期通信とカウントダウンだけで、
+     * 歩行記録用のバックグラウンド測位（watcher）はそのまま動かす。
+     */
+    pauseForegroundUpdates() {
+        const polling = this.stopRemoteTilesPolling();
+        const countdown = this.stopResetCountdown();
+        return polling || countdown;
+    }
+
+    /**
+     * 画面が戻ってきたときの再開処理。
+     *   - カウントダウンは止めていた時間分ずれないよう、即時更新してから刻み直す
+     *   - 陣地は1回だけ取り直す（直前の復帰から1秒以内の連続復帰では重ねない）
+     * @returns {boolean} 陣地を取り直したか
+     */
+    resumeForegroundUpdates() {
+        this.startRemoteTilesPolling();
+        if (typeof this.updateResetCountdown === 'function') this.updateResetCountdown();
+        this.startResetCountdown();
+
+        const now = Date.now();
+        if (now - (this.lastForegroundRefreshAt || 0) < FOREGROUND_REFRESH_MIN_INTERVAL_MS) {
+            return false;
+        }
+        this.lastForegroundRefreshAt = now;
+        this.loadRemoteTiles();
+        return true;
+    }
+
     // --- Lifecycle & Background State Handler for iOS / Screen Sleep ---
     initLifecycleListeners() {
         document.addEventListener('visibilitychange', () => {
             this.isAppInBackground = document.hidden;
-            if (!document.hidden) {
-                // Return from background / lock screen
-                if (this.backgroundClaimCount > 0) {
-                    this.showToast(`ポケット歩行で ${this.backgroundClaimCount} マスを開拓しました`);
-                    this.backgroundClaimCount = 0;
-                }
-                if (this.virtualPos && this.map) {
-                    this.updatePlayerMarker(this.virtualPos);
-                    if (this.gridManager) {
-                        this.gridManager.fetchAndRenderTilesInBounds();
-                    }
-                }
-                // 設定アプリで位置情報をオンにして戻ってきた場合にバナーを自動で消す
-                if (this.locationBanner) this.locationBanner.refreshPermissionState();
-                // フォアグラウンド復帰時に未送信分をまとめて同期
-                if (this.syncQueue) this.syncQueue.flush('foreground');
-                // 全国集計（上部％バー）も最新にする
-                this.refreshGlobalTeamCounts({ force: true });
-                // Apple Watch も復帰と同時に追いつかせる
-                this.initWatchBridge();
-                this.notifyWatchState('foreground');
+            if (document.hidden) {
+                // 画面が見えない間は表示用の定期通信・カウントダウンを止める（電池対策）
+                this.pauseForegroundUpdates();
+                return;
             }
+
+            // Return from background / lock screen
+            if (this.backgroundClaimCount > 0) {
+                this.showToast(`ポケット歩行で ${this.backgroundClaimCount} マスを開拓しました`);
+                this.backgroundClaimCount = 0;
+            }
+            if (this.virtualPos && this.map) {
+                this.updatePlayerMarker(this.virtualPos);
+            }
+            // 設定アプリで位置情報をオンにして戻ってきた場合にバナーを自動で消す
+            if (this.locationBanner) this.locationBanner.refreshPermissionState();
+            // フォアグラウンド復帰時に未送信分をまとめて同期
+            if (this.syncQueue) this.syncQueue.flush('foreground');
+            // 全国集計（上部％バー）も最新にする
+            this.refreshGlobalTeamCounts({ force: true });
+            // 止めていたカウントダウンを即時更新して刻み直し、陣地を1回だけ取り直す
+            // （この中で8秒ポーリングも再開する）
+            this.resumeForegroundUpdates();
+            // Apple Watch も復帰と同時に追いつかせる
+            this.initWatchBridge();
+            this.notifyWatchState('foreground');
         });
 
         // 通信状態の復帰・切断（オフラインキューとの連携）
@@ -3346,12 +3465,17 @@ class TerritoryWalkApp {
             try {
                 window.Capacitor.Plugins.App.addListener('appStateChange', (state) => {
                     this.isAppInBackground = !state.isActive;
-                    if (state.isActive && this.syncQueue) this.syncQueue.flush('app-active');
-                    if (state.isActive) this.refreshGlobalTeamCounts({ force: true });
-                    if (state.isActive) {
-                        this.initWatchBridge();
-                        this.notifyWatchState('foreground');
+                    if (!state.isActive) {
+                        // ネイティブ側のアプリ切替でも、表示用の定期処理を止める
+                        // （visibilitychange が来ない端末への保険。測定 watcher は止めない）
+                        this.pauseForegroundUpdates();
+                        return;
                     }
+                    if (this.syncQueue) this.syncQueue.flush('app-active');
+                    this.refreshGlobalTeamCounts({ force: true });
+                    this.resumeForegroundUpdates();
+                    this.initWatchBridge();
+                    this.notifyWatchState('foreground');
                 });
             } catch (e) {}
         }
@@ -3628,6 +3752,10 @@ class TerritoryWalkApp {
 
             // 1. Immediate local UI update
             this.gridManager.claimedTilesCache.set(meshId, this.currentTeam);
+            // 1kmブロックの色キャッシュは「このマスが属するブロック」分だけ捨てる
+            if (typeof this.gridManager.invalidateBlockTeamAt === 'function') {
+                this.gridManager.invalidateBlockTeamAt(latIdx, lngIdx);
+            }
             this.gridManager.saveTilesToStorage();
             // 全国集計（上部％バー）へも即時反映する（新規 +1、奪取は相手 -1）
             this.applyGlobalCountDelta(this.currentTeam, 1);
@@ -4077,7 +4205,9 @@ class TerritoryWalkApp {
         };
 
         updateTimer();
-        setInterval(updateTimer, 1000);
+        // 画面が見えている間だけ1秒ごとに刻む（非表示中は止める）
+        this.updateResetCountdown = updateTimer;
+        this.startResetCountdown();
     }
 
     initRealtimeSync() {
@@ -4098,6 +4228,11 @@ class TerritoryWalkApp {
                                 console.log('[Realtime Sync] Remote tile claimed:', tile.tile_id, tile.team);
                                 this.applyRealtimeGlobalDelta(payload.old ? payload.old.team : null, tile.team);
                                 this.gridManager.claimedTilesCache.set(tile.tile_id, tile.team);
+                                // ブロック集計のキャッシュも、そのマスのブロック分だけ捨てる
+                                if (typeof this.gridManager.invalidateBlockTeamAt === 'function'
+                                    && tile.lat_idx != null && tile.lng_idx != null) {
+                                    this.gridManager.invalidateBlockTeamAt(Number(tile.lat_idx), Number(tile.lng_idx));
+                                }
                                 this.gridManager.saveTilesToStorage();
                                 this.gridManager.updateGrids();
                                 this.updateScoreUI();
