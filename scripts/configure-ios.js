@@ -39,13 +39,15 @@ const MINIMUM_IOS_VERSION = '15.0';
 /**
  * App Store に出すバージョン（CFBundleShortVersionString の元）。
  *
- * v1.0 はすでに審査通過・公開済みのため、同じ 1.0 ではアップロードできない
- * （altool: 90186 "The train version '1.0' is closed" / 90062
+ * 公開済み・審査通過済みのバージョンと同じ番号ではアップロードできない
+ * （altool: 90186 "The train version 'X' is closed" / 90062
  *  "CFBundleShortVersionString must contain a higher version than the previously approved version"）。
- * v1.1 以降はここを上げる。Watch アプリのバージョンも add-watch-target.rb が
- * この値を読んで揃える。
+ *   v1.0 → 1.1（公開済み）
+ *   v1.1 → 1.2（2026-11-19: v1.1 の train が closed になったため 1.2 へ）
+ * ここを上げるときは package.json と tests/minimum-ios.test.js も揃える。
+ * Watch アプリのバージョンも add-watch-target.rb がこの値を読んで揃える。
  */
-const APP_MARKETING_VERSION = '1.1';
+const APP_MARKETING_VERSION = '1.2';
 
 /**
  * ホーム画面（アイコンの下）に表示するアプリ名。
