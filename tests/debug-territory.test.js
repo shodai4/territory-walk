@@ -14,6 +14,7 @@ const path = require('node:path');
 
 const ROOT = path.resolve(__dirname, '..');
 const { DebugTools, DEBUG_RESET_STORAGE_KEYS } = require(path.join(ROOT, 'debug-tools.js'));
+const { readAppSource, APP_SOURCE_FILES } = require('./helpers/app-sources');
 
 const LAT_GRID = 0.0009;
 const LNG_GRID = LAT_GRID / Math.cos(35.0 * Math.PI / 180);
@@ -296,7 +297,7 @@ test('D-Pad: 1マスごとの送信ではトーストを出さず、まとめて
  * 4. 配線の回帰チェック（app.js / index.html / build.js / www）
  * ------------------------------------------------------------------ */
 test('配線: app.js が仮想散歩中に実GPSで座標を上書きしない（D-Pad塗りの要）', () => {
-    const app = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
+    const app = readAppSource();
 
     assert.match(app, /isVirtualWalkActive\(\)\s*\{/, '仮想散歩中判定がある');
     assert.match(app, /if \(this\.isVirtualWalkActive\(\)\) \{\s*this\.updateGPSStatus\('GPS: 仮想散歩中'[\s\S]*?return;/, 'handlePositionUpdate が早期リターンする');
@@ -306,7 +307,7 @@ test('配線: app.js が仮想散歩中に実GPSで座標を上書きしない�
 });
 
 test('配線: デバッグ操作（D-Pad・リセット）は ENABLE_DEBUG_TOOLS=false で早期リターンする', () => {
-    const app = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
+    const app = readAppSource();
 
     // リセットハンドラとリセット本体の双方にガードがある
     assert.match(app, /btn-debug-reset-territories'\);\s*if \(btnDebugResetTerritories\) \{\s*btnDebugResetTerritories\.addEventListener\('click', \(e\) => \{\s*e\.preventDefault\(\);\s*if \(!this\.debugEnabled\) return;/);

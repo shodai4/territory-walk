@@ -17,9 +17,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const { readAppSource, readWwwAppSource, APP_SOURCE_FILES } = require('./helpers/app-sources');
 
 const ROOT = path.resolve(__dirname, '..');
-const APP_SOURCE = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
+const APP_SOURCE = readAppSource();
 const INDEX_HTML = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 
 /** 100mマス（grid.js と同じ刻み） */
@@ -520,7 +521,7 @@ test('UI: 省電力モードの初期化で二重配線しない', () => {
 });
 
 test('配線: www/app.js が app.js と同期し、キャッシュバスターが上がっている', () => {
-    const wwwApp = fs.readFileSync(path.join(ROOT, 'www', 'app.js'), 'utf8');
-    assert.equal(wwwApp, APP_SOURCE, 'www/app.js は app.js と同一（npm run build で同期）');
-    assert.match(INDEX_HTML, /app\.js\?v=20261119v62/);
+    const wwwApp = readWwwAppSource();
+    assert.equal(wwwApp, APP_SOURCE, 'www/ の app 分割モジュールはルートと同一（npm run build で同期）');
+    assert.match(INDEX_HTML, /app\.js\?v=20261119v63/);
 });

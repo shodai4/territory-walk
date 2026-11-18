@@ -16,6 +16,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const { readAppSource, APP_SOURCE_FILES } = require('./helpers/app-sources');
 
 const ROOT = path.resolve(__dirname, '..');
 
@@ -209,7 +210,7 @@ test('足跡: 週が変わると消える（先週の足跡が残らない）', 
 });
 
 test('足跡: サーバーへ送る経路が無い（送信は claimedTiles の同期だけ）', () => {
-    const source = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
+    const source = readAppSource();
     const claimBlock = source.slice(source.indexOf('async processMeshAndClaim'), source.indexOf('playClaimSound()'));
     assert.match(claimBlock, /recordFootprint\(/, '足跡はローカル記録のみ');
     assert.doesNotMatch(claimBlock, /recordFootprint[\s\S]{0,200}enqueueTileSync/, '足跡を送信キューに積まない');

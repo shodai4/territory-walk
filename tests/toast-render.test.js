@@ -14,9 +14,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const { readAppSource, readWwwAppSource, APP_SOURCE_FILES } = require('./helpers/app-sources');
 
 const ROOT = path.resolve(__dirname, '..');
-const APP_SOURCE = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
+const APP_SOURCE = readAppSource();
 
 /* ------------------------------------------------------------------ *
  * 最小限のDOMスタブ（jsdom を使わず、app.js を vm 上で動かす）
@@ -194,13 +195,10 @@ test('描画: renderToast は文言を innerHTML に埋め込まない', () => {
     assert.match(APP_SOURCE, /line\.style\.whiteSpace = 'pre-line'/, 'pre-line で改行を描画する');
 });
 
-test('描画: キャッシュバスター v62 と www/ 同期', () => {
+test('描画: キャッシュバスター v63 と www/ 同期', () => {
     const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
-    assert.match(html, /app\.js\?v=20261119v62/, 'app.js は v62');
+    assert.match(html, /app\.js\?v=20261119v63/, 'app.js は v63');
     assert.match(html, /iap\.js\?v=20261115v50/, 'iap.js は v50');
 
-    const wwwApp = path.join(ROOT, 'www', 'app.js');
-    if (fs.existsSync(wwwApp)) {
-        assert.equal(fs.readFileSync(wwwApp, 'utf8'), APP_SOURCE, 'www/app.js は app.js と同一');
-    }
+    assert.equal(readWwwAppSource(), APP_SOURCE, 'www/ の app 分割モジュールはルートと同一');
 });

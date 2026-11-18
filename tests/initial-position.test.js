@@ -15,9 +15,10 @@ const fs = require('node:fs');
 const crypto = require('node:crypto');
 const path = require('node:path');
 const vm = require('node:vm');
+const { readAppSource, APP_SOURCE_FILES } = require('./helpers/app-sources');
 
 const ROOT = path.resolve(__dirname, '..');
-const APP_SOURCE = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
+const APP_SOURCE = readAppSource();
 
 /** 渋谷駅（ハチ公口付近）の座標 */
 const SHIBUYA = { lat: 35.658034, lng: 139.701636 };

@@ -18,9 +18,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const { readAppSource, readWwwAppSource, APP_SOURCE_FILES } = require('./helpers/app-sources');
 
 const ROOT = path.resolve(__dirname, '..');
-const APP_SOURCE = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
+const APP_SOURCE = readAppSource();
 const { LocationPermissionBanner } = require(path.join(ROOT, 'permission.js'));
 
 /* ------------------------------------------------------------------ *
@@ -448,5 +449,5 @@ test('実装: 高精度・低精度のオプションは定数にまとめ、直
 });
 
 test('実装: アプリ本体と配布用 www/app.js が同期している（npm run build）', () => {
-    assert.equal(fs.readFileSync(path.join(ROOT, 'www', 'app.js'), 'utf8'), APP_SOURCE);
+    assert.equal(readWwwAppSource(), APP_SOURCE);
 });

@@ -18,9 +18,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const { readAppSource, readWwwAppSource, APP_SOURCE_FILES } = require('./helpers/app-sources');
 
 const ROOT = path.resolve(__dirname, '..');
-const APP_SOURCE = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
+const APP_SOURCE = readAppSource();
 const PERMISSION_SOURCE = fs.readFileSync(path.join(ROOT, 'permission.js'), 'utf8');
 
 /** コメントを外したコード（ソース点検用。行番号の対応は不要） */
@@ -605,6 +606,6 @@ test('実装: permission.js の retry / refreshPermissionState もネイティ�
 });
 
 test('配線: アプリ本体と配布用 www/ が同期している（npm run build）', () => {
-    assert.equal(fs.readFileSync(path.join(ROOT, 'www', 'app.js'), 'utf8'), APP_SOURCE);
+    assert.equal(readWwwAppSource(), APP_SOURCE);
     assert.equal(fs.readFileSync(path.join(ROOT, 'www', 'permission.js'), 'utf8'), PERMISSION_SOURCE);
 });

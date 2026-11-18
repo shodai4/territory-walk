@@ -22,6 +22,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const { readAppSource, APP_SOURCE_FILES } = require('./helpers/app-sources');
 
 const ROOT = path.resolve(__dirname, '..');
 const IAP_SOURCE = fs.readFileSync(path.join(ROOT, 'iap.js'), 'utf8');
@@ -580,7 +581,7 @@ test('静的: 付与は approved 起点で、.verified は検証サーバー用�
 });
 
 test('静的: 維持事項（暗号化申告）は変更していない', () => {
-    const appJs = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
+    const appJs = readAppSource();
     // 提出ビルドはデバッグ無効（ENABLE_DEBUG_TOOLS: false）。値はどちらでもよいが定義は必ず1か所に残す。
     assert.match(appJs, /ENABLE_DEBUG_TOOLS:\s*(true|false)/);
     const configure = fs.readFileSync(path.join(ROOT, 'scripts', 'configure-ios.js'), 'utf8');
@@ -684,7 +685,7 @@ test('価格: 未知の円額でも日本円表記にフォールバックする
 });
 
 test('ソース点検: iap.js / coins.js / app.js / index.html に $ 価格表記が残っていない', () => {
-    ['iap.js', 'coins.js', 'app.js', 'index.html'].forEach((file) => {
+    [...APP_SOURCE_FILES, 'iap.js', 'coins.js', 'index.html'].forEach((file) => {
         const source = fs.readFileSync(path.join(ROOT, file), 'utf8');
         assert.doesNotMatch(source, /\$\s?\d/, `${file} に「$ + 数字」の価格表記が無い`);
     });
@@ -911,7 +912,7 @@ test('無限ループ: 次の起動でも coinManager が使えなければ、�
 });
 
 test('順序: app.js は coinManager を IAPManager より先に作る', () => {
-    const appSource = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
+    const appSource = readAppSource();
     const coinIndex = appSource.indexOf('this.coinManager = new CoinManager');
     const iapIndex = appSource.indexOf('this.iapManager = new IAPManager');
     assert.ok(coinIndex >= 0, 'coinManager の生成がある');

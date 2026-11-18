@@ -17,6 +17,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const { readAppSource, APP_SOURCE_FILES } = require('./helpers/app-sources');
 
 const ROOT = path.resolve(__dirname, '..');
 
@@ -193,7 +194,7 @@ function bootApp(options = {}) {
 
     const context = vm.createContext(sandbox);
     ['permission.js', 'pro.js', 'poster.js', 'supabase.js', 'stats.js', 'coins.js', 'search.js',
-     'admob.js', 'iap.js', 'grid.js', 'outbox.js', 'startup-gate.js', 'debug-tools.js', 'app.js'
+     'admob.js', 'iap.js', 'grid.js', 'outbox.js', 'startup-gate.js', 'debug-tools.js', ...APP_SOURCE_FILES
     ].forEach((file) => {
         vm.runInContext(fs.readFileSync(path.join(ROOT, file), 'utf8'), context, { filename: file });
     });
@@ -274,7 +275,7 @@ test('検証ビルド（ENABLE_DEBUG_TOOLS=true）: デバッグ欄とトグル�
  * 3. フラグの置き場所（提出前の切替を1か所で済ませる）
  * ------------------------------------------------------------------ */
 test('配線: ENABLE_DEBUG_TOOLS は app.js の CONFIG に1か所だけある', () => {
-    const appSource = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
+    const appSource = readAppSource();
     const matches = appSource.match(/ENABLE_DEBUG_TOOLS\s*:/g) || [];
     assert.equal(matches.length, 1, '定義は1か所だけ');
     assert.match(appSource, /ENABLE_DEBUG_TOOLS:\s*(true|false)/);

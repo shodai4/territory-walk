@@ -213,7 +213,7 @@ App Store Connectでアプリ情報を登録する際、以下の内容をその
 ## 4. 最後にやること（審査へ提出ボタン）
 
 ### App Store 本番リリース前の必須切り替え（デバッグ無効化）
-- `app.js` の `CONFIG.ENABLE_DEBUG_TOOLS` を `false` にしてください（TestFlight検証中は `true`）。
+- `app-config.js`（旧 app.js の先頭）の `CONFIG.ENABLE_DEBUG_TOOLS` を `false` にしてください（TestFlight検証中は `true`）。
   - このフラグ1つで、MENU内の「デバッグモード」欄、仮想十字キー（D-PAD）、結果発表・チームリセットのプレビュー、コイン増減、購入アイテムリセット、チーム強制切替、Pro制限のデバッグバイパスがすべてUI非表示＋処理無効になります。
   - 同時に AdMob の広告リクエストも `isTesting: false`（本番広告）へ自動で切り替わります（`admob.js` は触らなくてOK）。
   - `false` の状態での起動・全画面・デバッグ操作の無効化は `tests/debug-off.test.js` が毎回検証しています（`npm test`）。
@@ -269,7 +269,7 @@ App Store Connectでアプリ情報を登録する際、以下の内容をその
 
 コード側は完了済み。以下は App Store Connect / AdMob / Apple Developer の画面での作業です。
 
-- [ ] `app.js` の `CONFIG.ENABLE_DEBUG_TOOLS` を `false` に切り替えてプッシュ（CIが新しいビルドをTestFlightへ上げます）
+- [ ] `app-config.js` の `CONFIG.ENABLE_DEBUG_TOOLS` を `false` に切り替えてプッシュ（CIが新しいビルドをTestFlightへ上げます）
 - [ ] TestFlight で最終ビルドを実機確認（位置情報「常に許可」、画面消灯歩行、ショップ、購入の復元、広告表示）
 - [ ] **提出直前**：Supabase本番データを全リセット（`docs/sql/pre-release-reset.sql` をSQL Editorで実行。TestFlight検証が完全に終わってから）
 - [ ] リセット後、テスター端末（自分の実機含む）からアプリを削除→最新ビルドを入れ直す（端末側データの再アップロード防止）

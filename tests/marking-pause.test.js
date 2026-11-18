@@ -20,6 +20,7 @@ const vm = require('node:vm');
 
 const ROOT = path.resolve(__dirname, '..');
 const { LocationPermissionBanner } = require(path.join(ROOT, 'permission.js'));
+const { readAppSource, APP_SOURCE_FILES } = require('./helpers/app-sources');
 
 /* ------------------------------------------------------------------ *
  * 最小限のDOMスタブ（jsdomを使わず、app.js を vm 上で動かす）
@@ -115,7 +116,7 @@ function loadApp(options = {}) {
     };
     const context = vm.createContext(sandbox);
     vm.runInContext(fs.readFileSync(path.join(ROOT, 'permission.js'), 'utf8'), context, { filename: 'permission.js' });
-    vm.runInContext(fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8'), context, { filename: 'app.js' });
+    vm.runInContext(readAppSource(), context, { filename: 'app.js' });
     return { context, document: doc, storage, TerritoryWalkApp: vm.runInContext('TerritoryWalkApp', context) };
 }
 
@@ -542,7 +543,7 @@ test('レイアウト: 一時停止バーはヘッダー直下、拒否バナー
  * ------------------------------------------------------------------ */
 const HTML = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 const CSS = fs.readFileSync(path.join(ROOT, 'style.css'), 'utf8');
-const APP = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
+const APP = readAppSource();
 
 test('HTML: トグルは現在地ボタンの真上、一時停止バーはヘッダー直下に置く', () => {
     assert.match(HTML, /id="btn-marking-toggle"[^>]*aria-pressed="true"/, 'トグルボタンがある');
@@ -576,13 +577,14 @@ test('文言: 今回の機能のユーザー向け文言は「マーキング」
 test('CSS: 375px幅で崩れない固定サイズと状態別の配色がある', () => {
     assert.match(CSS, /#marking-paused-banner \{[^}]*width: calc\(100% - 1\.5rem\);[^}]*max-width: 25rem;/);
     assert.match(CSS, /#marking-paused-banner\.hidden \{\s*display: none !important;/);
-    assert.match(CSS, /\.marking-toggle-btn \{[^}]*width: 64px;[^}]*height: 54px;/);
+    // v1.2: ＋／－／現在地と同じ正方形（52×52・角丸16px）に揃えた
+    assert.match(CSS, /\.marking-toggle-btn \{[^}]*width: 52px;[^}]*height: 52px;[^}]*border-radius: 16px;/);
     assert.match(CSS, /\.marking-toggle-btn\[data-state="paused"\] \{[^}]*background: rgba\(8, 47, 73, 0\.92\);[^}]*border-color: rgba\(56, 189, 248, 0\.85\);/);
 });
 
-test('キャッシュバスター: 変更した app.js は v62、未変更の style.css は v50 を参照する', () => {
-    assert.match(HTML, /app\.js\?v=20261119v62/);
-    assert.match(HTML, /style\.css\?v=20261116v50/);
+test('キャッシュバスター: 変更した app.js は v63、style.css は v51 を参照する', () => {
+    assert.match(HTML, /app\.js\?v=20261119v63/);
+    assert.match(HTML, /style\.css\?v=20261116v51/);
 });
 
 test('ビルド: www/ の index.html / style.css / app.js がルートと一致する', () => {

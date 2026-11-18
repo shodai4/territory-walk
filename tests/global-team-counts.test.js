@@ -18,9 +18,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const { readAppSource, readWwwAppSource, APP_SOURCE_FILES } = require('./helpers/app-sources');
 
 const ROOT = path.resolve(__dirname, '..');
-const APP_SOURCE = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
+const APP_SOURCE = readAppSource();
 const SUPABASE_SOURCE = fs.readFileSync(path.join(ROOT, 'supabase.js'), 'utf8');
 const { SupabaseManager, parseContentRangeTotal, SUPABASE_URL } =
     require(path.join(ROOT, 'supabase.js'));
@@ -456,12 +457,12 @@ test('配線: 起動/地図移動/自分の塗り/画面復帰/通信復帰で�
 });
 
 test('www/ 同期: 配布物にも同じ実装とキャッシュバスターが入っている', () => {
-    const wwwApp = fs.readFileSync(path.join(ROOT, 'www', 'app.js'), 'utf8');
+    const wwwApp = readWwwAppSource();
     const wwwSupabase = fs.readFileSync(path.join(ROOT, 'www', 'supabase.js'), 'utf8');
     const index = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
     const wwwIndex = fs.readFileSync(path.join(ROOT, 'www', 'index.html'), 'utf8');
 
-    assert.equal(wwwApp, APP_SOURCE, 'www/app.js は app.js と同一');
+    assert.equal(wwwApp, APP_SOURCE, 'www/ の app 分割モジュールはルートと同一');
     assert.equal(wwwSupabase, SUPABASE_SOURCE, 'www/supabase.js は supabase.js と同一');
     assert.equal(wwwIndex, index, 'www/index.html は index.html と同一');
 

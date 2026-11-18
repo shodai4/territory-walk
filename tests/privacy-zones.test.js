@@ -15,6 +15,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const { readAppSource, APP_SOURCE_FILES } = require('./helpers/app-sources');
 
 const ROOT = path.resolve(__dirname, '..');
 
@@ -68,7 +69,7 @@ const {
     PrivacyZoneManager
 } = require(path.join(ROOT, 'privacy.js'));
 
-const APP_SOURCE = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
+const APP_SOURCE = readAppSource();
 const INDEX_HTML = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 
 /** 決まった値を返す疑似乱数（テストを再現可能にする） */
@@ -330,7 +331,7 @@ function loadAppClass() {
         setInterval,
         clearInterval
     });
-    vm.runInContext(fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8'), sandbox, { filename: 'app.js' });
+    vm.runInContext(readAppSource(), sandbox, { filename: 'app.js' });
     return vm.runInContext('TerritoryWalkApp', sandbox);
 }
 

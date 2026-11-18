@@ -20,6 +20,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const { readAppSource, APP_SOURCE_FILES } = require('./helpers/app-sources');
 
 const ROOT = path.resolve(__dirname, '..');
 const read = (file) => fs.readFileSync(path.join(ROOT, file), 'utf8');
@@ -256,7 +257,7 @@ test('法務: アプリ内のローカルページ（terms/privacy/support）は
 test('申請資料: 実装していない特典を説明文に書いていない', () => {
     const metadata = read(path.join('docs', 'app-store-metadata.md'));
     const guide = read(path.join('docs', 'app-store-release-guide.md'));
-    const code = read('stats.js') + read('app.js') + read('coins.js');
+    const code = read('stats.js') + readAppSource() + read('coins.js');
 
     // シーズン勝利のコインボーナスは未実装（実装されたらこのガードを外す）
     if (!/シーズン勝利ボーナス|winnerBonus/.test(code)) {

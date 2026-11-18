@@ -17,10 +17,11 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const { readAppSource, APP_SOURCE_FILES } = require('./helpers/app-sources');
 
 const ROOT = path.resolve(__dirname, '..');
 const STATS_SOURCE = fs.readFileSync(path.join(ROOT, 'stats.js'), 'utf8');
-const APP_SOURCE = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
+const APP_SOURCE = readAppSource();
 const INDEX_HTML = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 
 /** 旧既定名（stats.js 内では Unicode エスケープで保持している値をテスト側で復元） */
@@ -237,5 +238,5 @@ test('文言: 入力欄のプレースホルダーは未設定＝ユーザーID�
 
 test('キャッシュバスター: stats.js / app.js は最新版を参照する', () => {
     assert.match(INDEX_HTML, /stats\.js\?v=20261117v60/);
-    assert.match(INDEX_HTML, /app\.js\?v=20261119v62/);
+    assert.match(INDEX_HTML, /app\.js\?v=20261119v63/);
 });

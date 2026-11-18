@@ -38,7 +38,17 @@
 .
 ├── index.html              # メインUI（ヘッダー、マップ、D-Pad、各種モーダル）
 ├── style.css               # スタイルシート（黒基調ダークテーマ、セーフエリア対応）
-├── app.js                  # コアコントローラー（GPS測位、ゲームループ、イベント統合）
+├── app.js                  # 起動（DOMContentLoaded → new TerritoryWalkApp()）
+├── app-config.js           # CONFIG・省電力／測位の定数・測位オプションの純粋関数
+├── app-core.js             # 起動・トースト通知・陣営（チーム）・テーマ・DOM初期化
+├── app-map.js              # 地図・グリッド・プライバシーゾーン・他プレイヤーの陣地同期・スキン／地図テーマ
+├── app-stats.js            # 戦績モーダル・ランキング（週間／通算）・週間リザルト
+├── app-actions.js          # Pro・ポスター書き出し・デバッグ（D-Pad／仮想散歩）・現在地ボタン
+├── app-menus.js            # ルール／陣営／MENU モーダル・はじめのゲート・引き継ぎコード
+├── app-geolocation.js      # 位置情報（Web測位・ネイティブ測位・バックグラウンド測位）
+├── app-marking.js          # マーキング ON/OFF（一時停止）・省電力モード
+├── app-tracking.js         # 測位の開始／停止・画面表示中だけのポーリング・ライフサイクル
+├── app-gameplay.js         # 歩行判定・陣地の獲得・スコア表示・イベント配線・リセット・Realtime同期
 ├── grid.js                 # 100mメッシュ計算、Leafletポリゴン描画、スキン連動
 ├── coins.js                # ゲーム内コイン、リワード広告シミュレーション、ショップ
 ├── stats.js                # 戦績集計、Supabase同期バッファ、称号アンロック、ランキング
@@ -56,6 +66,19 @@
 │   └── configure-ios.js    # Info.plist（権限・ATT・AdMob・輸出コンプライアンス）と最低対応OS（iOS 15.0）の自動設定
 └── www/                    # Capacitor iOS向け同期済みWebアセット
 ```
+
+### app.js のモジュール分割（v1.2）
+
+旧 `app.js`（4,283行・1クラス）は、機能を一切変えずに役割ごとのファイルへ分割しています。
+各ファイルは前のファイルのクラスを `extends` してメソッドを積み上げ、読み込み順は次のとおりです
+（`index.html` の `<script>` 順 = `scripts/build.js` のコピー順。最後の `app.js` が `TerritoryWalkApp` を完成させて起動します）。
+
+```
+app-config → app-core → app-map → app-stats → app-actions
+           → app-menus → app-geolocation → app-marking → app-tracking → app-gameplay → app.js
+```
+
+新しいメソッドは役割に合うファイルへ追加してください。`CONFIG` は `app-config.js` の1か所だけです。
 
 ---
 
@@ -95,7 +118,7 @@ npx cap open ios
 ### バックグラウンド位置情報（画面消灯・ロック中も陣地を獲得）
 `@capacitor-community/background-geolocation`（v1.3系 / Capacitor 6 対応）を導入しています。画面を消してポケットに入れたままでも、100mマスの獲得とSupabase同期が続きます。
 
-- ネイティブ: `app.js` の `initGeolocation()` が `registerPlugin('BackgroundGeolocation')` の `addWatcher()` を1本だけ張り、位置更新を `handlePositionUpdate()` → `processMeshAndClaim()`（ローカル保存＋Outbox同期）へ流します。`backgroundMessage` を渡すことでバックグラウンド更新が有効になり、`stale: false` と `distanceFilter: 20`（100mマスを取りこぼさず電池も抑える）で動きます。
+- ネイティブ: `app-geolocation.js` の `initGeolocation()` が `registerPlugin('BackgroundGeolocation')` の `addWatcher()` を1本だけ張り、位置更新を `handlePositionUpdate()` → `processMeshAndClaim()`（ローカル保存＋Outbox同期）へ流します。`backgroundMessage` を渡すことでバックグラウンド更新が有効になり、`stale: false` と `distanceFilter: 20`（100mマスを取りこぼさず電池も抑える）で動きます。
 - 権限拒否（`NOT_AUTHORIZED`）は `permission.js` の `LocationPermissionBanner` に繋がり、常設バナーと「再確認」（watcher の張り直し）で復帰できます。iOS では位置情報を「常に許可」にする必要があります。
 - 許可要求のタイミングは従来どおり `startup-gate.js`（ルール説明 → チーム決定 → 「ゲーム開始」）に従います。
 - Web（ブラウザ）やプラグイン未組込ビルドでは、従来どおり `navigator.geolocation.watchPosition` にフォールバックします。

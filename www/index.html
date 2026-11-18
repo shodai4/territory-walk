@@ -18,7 +18,7 @@
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
     <!-- Custom CSS -->
-    <link rel="stylesheet" href="style.css?v=20261116v50">
+    <link rel="stylesheet" href="style.css?v=20261116v51">
 </head>
 <body class="bg-black text-white overflow-hidden overflow-x-hidden h-screen w-screen max-w-full flex flex-col m-0 p-0 select-none" data-theme="black" data-skin="default">
 
@@ -140,10 +140,11 @@
     <!-- 地図コンテナ（全画面表示） -->
     <main id="map" class="flex-1 w-full h-full z-0"></main>
 
-    <!-- 右下：片手親指操作コントロール群（ズームイン・ズームアウト・現在地リセンター） -->
+    <!-- 右下：片手親指操作コントロール群（ズームイン・ズームアウト・マーキング・現在地リセンター）
+         v1.2: 4つとも .map-control-btn の同一正方形（52×52・角丸16px）に揃えて縦列を整える -->
     <div id="map-controls-container" class="fixed bottom-[74px] right-4 z-[1000] flex flex-col items-center gap-2 select-none transition-all duration-300">
         <!-- ズームイン（+）ボタン：大型黒基調ソリッド -->
-        <button id="btn-zoom-in" aria-label="地図を拡大" title="拡大 (+)" class="w-12 h-12 bg-black/90 hover:bg-zinc-900 active:bg-zinc-800 text-white border border-zinc-700/90 hover:border-zinc-500 rounded-2xl shadow-2xl flex items-center justify-center transition-all transform active:scale-95 backdrop-blur-md">
+        <button id="btn-zoom-in" aria-label="地図を拡大" title="拡大 (+)" class="map-control-btn bg-black/90 hover:bg-zinc-900 active:bg-zinc-800 text-white border border-zinc-700/90 hover:border-zinc-500 shadow-2xl flex items-center justify-center transition-all transform active:scale-95 backdrop-blur-md">
             <svg class="w-6 h-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="12" y1="5" x2="12" y2="19"></line>
                 <line x1="5" y1="12" x2="19" y2="12"></line>
@@ -151,7 +152,7 @@
         </button>
 
         <!-- ズームアウト（-）ボタン：大型黒基調ソリッド -->
-        <button id="btn-zoom-out" aria-label="地図を縮小" title="縮小 (-)" class="w-12 h-12 bg-black/90 hover:bg-zinc-900 active:bg-zinc-800 text-white border border-zinc-700/90 hover:border-zinc-500 rounded-2xl shadow-2xl flex items-center justify-center transition-all transform active:scale-95 backdrop-blur-md">
+        <button id="btn-zoom-out" aria-label="地図を縮小" title="縮小 (-)" class="map-control-btn bg-black/90 hover:bg-zinc-900 active:bg-zinc-800 text-white border border-zinc-700/90 hover:border-zinc-500 shadow-2xl flex items-center justify-center transition-all transform active:scale-95 backdrop-blur-md">
             <svg class="w-6 h-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="5" y1="12" x2="19" y2="12"></line>
             </svg>
@@ -176,8 +177,8 @@
             <span id="marking-toggle-label" class="marking-toggle-state">ON</span>
         </button>
 
-        <!-- 現在地（リセンター）ボタン：親指で迷わず押せる大型サイズ（w-14 h-14）、照準アイコン -->
-        <button id="btn-recenter" aria-label="現在地に戻る" title="現在地に戻る" class="w-14 h-14 bg-black/90 hover:bg-zinc-900 active:bg-zinc-800 text-white border border-zinc-700/90 hover:border-sky-400/80 rounded-2xl shadow-2xl flex items-center justify-center transition-all transform active:scale-95 backdrop-blur-md mt-0.5">
+        <!-- 現在地（リセンター）ボタン：ズーム・マーキングと同じ正方形サイズ、照準アイコン -->
+        <button id="btn-recenter" aria-label="現在地に戻る" title="現在地に戻る" class="map-control-btn bg-black/90 hover:bg-zinc-900 active:bg-zinc-800 text-white border border-zinc-700/90 hover:border-sky-400/80 shadow-2xl flex items-center justify-center transition-all transform active:scale-95 backdrop-blur-md">
             <svg class="w-7 h-7 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="12" r="7"></circle>
                 <circle cx="12" cy="12" r="2.5" fill="currentColor"></circle>
@@ -1185,6 +1186,17 @@
     <script src="startup-gate.js?v=20261114v41"></script>
     <script src="permission.js?v=20261115v47"></script>
     <script src="debug-tools.js?v=20261114v39"></script>
-    <script src="app.js?v=20261119v62"></script>
+    <!-- app.js は役割ごとのモジュールに分割（読み込み順が依存関係。最後に app.js が起動する） -->
+    <script src="app-config.js?v=20261119v63"></script>
+    <script src="app-core.js?v=20261119v63"></script>
+    <script src="app-map.js?v=20261119v63"></script>
+    <script src="app-stats.js?v=20261119v63"></script>
+    <script src="app-actions.js?v=20261119v63"></script>
+    <script src="app-menus.js?v=20261119v63"></script>
+    <script src="app-geolocation.js?v=20261119v63"></script>
+    <script src="app-marking.js?v=20261119v63"></script>
+    <script src="app-tracking.js?v=20261119v63"></script>
+    <script src="app-gameplay.js?v=20261119v63"></script>
+    <script src="app.js?v=20261119v63"></script>
 </body>
 </html>

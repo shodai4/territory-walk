@@ -15,6 +15,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const { readAppSource, APP_SOURCE_FILES } = require('./helpers/app-sources');
 
 const ROOT = path.resolve(__dirname, '..');
 const { GridManager, deterministicBlockTeam, displayModeForZoom, BLOCK_TILES, BLOCK_FILL_OPACITY, BLOCK_RENDER_MAX_COUNT } =
@@ -141,7 +142,7 @@ test('ズーム: しきい値は CONFIG で上書きできる（アプリ側の�
 });
 
 test('設定: app.js の CONFIG がこの仕様（100m=16以上 / ブロック=11以上 / マス取得は13以上）と一致する', () => {
-    const source = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
+    const source = readAppSource();
     const configBlock = source.slice(source.indexOf('const CONFIG = {'), source.indexOf('};', source.indexOf('const CONFIG = {')));
     assert.match(configBlock, /TILE_DETAIL_MIN_ZOOM:\s*16/);
     assert.match(configBlock, /TILE_RENDER_MIN_ZOOM:\s*11/);
@@ -387,7 +388,7 @@ test('スコア: ブロックを描いても claimedTilesCache（勝敗の集計
 });
 
 test('スコア: ％バーの集計元は全国集計（未取得時は claimedTilesCache）で、描画用の関数を参照しない', () => {
-    const source = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
+    const source = readAppSource();
     const body = source.slice(source.indexOf('    updateScoreUI()'), source.indexOf('    initDPad()'));
 
     assert.match(body, /getScoreCounts\(\)/, '集計は getScoreCounts（全国集計→ローカル集計）に集約');
@@ -403,7 +404,7 @@ test('歩行判定: 塗る処理は従来どおり実績マスだけを書き換
     const blockSection = source.slice(source.indexOf('getBlockIndices('), source.indexOf('initEventListeners()'));
     assert.doesNotMatch(blockSection, /claimedTilesCache\.(set|delete)|enqueueTileSync/, 'ブロックはキャッシュを書き換えない');
 
-    const appSource = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
+    const appSource = readAppSource();
     assert.match(appSource, /renderTileForCurrentZoom\(/, '塗った直後の描画もズームで切り替える');
 });
 

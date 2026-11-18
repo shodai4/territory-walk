@@ -14,6 +14,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const { readAppSource, APP_SOURCE_FILES } = require('./helpers/app-sources');
 
 const ROOT = path.resolve(__dirname, '..');
 
@@ -110,7 +111,7 @@ test('配布物: www/index.html にも同じルール説明が入っている（
  * ------------------------------------------------------------------ */
 
 test('整合性: 上部の％バーは実際に塗ったマスだけで数える（全国集計→未取得時は claimedTilesCache）', () => {
-    const app = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
+    const app = readAppSource();
     const body = app.slice(app.indexOf('updateScoreUI() {'), app.indexOf('initDPad() {'));
     assert.ok(body.length > 0, 'updateScoreUI の定義を切り出せる');
     assert.match(body, /this\.getScoreCounts\(\)/, '集計は getScoreCounts に集約する');

@@ -16,6 +16,7 @@ const path = require('node:path');
 
 const ROOT = path.resolve(__dirname, '..');
 const { StartupGate, RULES_SEEN_KEY } = require(path.join(ROOT, 'startup-gate.js'));
+const { readAppSource, APP_SOURCE_FILES } = require('./helpers/app-sources');
 
 /* ------------------------------------------------------------------ *
  * localStorage の最小スタブ
@@ -136,7 +137,7 @@ test('onStart が例外を投げてもゲートは開始済みとして扱う', 
  * 4. 配線の回帰チェック（app.js / admob.js / index.html / build.js / www）
  * ------------------------------------------------------------------ */
 test('配線: app.js は位置情報とAdMobを起動ゲート経由で開始する', () => {
-    const app = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
+    const app = readAppSource();
 
     // コンストラクタはゲートを立てる。位置情報の直接開始は startLocationTracking の中だけ。
     // （マーキング停止中はウォッチャーを張らないため、開始は1段ラップした startLocationTracking に集約）
@@ -159,7 +160,7 @@ test('配線: app.js は位置情報とAdMobを起動ゲート経由で開始す
 });
 
 test('配線: ルール説明 → チーム決定画面 → ゲーム開始の順に繋がっている', () => {
-    const app = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
+    const app = readAppSource();
 
     assert.match(app, /this\.btnCloseRules\.addEventListener\('click', \(\) => this\.dismissRulesModal\(\)\);/, '「ゲームをはじめる」ボタンが dismissRulesModal を呼ぶ');
     assert.match(
@@ -176,7 +177,7 @@ test('配線: ルール説明 → チーム決定画面 → ゲーム開始の�
 });
 
 test('チーム決定画面: 陣営（Black / White）に合わせて表示を作り分ける', () => {
-    const app = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
+    const app = readAppSource();
     const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 
     assert.match(app, /showTeamDecisionModal\(\) \{[\s\S]*?const isWhite = this\.currentTeam === 'white';/, 'currentTeam で出し分ける');
@@ -196,7 +197,7 @@ test('チーム決定画面: 陣営（Black / White）に合わせて表示を�
 });
 
 test('配線: AdMobは deferInit で生成され、init() は二重に初期化しない', () => {
-    const app = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
+    const app = readAppSource();
     const admob = fs.readFileSync(path.join(ROOT, 'admob.js'), 'utf8');
 
     assert.match(app, /new AdMobManager\(this, \{ deferInit: true \}\)/, 'ATT許可要求はルール説明より後に回す');
@@ -206,7 +207,7 @@ test('配線: AdMobは deferInit で生成され、init() は二重に初期化�
 });
 
 test('配線: チーム決定画面はトーストやモーダル監視の対象に入れる', () => {
-    const app = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
+    const app = readAppSource();
 
     const isAnyModalOpen = app.slice(app.indexOf('isAnyModalOpen() {'), app.indexOf('setupModalObservers() {'));
     assert.match(isAnyModalOpen, /'team-decision-modal'/, 'トーストの割り込み対象に入れる');

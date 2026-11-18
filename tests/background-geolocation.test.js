@@ -19,6 +19,7 @@ const vm = require('node:vm');
 
 const ROOT = path.resolve(__dirname, '..');
 const { LocationPermissionBanner } = require(path.join(ROOT, 'permission.js'));
+const { readAppSource, readWwwAppSource, APP_SOURCE_FILES } = require('./helpers/app-sources');
 
 /* ------------------------------------------------------------------ *
  * 最小限のDOMスタブ（jsdomを使わず、app.js を vm 上で動かす）
@@ -97,7 +98,7 @@ function loadTerritoryWalkApp(options = {}) {
     };
     const context = vm.createContext(sandbox);
     vm.runInContext(fs.readFileSync(path.join(ROOT, 'permission.js'), 'utf8'), context, { filename: 'permission.js' });
-    vm.runInContext(fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8'), context, { filename: 'app.js' });
+    vm.runInContext(readAppSource(), context, { filename: 'app.js' });
 
     return {
         context,
@@ -590,12 +591,11 @@ test('iOS設定: UIBackgroundModes に location が無い plist は検証で検�
 
 test('配線: index.html が最新 app.js を読み、www/ と同期されている', () => {
     const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
-    const app = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
-    const wwwApp = fs.readFileSync(path.join(ROOT, 'www', 'app.js'), 'utf8');
+    const app = readAppSource();
 
     assert.match(html, /app\.js\?v=\d{8}v\d+/);
     assert.match(app, /registerPlugin\(BACKGROUND_GEOLOCATION_PLUGIN_NAME\)/);
     assert.match(app, /addWatcher\(watcherOptions|addWatcher\(BACKGROUND_GEOLOCATION_OPTIONS/);
     assert.match(app, /removeWatcher\(\{ id: watcherId \}\)/);
-    assert.equal(wwwApp, app, 'www/app.js は app.js と同一（npm run build で同期）');
+    assert.equal(readWwwAppSource(), app, 'www/ の app 分割モジュールはルートと同一（npm run build で同期）');
 });

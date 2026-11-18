@@ -21,6 +21,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const { readAppSource, readWwwAppSource, APP_SOURCE_FILES } = require('./helpers/app-sources');
 
 const ROOT = path.resolve(__dirname, '..');
 const read = (file) => fs.readFileSync(path.join(ROOT, file), 'utf8');
@@ -289,7 +290,7 @@ test('invite: 招待シェア（OS共有シート）の文言に #テリウォ�
  * ------------------------------------------------------------------ */
 test('配線: shareToX / 招待シェア / 週次リザルトは共通ビルダーを使う', () => {
     const coins = read('coins.js');
-    const app = read('app.js');
+    const app = readAppSource();
 
     assert.match(coins, /const tweetText = CoinManager\.buildDailyShareText\(/);
     assert.match(coins, /const text = CoinManager\.buildReferralShareText\(/);
@@ -318,5 +319,5 @@ test('配線: 画面の案内文は iOS の設定に並ぶ名前（テリウォ�
     const wwwHtml = read('www/index.html');
     assert.match(wwwHtml, /設定 ＞ テリウォーク ＞ 位置情報/);
     assert.match(read('www/coins.js'), /#テリウォーク/);
-    assert.match(read('www/app.js'), /CoinManager\.buildWeeklyResultShareText\(/);
+    assert.match(readWwwAppSource(), /CoinManager\.buildWeeklyResultShareText\(/);
 });

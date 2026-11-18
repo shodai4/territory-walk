@@ -16,6 +16,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const { readAppSource, APP_SOURCE_FILES } = require('./helpers/app-sources');
 
 const ROOT = path.resolve(__dirname, '..');
 
@@ -193,7 +194,7 @@ function bootApp(options = {}) {
 
     const context = vm.createContext(sandbox);
     ['permission.js', 'pro.js', 'poster.js', 'supabase.js', 'stats.js', 'coins.js', 'search.js',
-     'admob.js', 'iap.js', 'grid.js', 'outbox.js', 'startup-gate.js', 'debug-tools.js', 'app.js'
+     'admob.js', 'iap.js', 'grid.js', 'outbox.js', 'startup-gate.js', 'debug-tools.js', ...APP_SOURCE_FILES
     ].forEach((file) => {
         vm.runInContext(fs.readFileSync(path.join(ROOT, file), 'utf8'), context, { filename: file });
     });

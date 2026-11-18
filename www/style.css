@@ -560,19 +560,32 @@ button, a, input, select, .btn-action {
     box-sizing: border-box;
 }
 
-/* マーキング ON/OFF トグル（現在地ボタンの真上・375px幅でも崩れない固定サイズ） */
+/* マーキング ON/OFF トグル（現在地ボタンの真上・375px幅でも崩れない固定サイズ）
+   v1.2: ＋／－／現在地と同じ .map-control-btn の正方形に揃える（幅・高さ・角丸を共通化） */
+.map-control-btn {
+    width: 52px;
+    height: 52px;
+    min-width: 52px;
+    min-height: 52px;
+    flex: 0 0 52px;
+    padding: 0;
+    margin: 0;
+    border-radius: 16px;
+    box-sizing: border-box;
+}
+
 .marking-toggle-btn {
-    width: 64px;
-    height: 54px;
-    flex: 0 0 auto;
+    width: 52px;
+    height: 52px;
+    flex: 0 0 52px;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     gap: 1px;
     padding: 0;
-    margin-top: 2px;
-    border-radius: 1rem;
+    margin-top: 0;
+    border-radius: 16px;
     border: 1px solid rgba(63, 63, 70, 0.9);
     background: rgba(0, 0, 0, 0.9);
     color: #ffffff;
@@ -627,9 +640,9 @@ button, a, input, select, .btn-action {
 .marking-toggle-title {
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 8px;
-    line-height: 1;
+    line-height: 1.1;
     font-weight: 700;
-    letter-spacing: 0.02em;
+    letter-spacing: -0.01em;
     color: #a1a1aa;
     white-space: nowrap;
 }
@@ -637,9 +650,9 @@ button, a, input, select, .btn-action {
 .marking-toggle-state {
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 10px;
-    line-height: 1;
+    line-height: 1.1;
     font-weight: 700;
-    letter-spacing: 0.02em;
+    letter-spacing: 0;
     color: #6ee7b7;
     white-space: nowrap;
 }

@@ -15,6 +15,7 @@ const { execFileSync } = require('node:child_process');
 
 const ROOT = path.resolve(__dirname, '..');
 const { LocationPermissionBanner } = require(path.join(ROOT, 'permission.js'));
+const { readAppSource, APP_SOURCE_FILES } = require('./helpers/app-sources');
 
 /* ------------------------------------------------------------------ *
  * 最小限のDOMスタブ（jsdomを使わずにバナー制御だけを検証する）
@@ -204,7 +205,7 @@ test('陣営説明: index.html の説明文が読点と文末で改行され、�
 });
 
 test('陣営説明: app.js が白・黒それぞれを改行付きで差し込む（textContent で改行が潰れない）', () => {
-    const app = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
+    const app = readAppSource();
 
     assert.match(app, /this\.teamDecisionDescription\.innerHTML =/, 'innerHTML で <br> を反映する');
     assert.doesNotMatch(app, /this\.teamDecisionDescription\.textContent/, 'textContent では改行が消える');
@@ -229,8 +230,9 @@ test('陣営説明: style.css が単語途中の折り返しを抑える指定�
  * ------------------------------------------------------------------ */
 test('構文: 配信対象の全JSが Node でパースできる', () => {
     const files = [
-        'app.js', 'permission.js', 'coins.js', 'grid.js', 'search.js', 'stats.js',
-        'supabase.js', 'outbox.js', 'poster.js', 'pro.js', 'iap.js', 'admob.js',
+        ...APP_SOURCE_FILES, 'permission.js', 'coins.js', 'grid.js', 'search.js', 'stats.js',
+        'supabase.js', 'outbox.js', 'poster.js', 'pro.js', 'iap.js', 'admob.js', 'watch-bridge.js',
+        'identity.js', 'privacy.js', 'notifications.js', 'startup-gate.js', 'debug-tools.js',
         'scripts/build.js'
     ];
     files.forEach((file) => {
@@ -257,7 +259,7 @@ test('バナー設置: index.html がバナー要素と permission.js を読み�
 });
 
 test('バナー設置: app.js が拒否時に常設バナーを表示し、取得成功時に自動で消す', () => {
-    const app = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
+    const app = readAppSource();
 
     assert.match(app, /new LocationPermissionBanner\(/);
     assert.match(app, /LocationPermissionBanner\.isPermissionDeniedError\(error\)/);
@@ -295,7 +297,7 @@ test('禁止表記: ソースに「オセロ」「Othello」を使っていな�
 
 test('SEASON RESULT: ゲージ上は％のみ、獲得マス数は詳細テーブルに移設', () => {
     const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
-    const app = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
+    const app = readAppSource();
 
     assert.doesNotMatch(app, /\(\$\{result\.(black|white)Total\}マス\)/, 'ゲージ上にマス数を残していない');
     assert.match(html, /id="result-black-tiles"/);
