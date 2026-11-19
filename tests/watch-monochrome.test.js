@@ -66,7 +66,9 @@ test('Watchズーム: Digital Crown を focusable にして4段階にスナッ�
     assert.match(WATCH_APP, /\.focusable\(true\)/, 'クラウンを受けるために focusable にする');
     assert.match(WATCH_APP, /\.digitalCrownRotation\([\s\S]*?crownBinding/, 'Digital Crown をバインドする');
     assert.match(WATCH_APP, /by: 1\.0/, '1段ずつスナップ');
-    assert.match(WATCH_APP, /from: 0,[\s\S]*?to: Double\(model\.maxZoomIndex\)/, '0〜3 の4段階');
+    assert.match(WATCH_APP, /from: 0,[\s\S]*?through: Double\(model\.maxZoomIndex\)/, '0〜3 の4段階（from:through:by: の組）');
+    // from:to: には by: が無いので、段付きで回すには through: を使う（CI で実際にコンパイルエラーになった）
+    assert.doesNotMatch(WATCH_APP, /\n\s*to: Double\(model\.maxZoomIndex\)/, 'to: は by: と組み合わせられない');
     assert.match(WATCH_APP, /isContinuous: false/, '両端で止める（回り続けない）');
     assert.match(WATCH_APP, /isHapticFeedbackEnabled: true/, '段が変わるたびに手応えを返す');
     assert.match(WATCH_APP, /model\.setCrownPosition\(\$0\)/, 'クラウンの値はモデルへ渡す');

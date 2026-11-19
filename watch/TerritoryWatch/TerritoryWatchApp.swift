@@ -84,13 +84,15 @@ struct ContentView: View {
             }
         }
         // Digital Crown でズーム（上へ回す＝拡大、下へ回す＝広げる）。
-        // by: 1.0 で4段階にスナップし、段が変わったときだけモデルが窓を取り直す。
+        // by: 1.0 で4段階にスナップし（isContinuous: false で両端は止まる）、
+        // 段が変わったときだけモデルが窓を取り直す。
+        // ※ focusable() は digitalCrownRotation() より前に置く（後ろだとクラウンが効かない）
         .focusable(true)
         .focusEffectDisabled()
         .digitalCrownRotation(
             crownBinding,
             from: 0,
-            to: Double(model.maxZoomIndex),
+            through: Double(model.maxZoomIndex),
             by: 1.0,
             sensitivity: .low,
             isContinuous: false,
