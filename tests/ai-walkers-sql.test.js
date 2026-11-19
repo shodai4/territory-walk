@@ -1,6 +1,6 @@
 /**
  * TERRITORY WALK - Node tests
- * v1.1 AIウォーカー（Supabase サーバー側 / supabase/ai_walkers.sql）:
+ * v1.3 AIウォーカー（Supabase サーバー側 / supabase/ai_walkers.sql）:
  *
  *   1) pg_cron で1時間ごとに public.run_ai_walkers() が走る（貼り直してもジョブは増えない）
  *   2) 1回あたり black 3〜7マス・white 3〜7マス（毎回ランダムに差が付く）
@@ -8,8 +8,9 @@
  *   4) schema.sql の territory_tiles（列・NOT NULL・主キー・CHECK）と完全に一致する
  *   5) grid.js と同じ tile_id（tile_{lat_idx}_{lng_idx}）・同じ100mメッシュ・
  *      同じ week_id（JST・月曜はじまりの 'YYYY-Www'）になる
- *   6) 直近30分に塗られたマスは奪わない（歩いている人の足元を守る）
- *   7) 主要都市（10拠点以上）に散らばり、日本国内に収まっている
+ *   6) 今週すでに塗られているマスは上書きしない（空白マス専用）。
+ *      ぶつかったらスキップして次の空きマスを探し、試行回数の安全上限で必ず止まる
+ *   7) 出発点は主要14都市エリアのランダム位置のみ（既存マスの近くからは出発しない）
  *   8) 1週間（168回）動かしても黒白が 48%〜52% 前後で揺れる（100%:0% にならない）
  *   9) アプリ側（ルール画面の文言・コード）は変更していない＝裏側だけで完結する
  *
@@ -39,6 +40,9 @@ function functionBody(name) {
 const RUN_BODY = functionBody('run_ai_walkers');
 const TILE_ID_BODY = functionBody('ai_walker_tile_id');
 const WEEK_BODY = functionBody('iso_week_id');
+
+/** 1マス塗るあたりの試行回数の安全上限（SQL の定数と同じ値） */
+const MAX_TRIES = Number((RUN_BODY.match(/MAX_TRIES_PER_TILE\s+CONSTANT INTEGER := (\d+)/) || [])[1]);
 
 /* ------------------------------------------------------------------ *
  * 1. pg_cron: 1時間ごとのジョブ
@@ -76,7 +80,8 @@ test('AIウォーカー: 1回あたり 3〜7 マス（毎回ランダムに差�
 test('AIウォーカー: black と white の両チームを同じ手順で歩かせる', () => {
     assert.match(RUN_BODY, /FOREACH v_team IN ARRAY ARRAY\['black', 'white'\]::TEXT\[\]/,
         '黒・白の2チーム分を回す');
-    assert.match(RUN_BODY, /VALUES \([\s\S]*?v_week_id,\s*v_team,/, 'INSERT の team はループのチーム');
+    assert.match(RUN_BODY, /VALUES \(\s*public\.ai_walker_tile_id\(v_lat_idx, v_lng_idx\),\s*v_week_id,\s*v_team,/,
+        'INSERT の team はループのチーム');
 });
 
 /* ------------------------------------------------------------------ *
@@ -91,7 +96,7 @@ test('AIウォーカー: 書き込みは territory_tiles だけで、users・週
 });
 
 test('AIウォーカー: ランキング・累計テーブルを更新する SQL が1行も無い', () => {
-    // ON CONFLICT ... DO UPDATE SET は行の書き換え（テーブル指定ではない）ので数えない
+    // ON CONFLICT ... DO NOTHING は行の書き換えもしないので、書き込み先は territory_tiles だけ
     const writeTargets = [...SQL.matchAll(/\b(?:INSERT INTO|DELETE FROM)\s+(?:public\.)?([a-z_]+)|\bUPDATE\s+(?!SET\b)(?:public\.)?([a-z_]+)/gi)]
         .map((m) => (m[1] || m[2]).toLowerCase());
     assert.deepEqual([...new Set(writeTargets)], ['territory_tiles'], `書き込み先: ${writeTargets.join(', ')}`);
@@ -112,10 +117,11 @@ test('AIウォーカー: territory_tiles の列を schema.sql と完全に一致
     assert.deepEqual(insert, columns, 'NOT NULL の列を1つも落とさない（updated_at も明示）');
 });
 
-test('AIウォーカー: 主キー (tile_id, week_id) で UPSERT する', () => {
+test('AIウォーカー: 主キー (tile_id, week_id) に ON CONFLICT DO NOTHING で当てる', () => {
     const primaryKey = SCHEMA.match(/CREATE TABLE IF NOT EXISTS territory_tiles \([\s\S]*?PRIMARY KEY \(([^)]*)\)/)[1];
     assert.equal(primaryKey.replace(/\s+/g, ''), 'tile_id,week_id', 'schema.sql の主キー');
-    assert.match(RUN_BODY, /ON CONFLICT \(tile_id, week_id\) DO UPDATE/, '同じマスは塗り替え（行を増やさない）');
+    assert.match(RUN_BODY, /ON CONFLICT \(tile_id, week_id\) DO NOTHING/,
+        'すでにあるマスは何もせず見送る（行も増えず、上書きもしない）');
 });
 
 test('AIウォーカー: team は schema.sql の CHECK と同じ white / black のみ', () => {
@@ -184,28 +190,104 @@ test('AIウォーカー: week_id は grid.js と同じ JST・月曜はじまり�
 });
 
 /* ------------------------------------------------------------------ *
- * 6. 歩いている人の足元を奪わない
+ * 6. 空白マス専用（今週すでに塗られているマスは上書きしない）
  * ------------------------------------------------------------------ */
 
-test('AIウォーカー: 直近30分に塗られたマスは塗り替えない', () => {
-    assert.match(RUN_BODY, /STALE_BEFORE CONSTANT INTERVAL := INTERVAL '30 minutes'/);
-    const conflict = RUN_BODY.match(/ON CONFLICT \(tile_id, week_id\) DO UPDATE[\s\S]*?;/)[0];
-    assert.match(conflict, /SET team\s+= EXCLUDED\.team/, '邪魔なマスは塗り替える（AI同士の取り合い）');
-    assert.match(conflict, /WHERE COALESCE\(territory_tiles\.updated_at,[\s\S]*?< now\(\) - STALE_BEFORE/,
-        '直近の更新はスキップする条件が付いている');
-    assert.match(RUN_BODY, /IF FOUND THEN[\s\S]*?v_placed := v_placed \+ 1/,
-        'スキップされた分は塗った枚数に数えない');
+test('AIウォーカー: 今週すでに塗られているマスは一切上書きしない（空白マス専用）', () => {
+    assert.match(RUN_BODY, /ON CONFLICT \(tile_id, week_id\) DO NOTHING/);
+    assert.doesNotMatch(RUN_BODY, /DO UPDATE/, '上書き（陣営の塗り替え）はしない');
+    assert.doesNotMatch(RUN_BODY, /SET\s+team\s*=/, '既存行の team を書き換えない');
+    assert.doesNotMatch(RUN_BODY, /updated_at\s*=\s*now\(\)\s*WHERE/i, '条件付き UPDATE も残っていない');
+    assert.doesNotMatch(RUN_BODY, /STALE_BEFORE/, '30分ルールは不要（そもそも一度も上書きしない）');
+    assert.match(RUN_BODY, /GET DIAGNOSTICS v_inserted = ROW_COUNT/,
+        '実際に INSERT できた行数で判定する（DO NOTHING なら 0）');
+    assert.match(RUN_BODY, /IF v_inserted > 0 THEN[\s\S]*?v_placed := v_placed \+ 1/, '塗れたマスだけ数える');
+});
+
+test('AIウォーカー: ぶつかったらスキップして次の空きマスを探す', () => {
+    const conflict = RUN_BODY.match(/ON CONFLICT \(tile_id, week_id\) DO NOTHING[\s\S]*?END IF;/)[0];
+    assert.match(conflict, /ELSE[\s\S]*?v_lat_idx := NULL/,
+        '塗れなかったときは散歩を続けて次の空きマスを探す（ときどき別の街へ移る）');
+    assert.match(conflict, /IF random\(\) < 0\.5 THEN[\s\S]*?v_lat_idx := NULL/,
+        '同じ場所で足踏みしないよう半分の確率で街を変える');
+    const elseBranch = conflict.split(/\bELSE\b/)[1] || '';
+    assert.ok(elseBranch.length > 0, 'スキップ側の分岐がある');
+    assert.doesNotMatch(elseBranch, /v_placed :=/, 'スキップした分は塗った枚数に数えない');
+});
+
+test('AIウォーカー: 空きマスが無くても無限ループしない（試行回数の安全上限）', () => {
+    assert.ok(Number.isInteger(MAX_TRIES) && MAX_TRIES >= 1 && MAX_TRIES <= 100,
+        `安全上限の定数がある（実測: ${MAX_TRIES}）`);
+    assert.match(RUN_BODY, /MAX_TRIES_PER_TILE\s+CONSTANT INTEGER := \d+/);
+    assert.match(RUN_BODY, /WHILE v_placed < v_target AND v_attempts < v_target \* MAX_TRIES_PER_TILE/,
+        '目標枚数 × 上限回数で必ず抜ける');
+    assert.match(RUN_BODY, /v_attempts := v_attempts \+ 1/, '試行を数えている');
+});
+
+test('AIウォーカー: 主要都市を全部埋め尽くしても1回の実行が止まる（上限の実測）', () => {
+    const cities = readCities();
+    // 各都市の円＋最大7歩（700m）を余裕を持って覆う矩形を先に全部うめる
+    const owned = new Set();
+    cities.forEach((c) => {
+        const latSpan = (c.radius + 1200) / 111320;
+        const lngSpan = (c.radius + 1200) / (111320 * Math.cos(c.lat * Math.PI / 180));
+        for (let la = Math.floor((c.lat - latSpan) / LAT_GRID); la <= Math.floor((c.lat + latSpan) / LAT_GRID); la++) {
+            for (let ln = Math.floor((c.lng - lngSpan) / LNG_GRID); ln <= Math.floor((c.lng + lngSpan) / LNG_GRID); ln++) {
+                owned.add(`tile_${la}_${ln}`);
+            }
+        }
+    });
+
+    let seed = 424242;
+    const rand = () => {
+        seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+        return seed / 4294967296;
+    };
+    let placedTotal = 0;
+    ['black', 'white'].forEach(() => {
+        const target = 3 + Math.floor(rand() * 5);
+        let placed = 0;
+        let tries = 0;
+        let latIdx = null;
+        let lngIdx = null;
+        while (placed < target && tries < target * MAX_TRIES) {
+            tries += 1;
+            if (latIdx === null) {
+                const c = cities[Math.floor(rand() * cities.length)];
+                const r = c.radius * Math.sqrt(rand());
+                const theta = 2 * Math.PI * rand();
+                const lat = c.lat + (r * Math.cos(theta)) / 111320;
+                const lng = c.lng + (r * Math.sin(theta)) / (111320 * Math.cos(lat * Math.PI / 180));
+                latIdx = Math.floor(lat / LAT_GRID);
+                lngIdx = Math.floor(lng / LNG_GRID);
+            } else if (rand() < 0.5) {
+                latIdx += rand() < 0.5 ? 1 : -1;
+            } else {
+                lngIdx += rand() < 0.5 ? 1 : -1;
+            }
+            if (owned.has(`tile_${latIdx}_${lngIdx}`)) {
+                if (rand() < 0.5) latIdx = null;
+            } else {
+                owned.add(`tile_${latIdx}_${lngIdx}`);
+                placed += 1;
+            }
+            if (rand() < 0.12) latIdx = null;
+        }
+        assert.ok(tries <= target * MAX_TRIES, `${target} マスを狙って ${tries} 回で打ち切る`);
+        placedTotal += placed;
+    });
+    assert.equal(placedTotal, 0, '空きが無ければ1枚も塗らずに終わる（既存マスは消さない）');
 });
 
 /* ------------------------------------------------------------------ *
- * 7. 主要都市（日本国内・10拠点以上）
+ * 7. 出発点は主要14都市エリアのみ
  * ------------------------------------------------------------------ */
 
-test('AIウォーカー: 主要都市が10拠点以上あり、日本国内に収まっている', () => {
+test('AIウォーカー: 出発点は主要14都市エリアのランダム位置だけ', () => {
     const cities = readCities();
-    assert.ok(cities.length >= 10, `拠点数: ${cities.length}`);
+    assert.equal(cities.length, 14, `主要14都市: ${cities.length} 拠点`);
     const names = cities.map((c) => c.name).join(' ');
-    ['東京', '梅田', '難波', '京都', '名古屋', '福岡', '札幌', '横浜', '神戸', '仙台']
+    ['東京', '新宿', '渋谷', '池袋', '梅田', '難波', '天王寺', '京都', '名古屋', '博多', '札幌', '横浜', '三宮', '仙台']
         .forEach((key) => assert.ok(names.includes(key), `${key} がある`));
 
     cities.forEach((c) => {
@@ -213,6 +295,16 @@ test('AIウォーカー: 主要都市が10拠点以上あり、日本国内に�
         assert.ok(c.lng >= 129 && c.lng <= 146, `${c.name} の経度が日本国内: ${c.lng}`);
         assert.ok(c.radius >= 300 && c.radius <= 2000, `${c.name} の散歩半径が街の広さ: ${c.radius}m`);
     });
+});
+
+test('AIウォーカー: 「今週塗られたマスの近くから出発する」分岐が消えている', () => {
+    // 既存マスを読みに行かない＝出発点が実プレイヤーの街に引き寄せられない
+    assert.doesNotMatch(RUN_BODY, /FROM\s+(?:public\.)?territory_tiles/i, 'territory_tiles を SELECT しない');
+    assert.doesNotMatch(RUN_BODY, /SELECT\s+t\.lat_idx,\s*t\.lng_idx/, '既存マスを出発点にしない');
+    assert.doesNotMatch(RUN_BODY, /ORDER BY random\(\)\s*LIMIT 1;\s*\n\s*END IF;/, '旧分岐の形が残っていない');
+    assert.match(RUN_BODY, /FROM \(VALUES[\s\S]*?\) AS c\(name, lat, lng, radius\)\s*ORDER BY random\(\)\s*LIMIT 1/,
+        '都市リストからランダムに1つ選ぶ');
+    assert.doesNotMatch(RUN_BODY, /random\(\) < 0\.5 THEN\s*\n\s*SELECT/, '半分だけ既存マス寄り、は廃止');
 });
 
 test('AIウォーカー: 街の中のランダムな1点から歩き出す（毎回同じ場所に固まらない）', () => {
@@ -237,16 +329,17 @@ test('AIウォーカー: 1週間（168回）動かしても黒白がほぼ半々
     const cities = readCities();
     const owns = new Map();            // tileKey -> 'black' | 'white'
     const perRun = { black: [], white: [] };
+    let overwrites = 0;
 
     for (let hour = 0; hour < 168; hour++) {
         ['black', 'white'].forEach((team) => {
             const target = 3 + Math.floor(rand() * 5);      // 3〜7
             let placed = 0;
+            let tries = 0;
             let latIdx = null;
             let lngIdx = null;
-            let attempts = 0;
-            while (placed < target && attempts < target * 8) {
-                attempts += 1;
+            while (placed < target && tries < target * MAX_TRIES) {
+                tries += 1;
                 if (latIdx === null) {
                     const c = cities[Math.floor(rand() * cities.length)];
                     const r = c.radius * Math.sqrt(rand());
@@ -260,22 +353,34 @@ test('AIウォーカー: 1週間（168回）動かしても黒白がほぼ半々
                 } else {
                     lngIdx += rand() < 0.5 ? 1 : -1;
                 }
-                owns.set(`tile_${latIdx}_${lngIdx}`, team);   // 1時間前のマスは塗り替え可
-                placed += 1;
+                const key = `tile_${latIdx}_${lngIdx}`;
+                if (owns.has(key)) {
+                    // すでに塗られている → 上書きせずスキップ（陣営は変わらない）
+                    overwrites += 1;
+                    if (rand() < 0.5) latIdx = null;
+                } else {
+                    owns.set(key, team);
+                    placed += 1;
+                }
                 if (rand() < 0.12) latIdx = null;
             }
-            assert.ok(placed >= 3 && placed <= 7, `${team} の1回の枚数: ${placed}`);
+            assert.ok(placed <= target, `${team} は目標 ${target} 枚を超えない: ${placed}`);
             perRun[team].push(placed);
         });
     }
 
+    assert.ok(overwrites > 0, '1週間のうちに既存マスとぶつかる場面は実際に起きる（=スキップの検証）');
     const black = [...owns.values()].filter((t) => t === 'black').length;
     const total = owns.size;
     const blackPct = (black / total) * 100;
+    assert.ok(total > 1000, `14都市だけで1週間で十分に塗れる: ${total} マス`);
     assert.ok(blackPct >= 45 && blackPct <= 55, `黒のシェアが半々: ${blackPct.toFixed(1)}%`);
     assert.ok(black > 0 && black < total, 'どちらかが0%にはならない');
     assert.ok(perRun.black.reduce((a, b) => a + b, 0) > 0, '黒は毎回歩いている');
     assert.ok(perRun.white.reduce((a, b) => a + b, 0) > 0, '白は毎回歩いている');
+    // 週の終わりでもまだ空きマスがあり、毎時しっかり塗れている
+    assert.ok(Math.min(...perRun.black.slice(-24)) >= 3, '週の最後の24回でも黒は目標枚数を確保');
+    assert.ok(Math.min(...perRun.white.slice(-24)) >= 3, '週の最後の24回でも白は目標枚数を確保');
 });
 
 /* ------------------------------------------------------------------ *
@@ -288,6 +393,14 @@ test('AIウォーカー: SQL Editor に貼るだけで試せる手順がコメ�
     assert.match(SQL, /cron\.job_run_details/, '実行履歴の確認方法');
     assert.match(SQL, /Supabase|SQL Editor/, 'どこで実行するか');
     assert.match(SQL, /xxzmrdfroqeflfgszgls/, '対象プロジェクト');
+});
+
+test('AIウォーカー: 先頭の説明コメントも新仕様（未塗り専用・14都市）になっている', () => {
+    const header = SQL.split('----------')[0];
+    assert.match(header, /主要14都市/);
+    assert.match(header, /まだ誰も塗っていない/);
+    assert.match(header, /上書きせず/);
+    assert.doesNotMatch(header, /30分/, '旧・30分ルールの説明は消す');
 });
 
 test('AIウォーカー: クライアントからは実行できない（いたずら防止）', () => {
