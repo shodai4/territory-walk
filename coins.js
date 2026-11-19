@@ -1170,6 +1170,37 @@ class CoinManager {
     }
 
     /**
+     * SHOPの「コード入力」（Proサポーター）から、SHOPを閉じずにその上へ #pro-modal を重ねる。
+     * 閉じれば SHOP がそのまま残っているので、コード入力→確認→買い物を1画面を行き来せず続けられる。
+     * （以前はSHOPを閉じてから開いていたため、キャンセルするとSHOPへ戻れなかった）
+     * @returns {boolean} モーダルを開けたか
+     */
+    openProModalFromShop() {
+        const proModal = document.getElementById('pro-modal');
+        if (!proModal) return false;
+
+        // 背後のSHOPは開いたまま触れる状態を維持する（ここでは hidden を付けない）
+        const shopModal = document.getElementById('shop-modal');
+        if (shopModal && shopModal.style && shopModal.classList
+            && !shopModal.classList.contains('hidden')) {
+            shopModal.style.pointerEvents = 'auto';
+        }
+
+        proModal.classList.remove('hidden');
+        // 背後のSHOPが見えるよう、重ね表示のときだけ幕を薄くする（単独表示は従来どおり）
+        proModal.classList.add('pro-over-shop');
+        if (proModal.style) proModal.style.pointerEvents = 'auto';
+
+        // 入力欄があればそのまま打てるようにする（キーボードを開く）
+        const input = document.getElementById('input-pro-code');
+        if (input && typeof input.focus === 'function') {
+            try { input.focus(); } catch (e) { /* 入力欄が無い環境でも開く */ }
+        }
+
+        return true;
+    }
+
+    /**
      * ショップを開く。
      * 描画の成否に関わらず「必ず開く」ことを最優先する。
      * （以前はパネル描画 → hidden 解除の順で、描画中の例外がモーダルを塞いでいた）
@@ -1718,10 +1749,8 @@ class CoinManager {
         const proFromShopBtn = container.querySelector('#btn-open-pro-from-shop');
         if (proFromShopBtn) {
             proFromShopBtn.addEventListener('click', () => {
-                const shopModal = document.getElementById('shop-modal');
-                if (shopModal) shopModal.classList.add('hidden');
-                const proModal = document.getElementById('pro-modal');
-                if (proModal) proModal.classList.remove('hidden');
+                // SHOPは閉じずに、その上へコード入力モーダルを重ねる（閉じればSHOPにそのまま戻る）
+                this.openProModalFromShop();
             });
         }
 

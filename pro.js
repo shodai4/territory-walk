@@ -127,6 +127,35 @@ class ProManager {
         `;
     }
 
+    /**
+     * 背後のSHOP（#shop-modal）が開いているとき、Pro状態の変化をSHOPの表示へ即座に反映する。
+     * コード入力はSHOPの上に重ねて開くので、有効化後は「未登録」→「有効」や
+     * スキン・特典・購入UIの解放状態を、閉じたSHOP側でもそのまま見せる必要がある。
+     * @returns {boolean} SHOPへ反映したか（SHOPが閉じていればfalse）
+     */
+    refreshShopAfterProChange() {
+        const shop = document.getElementById('shop-modal');
+        if (!shop || (shop.classList && shop.classList.contains('hidden'))) return false;
+
+        const coinManager = (this.app && this.app.coinManager)
+            || (typeof window !== 'undefined' ? window.coinManager : null);
+        if (!coinManager) return false;
+
+        try {
+            if (typeof coinManager.updateCoinCounts === 'function') coinManager.updateCoinCounts();
+        } catch (e) {
+            console.warn('[Pro] Coin counter refresh skipped:', e);
+        }
+        try {
+            if (typeof coinManager.renderShopPanels === 'function') coinManager.renderShopPanels();
+            else if (typeof coinManager.updateCoinUI === 'function') coinManager.updateCoinUI();
+        } catch (e) {
+            console.warn('[Pro] Shop refresh skipped:', e);
+        }
+
+        return true;
+    }
+
     initModal(app) {
         this.app = app;
         const modal = document.getElementById('pro-modal');
@@ -137,12 +166,16 @@ class ProManager {
         if (openBtn) {
             openBtn.addEventListener('click', () => {
                 if (this.app && this.app.menuModal) this.app.menuModal.classList.add('hidden');
+                // MENUからの単独表示では、SHOPの上に重ねたときの薄い幕を外す
+                if (modal && modal.classList) modal.classList.remove('pro-over-shop');
                 if (modal) modal.classList.remove('hidden');
             });
         }
 
         const closeModal = () => {
-            if (modal) modal.classList.add('hidden');
+            if (!modal) return;
+            modal.classList.add('hidden');
+            if (modal.classList) modal.classList.remove('pro-over-shop');
         };
 
         if (closeBtn) closeBtn.addEventListener('click', closeModal);
@@ -174,9 +207,11 @@ class ProManager {
                     alert('Proサポーター機能が有効になりました！限定スキンとポスター出力をご利用いただけます。');
                     closeModal();
                     if (this.app) {
-                        this.app.renderTeamBadge();
-                        this.app.updateStatsDisplay();
+                        if (typeof this.app.renderTeamBadge === 'function') this.app.renderTeamBadge();
+                        if (typeof this.app.updateStatsDisplay === 'function') this.app.updateStatsDisplay();
                     }
+                    // SHOPを開いたまま有効化した場合は、背後のSHOP表示も即座に更新する
+                    this.refreshShopAfterProChange();
                 } else {
                     alert('無効なコードです。正しいアクティベーションコードを入力してください。');
                 }

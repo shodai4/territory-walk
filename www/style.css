@@ -323,6 +323,19 @@ header, #dpad-container, #btn-recenter {
     user-select: none !important;
 }
 
+/* Pro入力モーダルは SHOP（z-[2000]）の上に重ねる。CDN生成に依存せず順序を確定させる */
+#pro-modal {
+    z-index: 2050;
+}
+
+/* SHOPの上に重ねたときは、幕を薄く・背景ぼかしを切って、背後のSHOPを見せる
+   （2枚重ねの暗幕とぼかしでSHOPが消えて見えると「閉じた」のと変わらないため） */
+#pro-modal.pro-over-shop {
+    background-color: rgba(0, 0, 0, 0.35);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+}
+
 /* Modal Viewport Protection: Smooth vertical scroll, prevent horizontal scroll */
 #rules-modal, #menu-modal, #stats-modal, #pro-modal, #weekly-result-modal, #shop-modal, #team-reset-modal {
     touch-action: pan-y !important;
