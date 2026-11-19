@@ -2,7 +2,8 @@
 //  TerritoryWatchApp.swift
 //  TERRITORY WALK Watch App（コンパニオン版 Phase 1）
 //
-//  画面は3要素だけに絞る（ユーザー指示: ①地図＋陣地マス ②＋／－ ③マーキングON/OFF）。
+//  画面は2要素だけに絞る（ユーザー指示: ①地図＋陣地マス ②マーキングON/OFF）。
+//  ズームは画面の ＋／－ ボタンを廃止し、Digital Crown（リューズ）を回して4段階で切り替える。
 //  マスの色は iPhone 側で解決済みの値をそのまま描く（初期配置・実績で見分けは付けない）。
 //
 
@@ -34,7 +35,7 @@ struct ContentView: View {
             .colorScheme(.dark)
             .ignoresSafeArea()
 
-            // iPhone とまだ繋がっていない時の案内（3要素は増やさない）
+            // iPhone とまだ繋がっていない時の案内（画面の要素は増やさない）
             if !model.hasWindow {
                 VStack(spacing: 4) {
                     Image(systemName: "iphone.radiowaves.left.and.right")
@@ -52,17 +53,8 @@ struct ContentView: View {
                 .padding(.bottom, 44)
             }
 
+            // 操作ボタンはマーキング ON/OFF だけ（ズームは Digital Crown）
             VStack(spacing: 6) {
-                HStack {
-                    Spacer()
-                    VStack(spacing: 6) {
-                        zoomButton("plus", enabled: model.canZoomIn) { model.zoomIn() }
-                        zoomButton("minus", enabled: model.canZoomOut) { model.zoomOut() }
-                    }
-                    .padding(.trailing, 6)
-                }
-                .padding(.top, 18)
-
                 Spacer()
 
                 Button {
@@ -91,12 +83,34 @@ struct ContentView: View {
                 .opacity(model.reachable ? 1 : 0.55)
             }
         }
+        // Digital Crown でズーム（上へ回す＝拡大、下へ回す＝広げる）。
+        // by: 1.0 で4段階にスナップし、段が変わったときだけモデルが窓を取り直す。
+        .focusable(true)
+        .focusEffectDisabled()
+        .digitalCrownRotation(
+            crownBinding,
+            from: 0,
+            to: Double(model.maxZoomIndex),
+            by: 1.0,
+            sensitivity: .low,
+            isContinuous: false,
+            isHapticFeedbackEnabled: true
+        )
         // 画面がアクティブに戻るたびに取り直す（iPhone が起きていれば即同期）
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 model.onForeground()
             }
         }
+    }
+
+    /// Digital Crown の値（0＝最も広い … maxZoomIndex＝最も拡大）。
+    /// 上へ回すと値が増える＝拡大方向になるよう、モデル側で zoomIndex と逆向きに持つ。
+    private var crownBinding: Binding<Double> {
+        Binding(
+            get: { model.crownPosition },
+            set: { model.setCrownPosition($0) }
+        )
     }
 
     /// 陣営の色（Watch も白黒で統一: 白チーム＝白 / 黒チーム＝黒）。
@@ -117,20 +131,6 @@ struct ContentView: View {
     /// 塗りつぶしの濃さ。白マスは地図の明るい場所でも沈まないよう濃さを揃える
     private func fillOpacity(for team: Int) -> Double {
         team == 1 ? 0.5 : 0.6
-    }
-
-    private func zoomButton(_ symbol: String, enabled: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 14, weight: .bold))
-                .frame(width: 34, height: 34)
-                .background(Color.black.opacity(0.55))
-                .overlay(Circle().stroke(Color.white.opacity(0.7), lineWidth: 1))
-                .clipShape(Circle())
-        }
-        .buttonStyle(.plain)
-        .disabled(!enabled)
-        .opacity(enabled ? 1 : 0.4)
     }
 }
 

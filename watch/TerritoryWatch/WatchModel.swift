@@ -150,7 +150,9 @@ final class WatchModel: NSObject, ObservableObject, WCSessionDelegate {
     /// ズーム段（度）。小さいほど拡大。250m/500m/1km/2km四方の目安。
     private let spans: [Double] = [0.00225, 0.0045, 0.009, 0.018]
     private let radii: [Int] = [2, 4, 7, 7]
-    private var zoomIndex = 1
+    /// 0＝最も拡大 … spans.count-1＝最も広い。画面の Digital Crown と連動する。
+    /// 初期値 1 は、Digital Crown 側の値（crownPosition）も 2 から始まる。
+    @Published private(set) var zoomIndex = 1
     private var lastCenterLatIdx: Int?
     private var lastCenterLngIdx: Int?
 
@@ -325,23 +327,36 @@ final class WatchModel: NSObject, ObservableObject, WCSessionDelegate {
         }
     }
 
-    // ---- ズーム ---------------------------------------------------
-    func zoomIn() {
-        guard zoomIndex > 0 else { return }
-        zoomIndex -= 1
+    // ---- ズーム（Digital Crown）-----------------------------------
+    /// Digital Crown の上限（＝最も広い段の番号）
+    var maxZoomIndex: Int { spans.count - 1 }
+
+    /// Digital Crown が持つ値。上へ回すと増える。
+    /// 「上へ回す＝手前へ寄る（拡大）」が地図らしいので、内部の zoomIndex とは逆向きに持つ。
+    /// 例: zoomIndex 0（最も拡大）＝ 3、zoomIndex 3（最も広い）＝ 0。
+    var crownPosition: Double { Double(maxZoomIndex - zoomIndex) }
+
+    /// Digital Crown からの入力。1段ずつスナップした値が来るので、段が変わったときだけ動く。
+    func setCrownPosition(_ position: Double) {
+        let clamped = min(max(position, 0), Double(maxZoomIndex))
+        setZoomIndex(maxZoomIndex - Int(clamped.rounded()))
+    }
+
+    /// ズーム段を変更する。段が変わったときだけカメラを寄せ、iPhone に窓サイズを要求する
+    /// （クラウンの連続変化で requestWindow を連打しない）。
+    func setZoomIndex(_ index: Int) {
+        let next = min(max(index, 0), maxZoomIndex)
+        guard next != zoomIndex else { return }
+        zoomIndex = next
         recenterAnimated()
         requestWindow()
     }
 
-    func zoomOut() {
-        guard zoomIndex < spans.count - 1 else { return }
-        zoomIndex += 1
-        recenterAnimated()
-        requestWindow()
-    }
+    func zoomIn() { setZoomIndex(zoomIndex - 1) }
+    func zoomOut() { setZoomIndex(zoomIndex + 1) }
 
     var canZoomIn: Bool { zoomIndex > 0 }
-    var canZoomOut: Bool { zoomIndex < spans.count - 1 }
+    var canZoomOut: Bool { zoomIndex < maxZoomIndex }
 
     private func recenterAnimated() {
         guard let center = window?.meCoordinate else { return }

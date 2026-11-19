@@ -5,6 +5,7 @@
  *   2) 黒マスは白寄りの縁取り、白マスは灰色の縁取りで境界がわかる
  *   3) 地図自体は彩度を落としたモノトーン（.saturation(0)）＋ダーク配色
  *   4) CI（ENABLE_WATCH_TARGET）で Watch ターゲットがビルド対象になっている
+ *   5) ズームは画面の ＋／－ をやめ、Digital Crown（リューズ）で4段階（2026-11-19）
  *
  * 実行: npm test （node --test tests/）
  */
@@ -16,6 +17,7 @@ const path = require('node:path');
 
 const ROOT = path.resolve(__dirname, '..');
 const WATCH_APP = fs.readFileSync(path.join(ROOT, 'watch', 'TerritoryWatch', 'TerritoryWatchApp.swift'), 'utf8');
+const WATCH_MODEL = fs.readFileSync(path.join(ROOT, 'watch', 'TerritoryWatch', 'WatchModel.swift'), 'utf8');
 const WORKFLOW = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'ios-build.yml'), 'utf8');
 const WATCH_SETUP = fs.readFileSync(path.join(ROOT, 'ci', 'watch-setup.sh'), 'utf8');
 
@@ -47,4 +49,46 @@ test('Watch配線: CI は Watch ターゲットを組み込んでビルドする
     assert.match(WORKFLOW, /run: bash ci\/watch-setup\.sh/);
     const configureWatch = fs.readFileSync(path.join(ROOT, 'scripts', 'configure-watch.js'), 'utf8');
     assert.match(configureWatch, /watch', 'TerritoryWatch'|TerritoryWatch/, 'Watch ソースを生成 iOS プロジェクトへ配置する');
+});
+
+/* ------------------------------------------------------------------ *
+ * 5: Digital Crown ズーム（画面の＋／－を廃止）
+ * ------------------------------------------------------------------ */
+
+test('Watchズーム: 画面の ＋／－ ボタンと zoomButton 定義は残っていない', () => {
+    assert.doesNotMatch(WATCH_APP, /"plus"/, '＋ボタンを削除');
+    assert.doesNotMatch(WATCH_APP, /"minus"/, '－ボタンを削除');
+    assert.doesNotMatch(WATCH_APP, /func zoomButton/, 'zoomButton の定義を削除');
+    assert.doesNotMatch(WATCH_APP, /zoomButton\(/, 'zoomButton の呼び出しを削除');
+});
+
+test('Watchズーム: Digital Crown を focusable にして4段階にスナップする', () => {
+    assert.match(WATCH_APP, /\.focusable\(true\)/, 'クラウンを受けるために focusable にする');
+    assert.match(WATCH_APP, /\.digitalCrownRotation\([\s\S]*?crownBinding/, 'Digital Crown をバインドする');
+    assert.match(WATCH_APP, /by: 1\.0/, '1段ずつスナップ');
+    assert.match(WATCH_APP, /from: 0,[\s\S]*?to: Double\(model\.maxZoomIndex\)/, '0〜3 の4段階');
+    assert.match(WATCH_APP, /isContinuous: false/, '両端で止める（回り続けない）');
+    assert.match(WATCH_APP, /isHapticFeedbackEnabled: true/, '段が変わるたびに手応えを返す');
+    assert.match(WATCH_APP, /model\.setCrownPosition\(\$0\)/, 'クラウンの値はモデルへ渡す');
+});
+
+test('Watchズーム: モデルは既存の spans[1] 初期値と連動し、段が変わったときだけ窓を取り直す', () => {
+    assert.match(WATCH_MODEL, /private let spans: \[Double\] = \[0\.00225, 0\.0045, 0\.009, 0\.018\]/,
+        '既存の4段階を維持');
+    assert.match(WATCH_MODEL, /@Published private\(set\) var zoomIndex = 1/, '初期値は 1');
+    assert.match(WATCH_MODEL, /var maxZoomIndex: Int \{ spans\.count - 1 \}/);
+    assert.match(WATCH_MODEL, /var crownPosition: Double \{ Double\(maxZoomIndex - zoomIndex\) \}/,
+        '初期値 1 ならクラウン側は 2 で始まる（上へ回す＝拡大）');
+    assert.match(WATCH_MODEL, /func setCrownPosition\(_ position: Double\)/, 'クラウンの連続値を段へ丸める');
+    assert.match(WATCH_MODEL, /func setZoomIndex\(_ index: Int\)/);
+    // 同じ段のあいだは何もしない＝ requestWindow の連打を防ぐ
+    assert.match(WATCH_MODEL, /func setZoomIndex\(_ index: Int\) \{[\s\S]*?guard next != zoomIndex else \{ return \}[\s\S]*?recenterAnimated\(\)[\s\S]*?requestWindow\(\)/);
+    assert.match(WATCH_MODEL, /func zoomIn\(\) \{ setZoomIndex\(zoomIndex - 1\) \}/);
+    assert.match(WATCH_MODEL, /func zoomOut\(\) \{ setZoomIndex\(zoomIndex \+ 1\) \}/);
+});
+
+test('Watch画面: ズームを外してもマーキング ON/OFF は残っている', () => {
+    assert.match(WATCH_APP, /model\.toggleMarking\(\)/);
+    assert.match(WATCH_APP, /"マーキング ON" : "停止中"/);
+    assert.match(WATCH_MODEL, /func toggleMarking\(\)/);
 });

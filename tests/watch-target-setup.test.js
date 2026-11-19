@@ -1,7 +1,7 @@
 /**
  * TERRITORY WALK - Node tests
  * v1.1 Apple Watch（コンパニオン）の組み込み・CI配線
- *   1) Watch アプリは3要素だけ（地図＋陣地マス / ＋－ / マーキングON/OFF）
+ *   1) Watch アプリは2要素だけ（地図＋陣地マス / マーキングON/OFF）。ズームは Digital Crown
  *   2) Info.plist に WKApplication と WKCompanionAppBundleIdentifier
  *   3) ターゲット追加スクリプトが Watch 用 Bundle ID・埋め込み・バージョン一致を扱う
  *   4) CI は変数 ENABLE_WATCH_TARGET=true のときだけ Watch を組み込む（既定OFF）
@@ -31,19 +31,21 @@ const WORKFLOW = read('.github', 'workflows', 'ios-build.yml');
 const WATCH_README = read('watch', 'README.md');
 
 /* ------------------------------------------------------------------ *
- * 1: 3要素だけ
+ * 1: 2要素だけ（ズームは Digital Crown）
  * ------------------------------------------------------------------ */
 
-test('Watch画面: 3要素（地図＋陣地マス / ＋－ / マーキングON/OFF）だけ', () => {
+test('Watch画面: 2要素（地図＋陣地マス / マーキングON/OFF）だけで、＋／－ ボタンは無い', () => {
     assert.match(WATCH_APP, /Map\(position: \$model\.camera/, '地図');
     assert.match(WATCH_APP, /MapPolygon\(coordinates:/, '陣地マス');
-    assert.match(WATCH_APP, /"plus"/, 'ズームイン');
-    assert.match(WATCH_APP, /"minus"/, 'ズームアウト');
     assert.match(WATCH_APP, /model\.toggleMarking\(\)/, 'マーキングON/OFF');
     assert.match(WATCH_APP, /マーキング ON/, 'ON表示');
     assert.match(WATCH_APP, /停止中/, 'OFF表示');
+    // 画面の ＋／－ ボタンは廃止（ズームは Digital Crown）
+    assert.doesNotMatch(WATCH_APP, /"plus"/, '＋ボタンを置かない');
+    assert.doesNotMatch(WATCH_APP, /"minus"/, '－ボタンを置かない');
+    assert.doesNotMatch(WATCH_APP, /func zoomButton/, 'ズームボタンの定義を残さない');
     // 画面に余計なタブ・設定・リストを足していない
-    assert.doesNotMatch(WATCH_APP, /TabView|List\s*\{/, '3要素以外の画面を足さない');
+    assert.doesNotMatch(WATCH_APP, /TabView|List\s*\{/, '2要素以外の画面を足さない');
 });
 
 test('Watch: 位置情報を取りに行かない（Phase 1はコンパニオン）', () => {

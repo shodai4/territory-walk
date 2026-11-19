@@ -1,7 +1,7 @@
 # Apple Watch（コンパニオン）— v1.1 Phase 1
 
 テリトリーウォークの Watch アプリは **iPhone のコンパニオン**として動く。
-Watch 画面は3要素だけ（①地図＋陣地マス ②＋／－ ③マーキングON/OFF）。
+Watch 画面は2要素だけ（①地図＋陣地マス ②マーキングON/OFF）。ズームは Digital Crown（リューズ）を回して4段階。
 
 ## 構成
 
@@ -63,7 +63,9 @@ v1.0 の審査が終わるまでは **変数を入れない**（＝従来どお�
 
 - iPhone と Watch をペアリングし、Watch 側にアプリが自動インストールされること
 - iPhone で数十メートル歩くと Watch のマスが増えること（`updateApplicationContext`）
-- Watch の ＋／－ でマスの表示範囲が変わること（`sendMessage {cmd:"window", r}`）
+- Digital Crown（リューズ）を回すとマスの表示範囲が4段階で変わること
+  （上へ回す＝拡大、`.digitalCrownRotation` → `setCrownPosition` → `sendMessage {cmd:"window", r}`）
+- 画面には ＋／－ ボタンが無く、下のマーキング ON/OFF だけがあること
 - Watch のマーキング ON/OFF で iPhone 側の状態が変わること（`setMarkingPaused`）
 - 陣地獲得時の無音通知：`WatchBridge.notifyCapture('claim','1マス獲得')` を
   Safari の Web Inspector から叩き、手首が振動すること（`silent.wav` が効いているか）
