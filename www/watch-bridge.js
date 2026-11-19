@@ -134,8 +134,11 @@ class WatchBridgeClient {
         if (!message || !this.app) return;
         const app = this.app;
         if (message.cmd === 'toggle' && typeof app.setMarkingPaused === 'function') {
-            const next = typeof message.to === 'boolean' ? message.to : !app.isMarkingPaused();
-            app.setMarkingPaused(next, { source: 'watch' });
+            // Watch は「marking（true=マーキングON / false=停止）」を送ってくるが、
+            // iPhone 側の setMarkingPaused は「paused（true=停止 / false=ON）」を受ける。
+            // そのまま渡すと真逆になり、ON のときに押しても切り替わらないので反転する。
+            const nextPaused = typeof message.to === 'boolean' ? !message.to : !app.isMarkingPaused();
+            app.setMarkingPaused(nextPaused, { source: 'watch' });
             this.send('toggle', { force: true });
         } else if (message.cmd === 'window') {
             const requested = Number(message.r);

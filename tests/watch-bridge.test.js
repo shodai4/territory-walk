@@ -4,6 +4,7 @@
  *   1) 窓データの組み立て（一辺 n / 現在地の位置 / n*n のマス文字列）
  *   2) マスの色は iPhone と同じ解決（初期配置も実績も同じ）＝ Watchで歩いた跡が浮かない
  *   3) Watchからのマーキング ON/OFF は既存の setMarkingPaused を呼ぶだけ
+ *      （Watch の marking と iPhone の paused は真逆なので反転して渡す・2026-11-19 修正）
  *   4) プラグインが無い環境（Web・未対応ビルド）では落ちずに何もしない
  *   5) 陣地獲得の連打は1秒に1回へ間引く
  *
@@ -115,15 +116,41 @@ test('送信内容: マーキング停止中は marking=false', () => {
     assert.equal(client.buildPayload().marking, false);
 });
 
-test('Watch操作: ON/OFF は既存の setMarkingPaused に委ねる', () => {
+test('Watch操作: ON/OFF は既存の setMarkingPaused に委ねる（Watchの marking と iPhoneの paused は真逆）', () => {
     const app = createAppStub();
     const client = new WatchBridgeClient(app);
+    // 停止中に Watch で ON を押す: to=true（マーキングON）→ paused=false（再開）
+    app.markingPaused = true;
     client.handleCommand({ cmd: 'toggle', to: true });
-    assert.deepEqual(app.calls, [true]);
-    assert.equal(app.markingPaused, true);
+    assert.deepEqual(app.calls, [false], 'ON は paused=false で渡す');
+    assert.equal(app.markingPaused, false, '押したとおり ON になる');
 
+    // ON のときに Watch で停止を押す: to=false（停止）→ paused=true（停止）
     client.handleCommand({ cmd: 'toggle', to: false });
-    assert.deepEqual(app.calls, [true, false]);
+    assert.deepEqual(app.calls, [false, true], '停止は paused=true で渡す');
+    assert.equal(app.markingPaused, true, '押したとおり停止になる');
+});
+
+test('Watch操作: ON を押すと Watch に戻る marking も ON になる（真逆にならない）', () => {
+    const app = createAppStub();
+    const client = new WatchBridgeClient(app);
+    app.markingPaused = true;                       // 停止中
+    client.handleCommand({ cmd: 'toggle', to: true }); // ON を押す
+    assert.equal(app.markingPaused, false);
+    assert.equal(client.buildPayload().marking, true, 'Watch に ON が返る');
+
+    client.handleCommand({ cmd: 'toggle', to: false }); // もう一度押して停止
+    assert.equal(app.markingPaused, true);
+    assert.equal(client.buildPayload().marking, false, 'Watch に停止が返る');
+});
+
+test('Watch操作: to が無いときは現在の状態を反転する', () => {
+    const app = createAppStub();
+    const client = new WatchBridgeClient(app);
+    client.handleCommand({ cmd: 'toggle' });
+    assert.deepEqual(app.calls, [true], 'ON のまま → 停止');
+    client.handleCommand({ cmd: 'toggle' });
+    assert.deepEqual(app.calls, [true, false], '停止 → ON');
 });
 
 test('Watch操作: ズーム要求で窓の一辺が変わる', () => {
@@ -160,10 +187,11 @@ test('プラグインあり: init で状態を1回送り、command を購読す�
         assert.equal(sent.length, 1);
         assert.equal(sent[0].n, 9);
 
-        // WatchからのON/OFFがJSまで届く
+        // WatchからのON/OFFがJSまで届く（to=true＝ON → paused=false）
         assert.equal(typeof listener, 'function');
         listener({ cmd: 'toggle', to: true });
-        assert.deepEqual(app.calls, [true]);
+        assert.deepEqual(app.calls, [false]);
+        assert.equal(app.markingPaused, false);
     } finally {
         delete global.window;
     }
