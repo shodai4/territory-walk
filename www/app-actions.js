@@ -7,7 +7,7 @@
  * このファイルは TerritoryWalkAppStats を継承してメソッドを積み上げる。
  * メソッドの中身は分割前と同一（挙動・保存データ・DOM 操作は変えない）。
  */
-class TerritoryWalkAppActions extends TerritoryWalkAppStats {
+class TerritoryWalkAppActions extends TerritoryWalkAppBattle {
     initProModal() {
         if (this.proManager && typeof this.proManager.initModal === 'function') {
             this.proManager.initModal(this);

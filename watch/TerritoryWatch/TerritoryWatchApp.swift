@@ -19,8 +19,8 @@ struct ContentView: View {
             Map(position: $model.camera, interactionModes: []) {
                 ForEach(model.visibleCells) { cell in
                     MapPolygon(coordinates: Grid.corners(latIdx: cell.latIdx, lngIdx: cell.lngIdx))
-                        .foregroundStyle(color(for: cell.team).opacity(0.45))
-                        .stroke(color(for: cell.team).opacity(0.55), lineWidth: 0.6)
+                        .foregroundStyle(color(for: cell.team).opacity(fillOpacity(for: cell.team)))
+                        .stroke(strokeColor(for: cell.team), lineWidth: strokeWidth(for: cell.team))
                 }
                 if let me = model.meCoordinate {
                     MapCircle(center: me, radius: 12)
@@ -29,6 +29,9 @@ struct ContentView: View {
             }
             .mapStyle(.standard(pointsOfInterest: .excludingAll))
             .mapControlVisibility(.hidden)
+            // 白黒の陣地マスが映えるよう、地図自体は彩度を落としたモノトーン寄りにする
+            .saturation(0.0)
+            .colorScheme(.dark)
             .ignoresSafeArea()
 
             // iPhone とまだ繋がっていない時の案内（3要素は増やさない）
@@ -96,9 +99,24 @@ struct ContentView: View {
         }
     }
 
-    /// 黒チームを黒で塗ると地図上で見えないため、Watchではアンバーで表現する
+    /// 陣営の色（Watch も白黒で統一: 白チーム＝白 / 黒チーム＝黒）。
+    /// 1 = 白チーム、2 = 黒チーム（watch-bridge.js の送信形式）。
     private func color(for team: Int) -> Color {
-        team == 1 ? .white : .orange
+        team == 1 ? .white : .black
+    }
+
+    /// 暗いモノトーン地図の上で黒マスが埋もれないよう、黒マスは白寄りの細い縁取りを付ける
+    private func strokeColor(for team: Int) -> Color {
+        team == 1 ? Color.gray.opacity(0.6) : Color.white.opacity(0.45)
+    }
+
+    private func strokeWidth(for team: Int) -> CGFloat {
+        team == 1 ? 0.6 : 0.7
+    }
+
+    /// 塗りつぶしの濃さ。白マスは地図の明るい場所でも沈まないよう濃さを揃える
+    private func fillOpacity(for team: Int) -> Double {
+        team == 1 ? 0.5 : 0.6
     }
 
     private func zoomButton(_ symbol: String, enabled: Bool, action: @escaping () -> Void) -> some View {

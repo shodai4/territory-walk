@@ -814,3 +814,23 @@ html.doc-scroll body {
         padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 2rem) !important;
     }
 }
+
+/* ------------------------------------------------------------------ *
+ * 画面上部の対戦％バー（#battle-bar-container）はタップで
+ * 「今週の戦況詳細」モーダルを開く。見た目は従来どおりのまま、
+ * タップできること（押した手応え）だけを足す。
+ * ------------------------------------------------------------------ */
+#battle-bar-container {
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+}
+
+#battle-bar-container:active {
+    filter: brightness(1.25);
+}
+
+#battle-bar-container:focus-visible {
+    outline: 2px solid rgba(251, 191, 36, 0.8);
+    outline-offset: 2px;
+}

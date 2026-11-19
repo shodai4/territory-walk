@@ -3,7 +3,8 @@
  * v1.1 要件3: 月曜リセット後の結果発表・無音通知（まずこの1種類のみ）
  *   1) 「次の月曜 09:00」を正しく出す（月曜の朝・夜、日曜、平日）
  *   2) 通知は無音（sound を指定しない）。置換IDで通知センターに溜めない
- *   3) 既定は OFF。ON にした瞬間だけ通知権限を要求する（起動時には要求しない）
+ *   3) 既定は OFF。通知権限を要求するのは「ONにした瞬間」と「初回起動で1回だけ」
+ *      （初回の自動プロンプトは first-launch-notification-prompt.test.js が見る）
  *   4) ネイティブ通知が無い環境（Web）では落ちずに何もしない
  *
  * 実行: npm test （node --test tests/）
@@ -248,13 +249,15 @@ test('未対応環境: プラグインが無ければ落ちずに何もしない
     assert.equal(notifier.enabled, false);
 });
 
-test('配線: 設定トグルと配線（起動時は init だけ・ONで権限）', () => {
+test('配線: 設定トグルと配線（init は予約の貼り直しだけで権限を要求しない）', () => {
     assert.match(INDEX_HTML, /id="btn-toggle-weekly-notify"/);
     assert.match(INDEX_HTML, /id="weekly-notify-text"/);
     assert.match(INDEX_HTML, /月曜の結果通知（無音）/);
     assert.match(INDEX_HTML, /notifications\.js\?v=/, 'notifications.js を読み込む');
     assert.match(APP_SOURCE, /initWeeklyResultNotifier\(\)/);
-    assert.match(APP_SOURCE, /this\.weeklyNotifier\.init\(\)/, '起動時は init のみ（権限要求はONの時だけ）');
+    assert.match(APP_SOURCE, /this\.weeklyNotifier\.init\(\)/, '起動時は init（予約の貼り直し）');
+    const notificationsSource = fs.readFileSync(path.join(ROOT, 'notifications.js'), 'utf8');
+    assert.match(notificationsSource, /promptOnFirstLaunch/, '初回だけ尋ねる処理を持つ');
 });
 
 test('プラグイン: Capacitor 6 系の @capacitor/local-notifications を依存に持つ', () => {

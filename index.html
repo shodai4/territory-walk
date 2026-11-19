@@ -18,7 +18,7 @@
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
     <!-- Custom CSS -->
-    <link rel="stylesheet" href="style.css?v=20261119v52">
+    <link rel="stylesheet" href="style.css?v=20261119v53">
 </head>
 <body class="bg-black text-white overflow-hidden overflow-x-hidden h-screen w-screen max-w-full flex flex-col m-0 p-0 select-none" data-theme="black" data-skin="default">
 
@@ -70,7 +70,7 @@
             </div>
 
             <!-- 全幅対戦パーセンテージバー（バー内にパーセント数値をインライン中央配置、左側が常に自陣営） -->
-            <div id="battle-bar-container" class="w-full h-7 bg-zinc-950 rounded-xl overflow-hidden flex flex-row border border-zinc-700 shadow-inner relative">
+            <div id="battle-bar-container" class="w-full h-7 bg-zinc-950 rounded-xl overflow-hidden flex flex-row border border-zinc-700 shadow-inner relative cursor-pointer" role="button" tabindex="0" aria-label="今週の戦況詳細を開く" title="タップで今週の戦況詳細">
                 <!-- 黒チームバー（内部に白文字でパーセント表示） -->
                 <div id="bar-black" class="bg-black border-r border-zinc-600 transition-all duration-500 flex items-center justify-center overflow-hidden shrink-0" style="width: 50%;">
                     <span id="score-black" class="text-white font-mono font-bold text-xs whitespace-nowrap px-1">50%</span>
@@ -788,6 +788,80 @@
         </div>
     </div>
 
+    <!-- 今週の戦況詳細モーダル（画面上部の％バーをタップで開く） -->
+    <div id="weekly-battle-modal" class="hidden fixed inset-0 z-[2000] bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4">
+        <div class="bg-zinc-900 border border-zinc-700/90 rounded-2xl w-full max-w-md p-4 sm:p-5 shadow-2xl flex flex-col gap-3 text-xs select-none max-h-[90vh] overflow-hidden box-border min-w-0">
+            <!-- モーダルヘッダー -->
+            <div class="flex items-center justify-between border-b border-zinc-800 pb-3 gap-2">
+                <div class="flex items-center gap-2 min-w-0">
+                    <span class="w-2 h-2 rounded-full bg-white shrink-0"></span>
+                    <div class="font-bold text-sm tracking-wider text-white truncate">今週の戦況詳細</div>
+                    <span id="battle-detail-week" class="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-800 text-zinc-400 shrink-0">----W--</span>
+                </div>
+                <button id="btn-close-weekly-battle" class="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-zinc-300 font-bold flex items-center gap-1 text-[11px] transition-all active:scale-95 shrink-0">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    <span>閉じる</span>
+                </button>
+            </div>
+
+            <!-- 本体（読み込み中 / 集計結果 / データなし） -->
+            <div class="flex-1 overflow-y-auto pr-1 space-y-2.5 font-mono">
+                <div id="battle-detail-loading" class="text-center text-zinc-400 py-6 text-[11px]">集計中...</div>
+
+                <div id="battle-detail-content" class="hidden space-y-2.5">
+                    <!-- 今週の参加人数（territory_weekly_rankings の実参加者） -->
+                    <div class="bg-zinc-950/80 border border-zinc-800 rounded-xl p-3 space-y-1.5">
+                        <div class="flex items-center justify-between gap-2">
+                            <span class="text-zinc-400 text-[11px]">今週の参加人数</span>
+                            <span class="text-white font-bold text-sm"><span id="battle-detail-players-total">0</span><span class="text-[10px] text-zinc-400 ml-0.5">人</span></span>
+                        </div>
+                        <div class="flex items-center justify-between gap-2 text-[10px] text-zinc-400">
+                            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-sm bg-black border border-zinc-500"></span>黒チーム <span id="battle-detail-players-black" class="text-zinc-200 font-bold">0</span>人</span>
+                            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-sm bg-white"></span>白チーム <span id="battle-detail-players-white" class="text-zinc-200 font-bold">0</span>人</span>
+                        </div>
+                    </div>
+
+                    <!-- 今週塗られたマス数（上部％バーと同じ基準） -->
+                    <div class="bg-zinc-950/80 border border-zinc-800 rounded-xl p-3 space-y-1.5">
+                        <div class="flex items-center justify-between gap-2">
+                            <span class="text-zinc-400 text-[11px]">今週塗られたマス数</span>
+                            <span class="text-white font-bold text-sm"><span id="battle-detail-tiles-total">0</span><span class="text-[10px] text-zinc-400 ml-0.5">マス</span></span>
+                        </div>
+                        <div class="flex items-center justify-between gap-2 text-[10px]">
+                            <span class="text-zinc-400">黒 <span id="battle-detail-tiles-black" class="text-zinc-100 font-bold">0</span> マス</span>
+                            <span class="text-zinc-400">白 <span id="battle-detail-tiles-white" class="text-zinc-100 font-bold">0</span> マス</span>
+                        </div>
+                        <p id="battle-detail-extra-note" class="hidden text-[9px] text-amber-400/90 leading-tight">※自動で広がるマスを含むため、参加者の合計マスとは一致しません</p>
+                    </div>
+
+                    <!-- だから今の割合（％バーの計算式） -->
+                    <div class="bg-zinc-950/80 border border-zinc-800 rounded-xl p-3 space-y-2">
+                        <div class="flex items-center justify-between gap-2 text-[11px]">
+                            <span class="text-zinc-400">だから今の割合</span>
+                            <span class="text-zinc-300 font-bold">黒 <span id="battle-detail-pct-black">50</span>% ／ 白 <span id="battle-detail-pct-white">50</span>%</span>
+                        </div>
+                        <div class="w-full h-3 bg-zinc-800 rounded-full overflow-hidden flex flex-row border border-zinc-700">
+                            <div id="battle-detail-bar-black" class="bg-black border-r border-zinc-600 transition-all duration-500" style="width: 50%;"></div>
+                            <div id="battle-detail-bar-white" class="bg-white transition-all duration-500" style="width: 50%;"></div>
+                        </div>
+                        <p class="text-[9px] text-zinc-500 leading-tight" id="battle-detail-formula">黒 0マス ÷ 合計 0マス = 50%</p>
+                    </div>
+
+                    <p id="battle-detail-source" class="text-[9px] text-zinc-500 text-center leading-tight"></p>
+                </div>
+
+                <div id="battle-detail-empty" class="hidden text-center text-zinc-500 py-6 text-[11px] leading-relaxed">
+                    今週はまだ集計できるデータがありません<br>
+                    <span class="text-[10px] text-zinc-600">マスを塗ると全国の対戦が始まります</span>
+                </div>
+            </div>
+
+            <div class="pt-2 border-t border-zinc-800">
+                <button id="btn-battle-detail-footer-close" class="w-full py-2.5 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 border border-zinc-700 text-white font-bold font-mono text-xs rounded-xl shadow transition-all active:scale-95">閉じる</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Proモーダル（SHOPの上に重ねて開けるよう #shop-modal[z-2000] より手前に置く） -->
     <div id="pro-modal" class="hidden fixed inset-0 z-[2050] bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
         <div class="bg-zinc-900 border border-zinc-700/90 rounded-2xl max-w-sm w-full p-6 shadow-2xl flex flex-col gap-4 text-xs select-none">
@@ -1175,28 +1249,29 @@
     <script src="admob.js?v=20261115v51"></script>
     <script src="iap.js?v=20261115v50"></script>
     <script src="identity.js?v=20261117v1"></script>
-    <script src="stats.js?v=20261117v60"></script>
+    <script src="stats.js?v=20261119v61"></script>
     <script src="supabase.js?v=20261117v60"></script>
     <script src="grid.js?v=20261119v41"></script>
     <script src="outbox.js?v=20261114v36"></script>
     <script src="privacy.js?v=20261116v1"></script>
-    <script src="notifications.js?v=20261116v1"></script>
+    <script src="notifications.js?v=20261119v2"></script>
     <script src="watch-bridge.js?v=20261116v1"></script>
     <!-- Main Application Logic -->
     <script src="startup-gate.js?v=20261114v41"></script>
     <script src="permission.js?v=20261115v47"></script>
     <script src="debug-tools.js?v=20261114v39"></script>
     <!-- app.js は役割ごとのモジュールに分割（読み込み順が依存関係。最後に app.js が起動する） -->
-    <script src="app-config.js?v=20261119v63"></script>
-    <script src="app-core.js?v=20261119v63"></script>
-    <script src="app-map.js?v=20261119v63"></script>
-    <script src="app-stats.js?v=20261119v63"></script>
-    <script src="app-actions.js?v=20261119v63"></script>
-    <script src="app-menus.js?v=20261119v63"></script>
-    <script src="app-geolocation.js?v=20261119v63"></script>
-    <script src="app-marking.js?v=20261119v63"></script>
-    <script src="app-tracking.js?v=20261119v63"></script>
-    <script src="app-gameplay.js?v=20261119v63"></script>
-    <script src="app.js?v=20261119v63"></script>
+    <script src="app-config.js?v=20261119v64"></script>
+    <script src="app-core.js?v=20261119v64"></script>
+    <script src="app-map.js?v=20261119v64"></script>
+    <script src="app-stats.js?v=20261119v64"></script>
+    <script src="app-battle.js?v=20261119v64"></script>
+    <script src="app-actions.js?v=20261119v64"></script>
+    <script src="app-menus.js?v=20261119v64"></script>
+    <script src="app-geolocation.js?v=20261119v64"></script>
+    <script src="app-marking.js?v=20261119v64"></script>
+    <script src="app-tracking.js?v=20261119v64"></script>
+    <script src="app-gameplay.js?v=20261119v64"></script>
+    <script src="app.js?v=20261119v64"></script>
 </body>
 </html>

@@ -33,6 +33,7 @@ const ASSETS_TO_COPY = [
     'app-core.js',
     'app-map.js',
     'app-stats.js',
+    'app-battle.js',
     'app-actions.js',
     'app-menus.js',
     'app-geolocation.js',

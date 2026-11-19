@@ -130,8 +130,8 @@ test('描画: message 内の改行は pre-line で改行として出る', () => 
     assert.ok(toast, 'トーストが1件だけ出る');
 
     const lines = toast.children;
-    assert.equal(lines.length, 1, '改行1つ＝1つの行要素（\\n はそのまま保持）');
-    assert.equal(lines[0].style.whiteSpace, 'pre-line', '\\n を描画する white-space 指定');
+    assert.equal(lines.length, 1, '改行1つ＝1つの行要素（\n はそのまま保持）');
+    assert.equal(lines[0].style.whiteSpace, 'pre-line', '\n を描画する white-space 指定');
     assert.equal(
         lines[0].textContent,
         'スタンダードパック (¥500) を獲得！\n広告完全非表示（Ad-Free）も解放しました'
@@ -197,7 +197,7 @@ test('描画: renderToast は文言を innerHTML に埋め込まない', () => {
 
 test('描画: キャッシュバスター v63 と www/ 同期', () => {
     const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
-    assert.match(html, /app\.js\?v=20261119v63/, 'app.js は v63');
+    assert.match(html, /app\.js\?v=20261119v64/, 'app.js は v64');
     assert.match(html, /iap\.js\?v=20261115v50/, 'iap.js は v50');
 
     assert.equal(readWwwAppSource(), APP_SOURCE, 'www/ の app 分割モジュールはルートと同一');

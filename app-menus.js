@@ -153,6 +153,28 @@ class TerritoryWalkAppMenus extends TerritoryWalkAppActions {
         if (this.weeklyNotifier && typeof this.weeklyNotifier.init === 'function') {
             Promise.resolve(this.weeklyNotifier.init()).catch(() => {});
         }
+        // はじめてゲームを開始した1回だけ、位置情報・ATT のダイアログが落ち着いてから通知許可を尋ねる
+        this.scheduleFirstLaunchNotificationPrompt();
+        return true;
+    }
+
+    /**
+     * 初回起動の通知許可ダイアログを予約する（WeeklyResultNotifier が tw_notification_prompted で
+     * 二重表示を防ぐ）。位置情報と AdMob（ATT）の許可要求と同じタイミングを避けるため数秒遅らせる。
+     */
+    scheduleFirstLaunchNotificationPrompt() {
+        if (!this.weeklyNotifier || typeof this.weeklyNotifier.promptOnFirstLaunch !== 'function') return false;
+        if (this.firstLaunchNotifyPromptScheduled) return false;
+        this.firstLaunchNotifyPromptScheduled = true;
+        const delay = (typeof FIRST_LAUNCH_NOTIFY_PROMPT_DELAY_MS === 'number')
+            ? FIRST_LAUNCH_NOTIFY_PROMPT_DELAY_MS
+            : 8000;
+        setTimeout(() => {
+            if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+            try {
+                Promise.resolve(this.weeklyNotifier.promptOnFirstLaunch()).catch(() => {});
+            } catch (e) { /* 通知が使えない環境でも起動を止めない */ }
+        }, delay);
         return true;
     }
 

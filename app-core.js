@@ -116,6 +116,8 @@ class TerritoryWalkAppCore {
         this.initSkinSelector();
         this.initMapThemeSelector();
         this.initStatsModal();
+        // 画面上部の％バー（#battle-bar-container）タップで「今週の戦況詳細」を開く
+        this.initWeeklyBattleDetail();
         this.initWeeklyResultModal();
         this.initWeeklyResultNotifier();
         this.initProModal();

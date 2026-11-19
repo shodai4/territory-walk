@@ -46,7 +46,7 @@ test('分割: すべてのモジュールが存在し、1ファイルあたり�
     assert.ok(readAppFile('app.js').split('\n').length < 60, 'app.js は起動処理だけ');
 });
 
-test('分割: index.html が 11 本をこの順で読み、最後が app.js', () => {
+test('分割: index.html が 12 本をこの順で読み、最後が app.js', () => {
     const srcs = [...HTML.matchAll(/<script src="(app(?:-[a-z]+)?\.js)\?v=(\d{8}v\d+)"><\/script>/g)]
         .map((m) => ({ file: m[1], version: m[2] }));
 
@@ -87,6 +87,7 @@ test('分割: 各ファイルは前のファイルのクラスを継承してい
         'TerritoryWalkAppCore',
         'TerritoryWalkAppMap',
         'TerritoryWalkAppStats',
+        'TerritoryWalkAppBattle',
         'TerritoryWalkAppActions',
         'TerritoryWalkAppMenus',
         'TerritoryWalkAppGeolocation',
@@ -184,6 +185,7 @@ test('不変: 主要なメソッドが各モジュールから揃っている', 
         'app-core.js': ['showToast', 'initTeam', 'initDOM'],
         'app-map.js': ['initMap', 'initGrid', 'loadRemoteTiles', 'refreshGlobalTeamCounts'],
         'app-stats.js': ['initStatsModal', 'loadWeeklyRankings', 'showWeeklyResultModal'],
+        'app-battle.js': ['initWeeklyBattleDetail', 'openWeeklyBattleDetail', 'loadBattleHistory'],
         'app-actions.js': ['initProModal', 'exportPosterAction', 'toggleDebugMode', 'recenterToCurrentPosition'],
         'app-menus.js': ['initMenuModal', 'initRulesModal', 'applyTransferCode'],
         'app-geolocation.js': ['initGeolocation', 'startBackgroundGeolocation', 'startWebGeolocation'],

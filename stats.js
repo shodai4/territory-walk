@@ -70,6 +70,8 @@ class StatsManager {
         }
         
         this.stats = this.loadLocalStats();
+        // 週明けリザルトの勝敗をサーバー集計から反映済みか（true の間はローカル加算しない＝二重計上防止）
+        this.battleRecordFromServer = false;
         this.pendingSyncTiles = 0;
         this.pendingSyncReclaimed = 0;
         // 引き継ぎコードの DB 同期状態（supabase/transfer_code.sql 未実行の環境では false のまま）
@@ -454,7 +456,8 @@ class StatsManager {
             lifetime_tiles: 0,
             lifetime_reclaimed: 0,
             battles_won: 0,
-            battles_lost: 0
+            battles_lost: 0,
+            battles_drawn: 0
         };
 
         try {
@@ -761,5 +764,264 @@ class StatsManager {
             isWin,
             isDraw
         };
+    }
+
+    /*
+     * 週次バトルの履歴・通算戦績（サーバー集計）
+     *   - 「過去の週次バトル履歴」と「通算バトル戦績」は、端末ローカルの加算ではなく
+     *     territory_weekly_rankings の過去週から計算する（週明けにアプリを開かなかった週も拾う）。
+     *   - week_id は 'YYYY-Www' 形式なので、文字列の大小比較がそのまま週の前後関係になる。
+     */
+
+    /** 'YYYY-Www' を1週前へ（年またぎは前年W52扱い。app-stats.js の getPreviousWeekId と同じ規則） */
+    static previousWeekId(weekId) {
+        const parts = String(weekId || '').split('-W');
+        if (parts.length !== 2) return null;
+        const year = parseInt(parts[0], 10);
+        const week = parseInt(parts[1], 10);
+        if (!Number.isFinite(year) || !Number.isFinite(week)) return null;
+        if (week > 1) return `${year}-W${String(week - 1).padStart(2, '0')}`;
+        return `${year - 1}-W52`;
+    }
+
+    /** weekId より前の週を count 件、新しい順に並べて返す（当週は含めない） */
+    static weekIdsBefore(weekId, count = 10) {
+        const list = [];
+        let cursor = StatsManager.previousWeekId(weekId);
+        for (let i = 0; i < count && cursor; i += 1) {
+            list.push(cursor);
+            cursor = StatsManager.previousWeekId(cursor);
+        }
+        return list;
+    }
+
+    /**
+     * 1週分のランキング行を、黒白の合計・参加人数・自分の結果へ集計する（純関数）。
+     * rows は territory_weekly_rankings の { user_id, team, tiles_count } の配列。
+     */
+    static summarizeBattleWeek(weekId, rows, userId) {
+        let blackTotal = 0;
+        let whiteTotal = 0;
+        let blackPlayers = 0;
+        let whitePlayers = 0;
+        let myTeam = null;
+        let myTiles = 0;
+
+        (Array.isArray(rows) ? rows : []).forEach((row) => {
+            if (!row) return;
+            const tiles = Math.max(0, Number(row.tiles_count) || 0);
+            if (row.team === 'black') {
+                blackTotal += tiles;
+                if (tiles > 0) blackPlayers += 1;
+            } else if (row.team === 'white') {
+                whiteTotal += tiles;
+                if (tiles > 0) whitePlayers += 1;
+            }
+            if (userId && row.user_id === userId) {
+                myTiles = tiles;
+                if (row.team === 'black' || row.team === 'white') myTeam = row.team;
+            }
+        });
+
+        const total = blackTotal + whiteTotal;
+        const blackPct = total > 0 ? Math.round((blackTotal / total) * 100) : 50;
+        const whitePct = total > 0 ? 100 - blackPct : 50;
+
+        let winnerTeam = 'draw';
+        if (blackTotal > whiteTotal) winnerTeam = 'black';
+        else if (whiteTotal > blackTotal) winnerTeam = 'white';
+
+        const participated = myTiles > 0 && !!myTeam;
+        let outcome = 'none';
+        if (participated) {
+            if (winnerTeam === 'draw') outcome = 'draw';
+            else outcome = winnerTeam === myTeam ? 'win' : 'lose';
+        }
+
+        return {
+            weekId,
+            blackTotal,
+            whiteTotal,
+            total,
+            blackPct,
+            whitePct,
+            winnerTeam,
+            blackPlayers,
+            whitePlayers,
+            playerTotal: blackPlayers + whitePlayers,
+            myTeam,
+            myTiles,
+            participated,
+            outcome
+        };
+    }
+
+    /**
+     * 今週の戦況詳細（参加人数）を territory_weekly_rankings の当週分から集計する。
+     * マス数は呼び出し側が画面上部％バーと同じ基準（全国集計→ローカル）で埋める。
+     * @returns {Promise<{ok:boolean, weekId:string|null, blackPlayers:number, whitePlayers:number,
+     *                    playerTotal:number, participantTiles:number}>}
+     */
+    async getWeeklyBattleSummary(weekId = null) {
+        const targetWeek = weekId || (this.supabaseManager && typeof this.supabaseManager.getCurrentWeekId === 'function'
+            ? this.supabaseManager.getCurrentWeekId()
+            : null);
+        const result = {
+            ok: false,
+            weekId: targetWeek,
+            blackPlayers: 0,
+            whitePlayers: 0,
+            playerTotal: 0,
+            participantTiles: 0
+        };
+        if (!targetWeek || !this.supabaseManager || !this.supabaseManager.client) return result;
+
+        try {
+            const { data, error } = await this.supabaseManager.client
+                .from('territory_weekly_rankings')
+                .select('user_id, team, tiles_count')
+                .eq('week_id', targetWeek)
+                .gt('tiles_count', 0);
+            if (error) {
+                console.warn('[Stats] Failed to fetch weekly battle summary:', error.message || error);
+                return result;
+            }
+            const summary = StatsManager.summarizeBattleWeek(targetWeek, data || [], this.userId);
+            return {
+                ok: true,
+                weekId: targetWeek,
+                blackPlayers: summary.blackPlayers,
+                whitePlayers: summary.whitePlayers,
+                playerTotal: summary.playerTotal,
+                participantTiles: summary.total
+            };
+        } catch (e) {
+            console.warn('[Stats] Failed to fetch weekly battle summary:', e);
+            return result;
+        }
+    }
+
+    /**
+     * 過去週のバトル履歴と通算戦績（勝・敗・分）をサーバーから集計する。
+     *   - 表示用: 当週より前の直近 weeks 週（新しい順）。自分が未参加の週も「未参加」として並べる
+     *   - 通算: 自分が参加した全過去週（tiles_count > 0）を対象に勝・敗・分を数える
+     * @param {{weeks?:number}} options
+     */
+    async getBattleHistory(options = {}) {
+        const limit = Math.max(1, Math.min(30, Number(options.weeks) || 10));
+        const currentWeekId = this.supabaseManager && typeof this.supabaseManager.getCurrentWeekId === 'function'
+            ? this.supabaseManager.getCurrentWeekId()
+            : null;
+        const empty = { ok: false, currentWeekId, weeks: [], record: { won: 0, lost: 0, drawn: 0, played: 0 } };
+        if (!currentWeekId || !this.supabaseManager || !this.supabaseManager.client) return empty;
+
+        try {
+            // 1. 自分が参加した過去週（通算戦績の根拠・全期間）
+            const { data: myRows, error: myError } = await this.supabaseManager.client
+                .from('territory_weekly_rankings')
+                .select('week_id, team, tiles_count')
+                .eq('user_id', this.userId)
+                .lt('week_id', currentWeekId);
+            if (myError) {
+                console.warn('[Stats] Failed to fetch my battle weeks:', myError.message || myError);
+                return empty;
+            }
+
+            const weekIdSet = new Set(StatsManager.weekIdsBefore(currentWeekId, limit));
+            (myRows || []).forEach((row) => {
+                if (row && row.week_id && (Number(row.tiles_count) || 0) > 0) weekIdSet.add(row.week_id);
+            });
+            const weekIds = [...weekIdSet].sort();
+            if (weekIds.length === 0) {
+                return { ok: true, currentWeekId, weeks: [], record: { won: 0, lost: 0, drawn: 0, played: 0 } };
+            }
+
+            // 2. 対象週の全プレイヤー行をまとめて取得（週ごとに集計）
+            //    PostgREST の1リクエスト上限（既定 1000 行）に当たった場合は週ごとに取り直して取りこぼしを防ぐ
+            const ROW_CAP = 1000;
+            const fetchWeekRows = async (ids) => {
+                const { data, error } = await this.supabaseManager.client
+                    .from('territory_weekly_rankings')
+                    .select('week_id, user_id, team, tiles_count')
+                    .in('week_id', ids)
+                    .limit(ROW_CAP);
+                return { rows: data || [], error };
+            };
+
+            const first = await fetchWeekRows(weekIds);
+            if (first.error) {
+                console.warn('[Stats] Failed to fetch battle history:', first.error.message || first.error);
+                return empty;
+            }
+            let rows = first.rows;
+            if (rows.length >= ROW_CAP && weekIds.length > 1) {
+                const perWeek = await Promise.all(weekIds.map((id) => fetchWeekRows([id])));
+                rows = perWeek.flatMap((result) => result.rows);
+            }
+
+            const rowsByWeek = new Map();
+            (rows || []).forEach((row) => {
+                if (!row || !row.week_id) return;
+                if (!rowsByWeek.has(row.week_id)) rowsByWeek.set(row.week_id, []);
+                rowsByWeek.get(row.week_id).push(row);
+            });
+
+            const summaries = weekIds.map((id) => StatsManager.summarizeBattleWeek(id, rowsByWeek.get(id) || [], this.userId));
+
+            // 3. 通算（自分が参加し、引き分けでない週を勝敗として数える）
+            const record = { won: 0, lost: 0, drawn: 0, played: 0 };
+            summaries.forEach((week) => {
+                if (!week.participated) return;
+                record.played += 1;
+                if (week.outcome === 'win') record.won += 1;
+                else if (week.outcome === 'lose') record.lost += 1;
+                else record.drawn += 1;
+            });
+
+            // 4. 表示用（新しい順・当週より前だけ・データのある週だけ）
+            const displayWeeks = summaries
+                .filter((week) => week.weekId < currentWeekId && (week.total > 0 || week.participated))
+                .sort((a, b) => (a.weekId < b.weekId ? 1 : -1))
+                .slice(0, limit);
+
+            return { ok: true, currentWeekId, weeks: displayWeeks, record };
+        } catch (e) {
+            console.warn('[Stats] Failed to fetch battle history:', e);
+            return empty;
+        }
+    }
+
+    /**
+     * サーバー集計の通算戦績をローカル保存値へ反映する。
+     * サーバーに参加記録が1週も無いときはローカル値を消さない（オフライン・新規端末で0に戻さない）。
+     * @returns {boolean} 表示を書き換える必要があるとき true
+     */
+    applyBattleRecordFromServer(record) {
+        if (!record || !Number.isFinite(Number(record.played)) || Number(record.played) <= 0) return false;
+        const won = Math.max(0, Number(record.won) || 0);
+        const lost = Math.max(0, Number(record.lost) || 0);
+        const drawn = Math.max(0, Number(record.drawn) || 0);
+        const changed = this.stats.battles_won !== won
+            || this.stats.battles_lost !== lost
+            || (Number(this.stats.battles_drawn) || 0) !== drawn;
+
+        this.stats.battles_won = won;
+        this.stats.battles_lost = lost;
+        this.stats.battles_drawn = drawn;
+        this.battleRecordFromServer = true;
+        if (changed) this.saveLocalStats();
+        return changed;
+    }
+
+    /**
+     * 週明けリザルトの勝敗をローカルへ加算する（サーバー集計を反映済みなら二重計上しない）。
+     * @returns {boolean} 加算したとき true
+     */
+    recordBattleOutcome(isWin) {
+        if (this.battleRecordFromServer) return false;
+        if (isWin) this.stats.battles_won += 1;
+        else this.stats.battles_lost += 1;
+        this.saveLocalStats();
+        return true;
     }
 }

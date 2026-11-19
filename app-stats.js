@@ -163,8 +163,9 @@ class TerritoryWalkAppStats extends TerritoryWalkAppMap {
         const reclaimedEl = document.getElementById('stat-reclaimed-tiles');
         if (reclaimedEl) reclaimedEl.textContent = stats.lifetime_reclaimed.toLocaleString();
 
-        const battleEl = document.getElementById('stat-battles-record');
-        if (battleEl) battleEl.textContent = `${stats.battles_won}勝 ${stats.battles_lost}敗`;
+        this.renderBattleRecord();
+        // 過去週の履歴と通算戦績はサーバー集計で補完する（20秒スロットル・戦績モーダルを開いた直後は即時）
+        this.loadBattleHistory();
 
         const referralCodeDisplay = document.getElementById('stats-referral-code-display');
         if (referralCodeDisplay && this.statsManager) {
@@ -519,18 +520,30 @@ class TerritoryWalkAppStats extends TerritoryWalkAppMap {
         } else if (result.isWin) {
             outcome.innerHTML = '<span class="text-amber-400 font-bold">VICTORY (勝利陣営)</span>';
             if (!isManual && this.statsManager) {
-                this.statsManager.stats.battles_won += 1;
-                this.statsManager.saveLocalStats();
+                // サーバー集計済みなら二重計上しない（recordBattleOutcome が判定する）
+                if (typeof this.statsManager.recordBattleOutcome === 'function') {
+                    this.statsManager.recordBattleOutcome(true);
+                } else {
+                    this.statsManager.stats.battles_won += 1;
+                    this.statsManager.saveLocalStats();
+                }
             }
         } else {
             outcome.innerHTML = '<span class="text-zinc-400">DEFEAT (敗北陣営)</span>';
             if (!isManual && this.statsManager) {
-                this.statsManager.stats.battles_lost += 1;
-                this.statsManager.saveLocalStats();
+                if (typeof this.statsManager.recordBattleOutcome === 'function') {
+                    this.statsManager.recordBattleOutcome(false);
+                } else {
+                    this.statsManager.stats.battles_lost += 1;
+                    this.statsManager.saveLocalStats();
+                }
             }
         }
 
         this.lastResultData = result;
+
+        // 週明け直後はサーバーの確定記録で通算戦績を上書きする（開かなかった週の取りこぼしも埋める）
+        if (!isManual) this.loadBattleHistory({ force: true });
     }
 
     getPreviousWeekId(currentWeekId) {
