@@ -18,6 +18,8 @@
  *   - 10 <= zoom <= 13（中距離）: 100mマスは描かず、10×10マス（約1km四方）のブロックに集計して薄く塗る。
  *     ブロック内の色は多数決なので、細かな歩行経路は分からない。
  *   - 6 <= zoom <= 9（広域）: 1kmブロックをさらに10×10（約10km四方）に集計した10kmブロック。
+ *     自分の足跡を含む10kmブロックだけ、薄いオレンジ塗り＋オレンジ枠線でハイライトする
+ *     （非表示ピンの中の足跡は数えない・自分の端末だけ・1kmブロックには付けない）。
  *   - zoom <= 5（広域）: マスもブロックも一切描かない。
  *   スコア（勝敗）は従来どおり claimedTilesCache だけで集計し、描画とは無関係。
  *
@@ -36,6 +38,14 @@ const TILE_STROKE_WEIGHT = 1.2;
 const FOOTPRINT_STROKE_COLOR = '#f59e0b';
 const FOOTPRINT_STROKE_WEIGHT = 2.4;
 const FOOTPRINT_STROKE_OPACITY = 0.95;
+/**
+ * 自分の足跡を含む10kmブロックのハイライト。
+ *   広域（zoom 6〜7）では10kmブロックが数px しかないので、白黒の区画に紛れないよう
+ *   塗りをオレンジに置き換え、枠線も太めにはっきりさせる（下の地図の文字・道路は読める濃さ）。
+ */
+const FOOTPRINT_BLOCK_FILL_OPACITY = 0.38;
+const FOOTPRINT_BLOCK_STROKE_WEIGHT = 1.9;
+const FOOTPRINT_BLOCK_STROKE_OPACITY = 0.9;
 /** 自分の足跡の保存キー（端末内のみ） */
 const FOOTPRINT_STORAGE_KEY = 'tw_footprint';
 const FOOTPRINT_MAX_TILES = 3000;
@@ -276,6 +286,8 @@ class GridManager {
         this.footprintWeek = null;
         this.footprintIds = [];
         this.footprintSet = new Set();
+        // 足跡を含む10kmブロックの索引（描画中に footprintSet を走査し直さないための使い回し）
+        this.footprintMacroCache = null; // { size, week, privacy, macros: Set }
 
         // 初期配置の色を決める週（週明けに更新される）
         this.weekId = null;
@@ -659,6 +671,7 @@ class GridManager {
             this.footprintIds = [];
             this.footprintSet = new Set();
             this.footprintWeek = currentWeek;
+            this.footprintMacroCache = null;
             this.saveFootprint();
         }
         localStorage.setItem('territory_current_week', currentWeek);
@@ -698,6 +711,7 @@ class GridManager {
     loadFootprint() {
         const week = this.getWeekId();
         this.footprintWeek = week;
+        this.footprintMacroCache = null;
         try {
             const raw = localStorage.getItem(FOOTPRINT_STORAGE_KEY);
             if (!raw) return;
@@ -723,7 +737,9 @@ class GridManager {
         }
     }
 
-    /** 自分が今週塗ったマスを記録する（描画の枠線だけで、サーバーには送らない） */
+    /**
+     * 自分が今週塗ったマスを記録する（描画の枠線・10kmブロックのハイライトだけで、サーバーには送らない）
+     */
     recordFootprint(meshId) {
         if (!meshId) return;
         const week = this.getWeekId();
@@ -740,12 +756,75 @@ class GridManager {
             const removed = this.footprintIds.splice(0, overflow);
             removed.forEach((id) => this.footprintSet.delete(id));
         }
+        // 足跡が増えたので10kmブロックの索引も作り直す
+        this.footprintMacroCache = null;
         this.saveFootprint();
     }
 
     isOwnFootprint(meshId) {
         if (!meshId || this.footprintWeek !== this.getWeekId()) return false;
         return this.footprintSet.has(meshId);
+    }
+
+    /**
+     * 自分の足跡を含む10kmブロックの索引（macroId の Set）。
+     *   描画のたびに footprintSet（最大3,000マス）を分割して数え直さないよう、
+     *   footprintSet の大きさ・週・非表示ピンの内容が変わったときだけ作り直し、
+     *   10kmブロック1枚の判定は Set.has（O(1)）で済ませる。
+     *   非表示ピンの中の足跡は数えない（区域の存在をハイライトで滲ませない）。
+     *   先週の足跡（footprintWeek が今週と違う）も数えない。
+     */
+    footprintMacroIndex() {
+        const week = this.getWeekId();
+        const active = this.footprintWeek === week && this.footprintSet ? this.footprintSet.size : 0;
+        const privacy = this.privacyZoneSignature();
+        const cached = this.footprintMacroCache;
+        if (cached && cached.size === active && cached.week === week && cached.privacy === privacy) {
+            return cached.macros;
+        }
+
+        const macros = new Set();
+        if (active > 0) {
+            for (const meshId of this.footprintSet) {
+                if (typeof meshId !== 'string') continue;
+                const parts = meshId.split('_');
+                if (parts.length !== 3) continue;
+                const latIdx = parseInt(parts[1], 10);
+                const lngIdx = parseInt(parts[2], 10);
+                if (!Number.isFinite(latIdx) || !Number.isFinite(lngIdx)) continue;
+                // 非表示ピンの中のマスは足跡として数えない（見せない）
+                if (this.getPrivacyZone(latIdx, lngIdx)) continue;
+                const { latMacro, lngMacro } = this.getMacroIndices(latIdx, lngIdx);
+                macros.add(this.getMacroId(latMacro, lngMacro));
+            }
+        }
+        this.footprintMacroCache = { size: active, week, privacy, macros };
+        return macros;
+    }
+
+    /**
+     * 非表示ピンの内容の指紋（足跡の索引を作り直す必要があるかの判定用）。
+     *   区域の追加・削除・中心や半径の変更で変わる。ピンが無ければ 'none'。
+     */
+    privacyZoneSignature() {
+        const manager = this.app ? this.app.privacyZones : null;
+        if (!manager || typeof manager.containsMesh !== 'function') return 'none';
+        if (typeof manager.getZones !== 'function') return 'unknown';
+        try {
+            const zones = manager.getZones() || [];
+            if (!zones.length) return 'none';
+            return zones
+                .map((zone) => `${zone.id}:${zone.lat}:${zone.lng}:${zone.radius}`)
+                .join('|');
+        } catch (e) {
+            return 'error';
+        }
+    }
+
+    /** その10kmブロックが自分の足跡を含むか（索引を省略した場合は今の索引で判定） */
+    isFootprintMacro(macroId, footprintMacros = null) {
+        const macros = footprintMacros || this.footprintMacroIndex();
+        return !!(macros && typeof macros.has === 'function' && macros.has(macroId));
     }
 
     /* ---------------- 初期配置・非表示ピンを含めたマスの解決 ---------------- */
@@ -953,12 +1032,15 @@ class GridManager {
             rectangle.setStyle(this.getBlockStyle(this.resolveBlockTeam(latBlock, lngBlock)));
             rectangle._twStyleKey = null;
         }
+        const footprintMacros = this.footprintMacroIndex();
         for (const [macroId, rectangle] of this.renderedMacroBlocks.entries()) {
             const parts = macroId.split('_');
             if (parts.length !== 3) continue;
             const latMacro = parseInt(parts[1], 10);
             const lngMacro = parseInt(parts[2], 10);
-            rectangle.setStyle(this.getMacroStyle(this.resolveMacroTeam(latMacro, lngMacro)));
+            rectangle.setStyle(this.getMacroStyle(this.resolveMacroTeam(latMacro, lngMacro), {
+                ownFootprint: this.isFootprintMacro(macroId, footprintMacros)
+            }));
             rectangle._twStyleKey = null;
         }
     }
@@ -973,6 +1055,7 @@ class GridManager {
         this.clearBlockTeamCache();
         this.footprintIds = [];
         this.footprintSet = new Set();
+        this.footprintMacroCache = null;
         this.saveFootprint();
         for (const rectangle of this.renderedMeshes.values()) {
             try {
@@ -1166,6 +1249,8 @@ class GridManager {
             : MACRO_RENDER_MAX_COUNT;
         // 実績マスを含む10kmブロックの索引は1回だけ作って全マスで使う
         const claimIndex = this.macroClaimIndex();
+        // 自分の足跡を含む10kmブロックの索引も、描画の先頭で1回だけ作る
+        const footprintMacros = this.footprintMacroIndex();
         const currentVisibleMacros = new Set();
         let renderedCount = 0;
 
@@ -1175,7 +1260,7 @@ class GridManager {
                 const macroId = this.getMacroId(latMacro, lngMacro);
                 currentVisibleMacros.add(macroId);
                 // 既に描いてあるマスも、中の塗りが変わっていれば色を更新する
-                this.renderSingleMacro(macroId, latMacro, lngMacro, claimIndex);
+                this.renderSingleMacro(macroId, latMacro, lngMacro, claimIndex, footprintMacros);
                 renderedCount++;
             }
         }
@@ -1297,36 +1382,49 @@ class GridManager {
 
     /**
      * 10kmブロックの描画スタイル。1kmブロックよりさらに薄く・枠線も細くする。
+     *   options.ownFootprint のときは、自分の足跡を含むブロックとして
+     *   オレンジ塗り＋オレンジ枠線のハイライトに置き換える（自分の端末だけ）。
      */
-    getMacroStyle(team) {
+    getMacroStyle(team, options = {}) {
         const base = this.getTileStyle(team);
         const claimed = team === 'white' || team === 'black';
-        return {
+        const style = {
             ...base,
             weight: MACRO_STROKE_WEIGHT,
             opacity: MACRO_STROKE_OPACITY,
             fillOpacity: claimed ? MACRO_FILL_OPACITY : base.fillOpacity,
             interactive: false
         };
+        if (options.ownFootprint) {
+            // 白黒の区画の中で一目で目立つよう、塗りも枠線もオレンジにする
+            style.fillColor = FOOTPRINT_STROKE_COLOR;
+            style.fillOpacity = FOOTPRINT_BLOCK_FILL_OPACITY;
+            style.color = FOOTPRINT_STROKE_COLOR;
+            style.weight = FOOTPRINT_BLOCK_STROKE_WEIGHT;
+            style.opacity = FOOTPRINT_BLOCK_STROKE_OPACITY;
+        }
+        return style;
     }
 
     /**
      * 1マス（約10km四方）描く。色は resolveMacroTeamCached（中の1kmブロックの多数決）。
+     * 自分の足跡を含むブロックはオレンジでハイライトする。
      * 見た目が前回と同じなら setStyle しない（12,500枚の再描画を防ぐ）。
      */
-    renderSingleMacro(macroId, latMacro, lngMacro, claimIndex = null) {
+    renderSingleMacro(macroId, latMacro, lngMacro, claimIndex = null, footprintMacros = null) {
         const team = this.resolveMacroTeamCached(latMacro, lngMacro, claimIndex);
-        const styleKey = `${team}|${this.currentSkin()}`;
+        const ownFootprint = this.isFootprintMacro(macroId, footprintMacros);
+        const styleKey = `${team}|${this.currentSkin()}|${ownFootprint ? 1 : 0}`;
 
         if (this.renderedMacroBlocks.has(macroId)) {
             const rect = this.renderedMacroBlocks.get(macroId);
             if (rect._twStyleKey === styleKey) return rect;
-            rect.setStyle(this.getMacroStyle(team));
+            rect.setStyle(this.getMacroStyle(team, { ownFootprint }));
             rect._twStyleKey = styleKey;
             return rect;
         }
 
-        const style = this.getMacroStyle(team);
+        const style = this.getMacroStyle(team, { ownFootprint });
         const bounds = this.getMacroBounds(latMacro, lngMacro);
         const options = this.canvasRenderer ? { ...style, renderer: this.canvasRenderer } : style;
         const rect = L.rectangle(bounds, options);
@@ -1362,6 +1460,9 @@ if (typeof module !== 'undefined' && module.exports) {
         MACRO_RENDER_MAX_COUNT,
         REMOTE_FETCH_MIN_ZOOM,
         FOOTPRINT_STROKE_COLOR,
+        FOOTPRINT_BLOCK_FILL_OPACITY,
+        FOOTPRINT_BLOCK_STROKE_WEIGHT,
+        FOOTPRINT_BLOCK_STROKE_OPACITY,
         FOOTPRINT_STORAGE_KEY
     };
 }
