@@ -286,8 +286,9 @@ class GridManager {
         this.footprintWeek = null;
         this.footprintIds = [];
         this.footprintSet = new Set();
-        // 足跡を含む10kmブロックの索引（描画中に footprintSet を走査し直さないための使い回し）
-        this.footprintMacroCache = null; // { size, week, privacy, macros: Set }
+        // 足跡を含む10kmブロック・1kmブロックの索引
+        //   （描画中に footprintSet を走査し直さないための使い回し）
+        this.footprintIndexCache = null; // { size, week, privacy, macros: Set, blocks: Set }
 
         // 初期配置の色を決める週（週明けに更新される）
         this.weekId = null;
@@ -671,7 +672,7 @@ class GridManager {
             this.footprintIds = [];
             this.footprintSet = new Set();
             this.footprintWeek = currentWeek;
-            this.footprintMacroCache = null;
+            this.footprintIndexCache = null;
             this.saveFootprint();
         }
         localStorage.setItem('territory_current_week', currentWeek);
@@ -711,7 +712,7 @@ class GridManager {
     loadFootprint() {
         const week = this.getWeekId();
         this.footprintWeek = week;
-        this.footprintMacroCache = null;
+        this.footprintIndexCache = null;
         try {
             const raw = localStorage.getItem(FOOTPRINT_STORAGE_KEY);
             if (!raw) return;
@@ -756,8 +757,8 @@ class GridManager {
             const removed = this.footprintIds.splice(0, overflow);
             removed.forEach((id) => this.footprintSet.delete(id));
         }
-        // 足跡が増えたので10kmブロックの索引も作り直す
-        this.footprintMacroCache = null;
+        // 足跡が増えたので10km・1kmブロックの索引も作り直す
+        this.footprintIndexCache = null;
         this.saveFootprint();
     }
 
@@ -767,23 +768,26 @@ class GridManager {
     }
 
     /**
-     * 自分の足跡を含む10kmブロックの索引（macroId の Set）。
+     * 自分の足跡を含む10kmブロック・1kmブロックの索引（{ macros: Set, blocks: Set }）。
      *   描画のたびに footprintSet（最大3,000マス）を分割して数え直さないよう、
      *   footprintSet の大きさ・週・非表示ピンの内容が変わったときだけ作り直し、
-     *   10kmブロック1枚の判定は Set.has（O(1)）で済ませる。
+     *   ブロック1枚の判定は Set.has（O(1)）で済ませる。
+     *   10kmと1kmは同じ走査でまとめて作る（どちらの表示でも走査は1回）。
      *   非表示ピンの中の足跡は数えない（区域の存在をハイライトで滲ませない）。
      *   先週の足跡（footprintWeek が今週と違う）も数えない。
      */
-    footprintMacroIndex() {
+    footprintIndex() {
         const week = this.getWeekId();
         const active = this.footprintWeek === week && this.footprintSet ? this.footprintSet.size : 0;
         const privacy = this.privacyZoneSignature();
-        const cached = this.footprintMacroCache;
-        if (cached && cached.size === active && cached.week === week && cached.privacy === privacy) {
-            return cached.macros;
+        const cached = this.footprintIndexCache;
+        if (cached && cached.size === active && cached.week === week && cached.privacy === privacy
+            && cached.macros && cached.blocks) {
+            return cached;
         }
 
         const macros = new Set();
+        const blocks = new Set();
         if (active > 0) {
             for (const meshId of this.footprintSet) {
                 if (typeof meshId !== 'string') continue;
@@ -796,10 +800,22 @@ class GridManager {
                 if (this.getPrivacyZone(latIdx, lngIdx)) continue;
                 const { latMacro, lngMacro } = this.getMacroIndices(latIdx, lngIdx);
                 macros.add(this.getMacroId(latMacro, lngMacro));
+                const { latBlock, lngBlock } = this.getBlockIndices(latIdx, lngIdx);
+                blocks.add(this.getBlockId(latBlock, lngBlock));
             }
         }
-        this.footprintMacroCache = { size: active, week, privacy, macros };
-        return macros;
+        this.footprintIndexCache = { size: active, week, privacy, macros, blocks };
+        return this.footprintIndexCache;
+    }
+
+    /** 自分の足跡を含む10kmブロックの索引（macroId の Set） */
+    footprintMacroIndex() {
+        return this.footprintIndex().macros;
+    }
+
+    /** 自分の足跡を含む1kmブロックの索引（blockId の Set） */
+    footprintBlockIndex() {
+        return this.footprintIndex().blocks;
     }
 
     /**
@@ -825,6 +841,12 @@ class GridManager {
     isFootprintMacro(macroId, footprintMacros = null) {
         const macros = footprintMacros || this.footprintMacroIndex();
         return !!(macros && typeof macros.has === 'function' && macros.has(macroId));
+    }
+
+    /** その1kmブロックが自分の足跡を含むか（索引を省略した場合は今の索引で判定） */
+    isFootprintBlock(blockId, footprintBlocks = null) {
+        const blocks = footprintBlocks || this.footprintBlockIndex();
+        return !!(blocks && typeof blocks.has === 'function' && blocks.has(blockId));
     }
 
     /* ---------------- 初期配置・非表示ピンを含めたマスの解決 ---------------- */
@@ -1024,12 +1046,15 @@ class GridManager {
             // 直接 setStyle したので、次の描画で差分判定をやり直す
             rectangle._twStyleKey = null;
         }
+        const footprintBlocks = this.footprintBlockIndex();
         for (const [blockId, rectangle] of this.renderedBlocks.entries()) {
             const parts = blockId.split('_');
             if (parts.length !== 3) continue;
             const latBlock = parseInt(parts[1], 10);
             const lngBlock = parseInt(parts[2], 10);
-            rectangle.setStyle(this.getBlockStyle(this.resolveBlockTeam(latBlock, lngBlock)));
+            rectangle.setStyle(this.getBlockStyle(this.resolveBlockTeam(latBlock, lngBlock), {
+                ownFootprint: this.isFootprintBlock(blockId, footprintBlocks)
+            }));
             rectangle._twStyleKey = null;
         }
         const footprintMacros = this.footprintMacroIndex();
@@ -1055,7 +1080,7 @@ class GridManager {
         this.clearBlockTeamCache();
         this.footprintIds = [];
         this.footprintSet = new Set();
-        this.footprintMacroCache = null;
+        this.footprintIndexCache = null;
         this.saveFootprint();
         for (const rectangle of this.renderedMeshes.values()) {
             try {
@@ -1185,6 +1210,8 @@ class GridManager {
         const maxRender = (typeof CONFIG !== 'undefined' && CONFIG.BLOCK_RENDER_MAX_COUNT)
             ? CONFIG.BLOCK_RENDER_MAX_COUNT
             : BLOCK_RENDER_MAX_COUNT;
+        // 自分の足跡を含む1kmブロックの索引も、描画の先頭で1回だけ作る
+        const footprintBlocks = this.footprintBlockIndex();
         const currentVisibleBlocks = new Set();
         let renderedCount = 0;
 
@@ -1194,7 +1221,7 @@ class GridManager {
                 const blockId = this.getBlockId(latBlock, lngBlock);
                 currentVisibleBlocks.add(blockId);
                 // 既に描いてあるブロックも、中の塗りが変わっていれば色を更新する
-                this.renderSingleBlock(blockId, latBlock, lngBlock);
+                this.renderSingleBlock(blockId, latBlock, lngBlock, footprintBlocks);
                 renderedCount++;
             }
         }
@@ -1341,36 +1368,49 @@ class GridManager {
     /**
      * ブロックの描画スタイル。スキンの色はそのままに、塗りを薄く・枠線をごく薄くする。
      * 100mマスの細かい経路が見えないようにするための濃さ。
+     *   options.ownFootprint のときは、自分の足跡を含むブロックとして
+     *   10kmブロックと同じオレンジ塗り＋オレンジ枠線のハイライトに置き換える（自分の端末だけ）。
      */
-    getBlockStyle(team) {
+    getBlockStyle(team, options = {}) {
         const base = this.getTileStyle(team);
         const claimed = team === 'white' || team === 'black';
-        return {
+        const style = {
             ...base,
             weight: BLOCK_STROKE_WEIGHT,
             opacity: BLOCK_STROKE_OPACITY,
             fillOpacity: claimed ? BLOCK_FILL_OPACITY : base.fillOpacity,
             interactive: false
         };
+        if (options.ownFootprint) {
+            // 白黒の区画の中で一目で目立つよう、塗りも枠線もオレンジにする
+            style.fillColor = FOOTPRINT_STROKE_COLOR;
+            style.fillOpacity = FOOTPRINT_BLOCK_FILL_OPACITY;
+            style.color = FOOTPRINT_STROKE_COLOR;
+            style.weight = FOOTPRINT_BLOCK_STROKE_WEIGHT;
+            style.opacity = FOOTPRINT_BLOCK_STROKE_OPACITY;
+        }
+        return style;
     }
 
     /**
      * 1ブロック（約1km四方）描く。色は resolveBlockTeamCached（ブロック内100マスの多数決）。
+     * 自分の足跡を含むブロックはオレンジでハイライトする（索引は省略時だけ自前で取得）。
      * 見た目が前回と同じなら setStyle しない（1,400枚の再描画を防ぐ）。
      */
-    renderSingleBlock(blockId, latBlock, lngBlock) {
+    renderSingleBlock(blockId, latBlock, lngBlock, footprintBlocks = null) {
         const team = this.resolveBlockTeamCached(latBlock, lngBlock);
-        const styleKey = `${team}|${this.currentSkin()}`;
+        const ownFootprint = this.isFootprintBlock(blockId, footprintBlocks);
+        const styleKey = `${team}|${this.currentSkin()}|${ownFootprint ? 1 : 0}`;
 
         if (this.renderedBlocks.has(blockId)) {
             const rect = this.renderedBlocks.get(blockId);
             if (rect._twStyleKey === styleKey) return rect;
-            rect.setStyle(this.getBlockStyle(team));
+            rect.setStyle(this.getBlockStyle(team, { ownFootprint }));
             rect._twStyleKey = styleKey;
             return rect;
         }
 
-        const style = this.getBlockStyle(team);
+        const style = this.getBlockStyle(team, { ownFootprint });
         const bounds = this.getBlockBounds(latBlock, lngBlock);
         const options = this.canvasRenderer ? { ...style, renderer: this.canvasRenderer } : style;
         const rect = L.rectangle(bounds, options);

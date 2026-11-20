@@ -4,7 +4,7 @@
  *   1) 今週の自分の足跡を含む10kmブロックだけ、薄いオレンジ塗り＋オレンジ枠線になる
  *   2) 足跡を含まないブロックは従来どおりの白黒（薄い半透明）のまま
  *   3) 非表示ピンの中の足跡は数えない（区域の外に足跡があるときだけハイライトする）
- *   4) 1kmブロック（zoom 10〜13）には付けない（10kmブロックだけ）
+ *   4) 1kmブロック（zoom 10〜13）にも同じ見た目で付ける（10kmブロックはそのまま維持）
  *   5) 足跡の追加・非表示ピンの変更・週リセットで見た目が正しく更新される
  *   6) 描画のたびに footprintSet を走査しない（索引は描画1回につき1回だけ作る）
  *
@@ -13,7 +13,6 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
 const path = require('node:path');
 
 const ROOT = path.resolve(__dirname, '..');
@@ -21,6 +20,7 @@ const {
     GridManager,
     BLOCK_TILES,
     MACRO_BLOCKS,
+    BLOCK_FILL_OPACITY,
     MACRO_FILL_OPACITY,
     FOOTPRINT_STROKE_COLOR,
     FOOTPRINT_BLOCK_FILL_OPACITY,
@@ -94,6 +94,13 @@ function viewportBounds(lat, lng, zoom, size = [375, 812]) {
     return [lat - halfHeight, lng - halfWidth, lat + halfHeight, lng + halfWidth];
 }
 
+/** 指定した1kmブロック（latBlock, lngBlock）まわりだけを写す範囲（テストを軽くする） */
+function blockWindowBounds(latBlock, lngBlock) {
+    const south = (latBlock - 1) * BLOCK_TILES * LAT_GRID;
+    const west = (lngBlock - 1) * BLOCK_TILES * LNG_GRID;
+    return [south, west, south + 3 * BLOCK_TILES * LAT_GRID, west + 3 * BLOCK_TILES * LNG_GRID];
+}
+
 /** 指定した10kmブロック（latMacro, lngMacro）まわりだけを写す範囲（テストを軽くする） */
 function macroWindowBounds(latMacro, lngMacro) {
     const cells = BLOCK_TILES * MACRO_BLOCKS;
@@ -153,7 +160,7 @@ function createRealGrid({
     grid.footprintWeek = weekId;
     grid.footprintIds = footprint.slice();
     grid.footprintSet = new Set(footprint);
-    grid.footprintMacroCache = null;
+    grid.footprintIndexCache = null;
     return { grid, map, app };
 }
 
@@ -177,6 +184,26 @@ function tileInsideMacro(latMacro, lngMacro, dLat = 5, dLng = 5) {
     return {
         latIdx: latMacro * cells + dLat,
         lngIdx: lngMacro * cells + dLng
+    };
+}
+
+/** 中心付近（34.6, 135.6）を含む1kmブロック */
+function centerBlock() {
+    const latIdx = Math.floor(34.6 / LAT_GRID);
+    const lngIdx = Math.floor(135.6 / LNG_GRID);
+    return {
+        latIdx,
+        lngIdx,
+        latBlock: Math.floor(latIdx / BLOCK_TILES),
+        lngBlock: Math.floor(lngIdx / BLOCK_TILES)
+    };
+}
+
+/** 1kmブロックの内側に収まるマス座標（境界をまたがない） */
+function tileInsideBlock(latBlock, lngBlock, dLat = 5, dLng = 5) {
+    return {
+        latIdx: latBlock * BLOCK_TILES + dLat,
+        lngIdx: lngBlock * BLOCK_TILES + dLng
     };
 }
 
@@ -286,7 +313,7 @@ test('プライバシー: 非表示ピンの中の足跡だけなら、その10k
     // 足跡マスの中心に半径300mの非表示ピンを置く
     const center = grid.getMeshCenter(inside.latIdx, inside.lngIdx);
     privacy.addZone({ id: 'z1', lat: center.lat, lng: center.lng, radius: 300 });
-    grid.footprintMacroCache = null;
+    grid.footprintIndexCache = null;
 
     grid.updateGrids();
     assert.equal(grid.footprintMacroIndex().size, 0, '区域内の足跡は索引に入れない');
@@ -307,7 +334,7 @@ test('プライバシー: 区域の外に足跡が1つでもあればハイラ�
     const { grid } = createRealGrid({ footprint, zones: privacy, zoom: 7, bounds: macroWindowBounds(latMacro, lngMacro) });
     const center = grid.getMeshCenter(target.latIdx, target.lngIdx);
     privacy.addZone({ id: 'z1', lat: center.lat, lng: center.lng, radius: 400 });
-    grid.footprintMacroCache = null;
+    grid.footprintIndexCache = null;
 
     grid.updateGrids();
     assert.equal(grid.footprintMacroIndex().size, 1, '区域の外の足跡は数える');
@@ -330,7 +357,7 @@ test('プライバシー: 区域の中のブロックだけが消え、区域の
     });
     const center = grid.getMeshCenter(masked.latIdx, masked.lngIdx);
     privacy.addZone({ id: 'z1', lat: center.lat, lng: center.lng, radius: 400 });
-    grid.footprintMacroCache = null;
+    grid.footprintIndexCache = null;
 
     grid.updateGrids();
     const index = grid.footprintMacroIndex();
@@ -348,33 +375,153 @@ test('プライバシー: 区域の中のブロックだけが消え、区域の
 });
 
 /* ------------------------------------------------------------------ *
- * 4. 10kmブロックだけ（1kmブロックには付けない）
+ * 4. 1kmブロック（zoom 10〜13）の足跡ハイライト
  * ------------------------------------------------------------------ */
 
-test('範囲: 1kmブロック（zoom 10〜13）には足跡ハイライトを付けない', () => {
-    const latIdx = Math.floor(34.6 / LAT_GRID);
-    const lngIdx = Math.floor(135.6 / LNG_GRID);
-    const footprint = [`tile_${latIdx}_${lngIdx}`];
+test('スタイル: 足跡を含む1kmブロックは10kmブロックと同じオレンジ塗り＋枠線になる', () => {
+    const { grid } = createRealGrid();
+    const style = grid.getBlockStyle('white', { ownFootprint: true });
 
-    for (const zoom of [10, 11, 13]) {
-        const { grid } = createRealGrid({ footprint, zoom });
+    assert.equal(style.fillColor, FOOTPRINT_STROKE_COLOR, '塗りはオレンジ #f59e0b');
+    assert.equal(style.fillOpacity, FOOTPRINT_BLOCK_FILL_OPACITY, '塗りの透過率は0.38');
+    assert.equal(style.color, FOOTPRINT_STROKE_COLOR, '枠線もオレンジ #f59e0b');
+    assert.equal(style.weight, FOOTPRINT_BLOCK_STROKE_WEIGHT, '枠線は1.9');
+    assert.equal(style.opacity, FOOTPRINT_BLOCK_STROKE_OPACITY, '枠線は0.9');
+    assert.equal(style.interactive, false);
+    // 10kmブロックのハイライトと寸分同じ見た目（2つの表示で印象を揃える）
+    assert.deepEqual(style, grid.getMacroStyle('white', { ownFootprint: true }));
+});
+
+test('スタイル: 足跡を含まない1kmブロックは従来どおり薄い白黒のまま', () => {
+    const { grid } = createRealGrid();
+    for (const team of ['white', 'black']) {
+        const style = grid.getBlockStyle(team);
+        assert.notEqual(style.fillColor, FOOTPRINT_STROKE_COLOR, 'オレンジにしない');
+        assert.equal(style.fillOpacity, BLOCK_FILL_OPACITY);
+        assert.ok(style.weight <= 1, '枠線は1kmブロックの細い線のまま');
+        assert.ok(style.opacity <= 0.15, '枠線はほぼ透明のまま（＝目立たせない）');
+        assert.equal(style.interactive, false);
+    }
+    // 未指定（引数なし）でも同じ
+    assert.equal(grid.getBlockStyle('black').fillOpacity, BLOCK_FILL_OPACITY);
+});
+
+test('描画: 1kmブロックも足跡を含むブロックだけがオレンジでハイライトされる（zoom 10〜13）', () => {
+    const { latBlock, lngBlock } = centerBlock();
+    const inside = tileInsideBlock(latBlock, lngBlock);
+    const footprint = [`tile_${inside.latIdx}_${inside.lngIdx}`];
+
+    for (const zoom of [10, 11, 12, 13]) {
+        const { grid } = createRealGrid({
+            footprint,
+            zoom,
+            bounds: blockWindowBounds(latBlock, lngBlock)
+        });
         grid.updateGrids();
         assert.equal(displayModeForZoom(zoom), 'blocks');
         assert.ok(grid.renderedBlocks.size > 0, `zoom ${zoom} は1kmブロックを描く`);
         assert.equal(grid.renderedMacroBlocks.size, 0, '10kmブロックは描かない');
 
-        for (const [blockId, rectangle] of grid.renderedBlocks.entries()) {
-            assert.notEqual(rectangle.options.fillColor, FOOTPRINT_STROKE_COLOR, `zoom ${zoom}: ${blockId} はオレンジにしない`);
-        }
-        // 1kmブロックのスタイル関数そのものにも足跡の分岐が無い
-        const style = grid.getBlockStyle('white');
-        assert.notEqual(style.fillColor, FOOTPRINT_STROKE_COLOR);
-    }
+        const blockId = grid.getBlockId(latBlock, lngBlock);
+        const rect = grid.renderedBlocks.get(blockId);
+        assert.ok(rect, `zoom ${zoom}: 足跡を含む1kmブロックを描く`);
+        assert.equal(rect.options.fillColor, FOOTPRINT_STROKE_COLOR, `zoom ${zoom} でもオレンジで塗る`);
+        assert.equal(rect.options.fillOpacity, FOOTPRINT_BLOCK_FILL_OPACITY);
+        assert.equal(rect.options.color, FOOTPRINT_STROKE_COLOR);
+        assert.equal(rect.options.weight, FOOTPRINT_BLOCK_STROKE_WEIGHT);
+        assert.equal(rect.options.opacity, FOOTPRINT_BLOCK_STROKE_OPACITY);
 
-    // ソース上も 1km ブロックのスタイルにはハイライトを入れない
-    const source = fs.readFileSync(path.join(ROOT, 'grid.js'), 'utf8');
-    const blockStyle = source.slice(source.indexOf('    getBlockStyle('), source.indexOf('    renderSingleBlock('));
-    assert.doesNotMatch(blockStyle, /FOOTPRINT_BLOCK_|ownFootprint/, '1kmブロックには付けない（10kmブロックだけ）');
+        // ハイライトは1枚だけ（他のブロックは従来の白黒）
+        let highlighted = 0;
+        for (const [id, rectangle] of grid.renderedBlocks.entries()) {
+            const isOrange = rectangle.options.fillColor === FOOTPRINT_STROKE_COLOR;
+            if (isOrange) highlighted += 1;
+            if (id !== blockId) {
+                assert.equal(isOrange, false, `${id} はハイライトしない`);
+                assert.equal(rectangle.options.fillOpacity, BLOCK_FILL_OPACITY, `${id} は従来の薄い塗り`);
+            }
+        }
+        assert.equal(highlighted, 1, 'ハイライトされるのは足跡を含む1枚だけ');
+    }
+});
+
+test('描画: 足跡が1マスも無ければ、どの1kmブロックもハイライトしない', () => {
+    const { latBlock, lngBlock } = centerBlock();
+    const { grid } = createRealGrid({ zoom: 11, bounds: blockWindowBounds(latBlock, lngBlock) });
+    grid.updateGrids();
+
+    assert.ok(grid.renderedBlocks.size > 0);
+    for (const [blockId, rectangle] of grid.renderedBlocks.entries()) {
+        assert.notEqual(rectangle.options.fillColor, FOOTPRINT_STROKE_COLOR, `${blockId} はオレンジにしない`);
+    }
+});
+
+test('描画: 10kmブロック（zoom 6〜9）のハイライトはそのまま維持する', () => {
+    const { latMacro, lngMacro } = centerMacro();
+    const inside = tileInsideMacro(latMacro, lngMacro, 5, 5);
+    const footprint = [`tile_${inside.latIdx}_${inside.lngIdx}`];
+    const { grid } = createRealGrid({ footprint, zoom: 7, bounds: macroWindowBounds(latMacro, lngMacro) });
+    grid.updateGrids();
+
+    const rect = grid.renderedMacroBlocks.get(grid.getMacroId(latMacro, lngMacro));
+    assert.equal(rect.options.fillColor, FOOTPRINT_STROKE_COLOR);
+    assert.equal(rect.options.fillOpacity, FOOTPRINT_BLOCK_FILL_OPACITY);
+    assert.equal(rect.options.weight, FOOTPRINT_BLOCK_STROKE_WEIGHT);
+});
+
+/* ------------------------------------------------------------------ *
+ * 4b. 1kmブロックのプライバシー（非表示ピンの中は光らせない）
+ * ------------------------------------------------------------------ */
+
+test('プライバシー: 非表示ピンの中の足跡だけなら、その1kmブロックはハイライトしない', () => {
+    const { latBlock, lngBlock } = centerBlock();
+    const inside = tileInsideBlock(latBlock, lngBlock, 5, 5);
+    const footprint = [`tile_${inside.latIdx}_${inside.lngIdx}`];
+    const privacy = createPrivacyStub();
+
+    const { grid } = createRealGrid({
+        footprint,
+        zones: privacy,
+        zoom: 12,
+        bounds: blockWindowBounds(latBlock, lngBlock)
+    });
+    const center = grid.getMeshCenter(inside.latIdx, inside.lngIdx);
+    privacy.addZone({ id: 'z1', lat: center.lat, lng: center.lng, radius: 300 });
+    grid.footprintIndexCache = null;
+
+    grid.updateGrids();
+    assert.equal(grid.footprintBlockIndex().size, 0, '区域内の足跡は索引に入れない');
+    const rect = grid.renderedBlocks.get(grid.getBlockId(latBlock, lngBlock));
+    assert.ok(rect);
+    assert.notEqual(rect.options.fillColor, FOOTPRINT_STROKE_COLOR, '区域の中の足跡ではハイライトしない');
+    assert.equal(rect.options.fillOpacity, BLOCK_FILL_OPACITY);
+});
+
+test('プライバシー: 区域の外に足跡が1つでもあれば、その1kmブロックはハイライトする', () => {
+    const { latBlock, lngBlock } = centerBlock();
+    const masked = tileInsideBlock(latBlock, lngBlock, 5, 5);
+    // 同じ1kmブロックの中、区域から十分離れた場所（約900m東）
+    const far = tileInsideBlock(latBlock, lngBlock, 5, 9);
+    const footprint = [`tile_${masked.latIdx}_${masked.lngIdx}`, `tile_${far.latIdx}_${far.lngIdx}`];
+    const privacy = createPrivacyStub();
+
+    const { grid } = createRealGrid({
+        footprint,
+        zones: privacy,
+        zoom: 12,
+        bounds: blockWindowBounds(latBlock, lngBlock)
+    });
+    const center = grid.getMeshCenter(masked.latIdx, masked.lngIdx);
+    privacy.addZone({ id: 'z1', lat: center.lat, lng: center.lng, radius: 300 });
+    grid.footprintIndexCache = null;
+
+    grid.updateGrids();
+    assert.equal(grid.footprintBlockIndex().size, 1, '区域の外の足跡だけを数える');
+    assert.equal(
+        grid.renderedBlocks.get(grid.getBlockId(latBlock, lngBlock)).options.fillColor,
+        FOOTPRINT_STROKE_COLOR,
+        '区域の外に足跡があればハイライトする'
+    );
 });
 
 /* ------------------------------------------------------------------ *
@@ -452,7 +599,7 @@ test('更新: 週が変わると先週の足跡ではハイライトしない', 
     grid.footprintIds = [];
     grid.footprintSet = new Set();
     grid.footprintWeek = '2026-W48';
-    grid.footprintMacroCache = null;
+    grid.footprintIndexCache = null;
     grid.updateGrids();
     assert.equal(grid.footprintMacroIndex().size, 0);
     assert.notEqual(grid.renderedMacroBlocks.get(target).options.fillColor, FOOTPRINT_STROKE_COLOR, '先週の足跡は出さない');
@@ -490,6 +637,108 @@ test('更新: 画面の切り替えで10kmブロックを描き直してもハ�
 });
 
 /* ------------------------------------------------------------------ *
+ * 5b. 1kmブロックの即時反映（足跡追加・非表示ピン変更・週リセット・スキン）
+ * ------------------------------------------------------------------ */
+
+test('更新: 1kmブロック表示中に足跡が増えると、そのブロックがすぐオレンジになる', () => {
+    const { latBlock, lngBlock } = centerBlock();
+    const inside = tileInsideBlock(latBlock, lngBlock, 5, 5);
+    const meshId = `tile_${inside.latIdx}_${inside.lngIdx}`;
+    const { grid } = createRealGrid({ zoom: 12, bounds: blockWindowBounds(latBlock, lngBlock) });
+    grid.updateGrids();
+
+    const target = grid.getBlockId(latBlock, lngBlock);
+    assert.notEqual(grid.renderedBlocks.get(target).options.fillColor, FOOTPRINT_STROKE_COLOR, '最初は白黒');
+
+    // マスを塗った直後の流れ（recordFootprint → renderTileForCurrentZoom）
+    grid.recordFootprint(meshId);
+    grid.renderTileForCurrentZoom(meshId, inside.latIdx, inside.lngIdx);
+
+    assert.equal(grid.renderedBlocks.get(target).options.fillColor, FOOTPRINT_STROKE_COLOR, 'すぐハイライトされる');
+    assert.equal(grid.renderedBlocks.get(target).options.weight, FOOTPRINT_BLOCK_STROKE_WEIGHT);
+});
+
+test('更新: 非表示ピンを足すと1kmブロックのハイライトが消え、外すと戻る', () => {
+    const { latBlock, lngBlock } = centerBlock();
+    const inside = tileInsideBlock(latBlock, lngBlock, 5, 5);
+    const footprint = [`tile_${inside.latIdx}_${inside.lngIdx}`];
+    const privacy = createPrivacyStub();
+
+    const { grid } = createRealGrid({
+        footprint,
+        zones: privacy,
+        zoom: 12,
+        bounds: blockWindowBounds(latBlock, lngBlock)
+    });
+    const target = grid.getBlockId(latBlock, lngBlock);
+    grid.updateGrids();
+    assert.equal(grid.renderedBlocks.get(target).options.fillColor, FOOTPRINT_STROKE_COLOR, '最初はハイライト');
+
+    // 非表示ピンを追加（privacy.js の refreshTiles と同じ順序で描き直す）
+    const center = grid.getMeshCenter(inside.latIdx, inside.lngIdx);
+    privacy.addZone({ id: 'z1', lat: center.lat, lng: center.lng, radius: 400 });
+    grid.clearBlockTeamCache();
+    grid.updateGrids();
+    assert.notEqual(
+        grid.renderedBlocks.get(target).options.fillColor,
+        FOOTPRINT_STROKE_COLOR,
+        '区域の中だけならハイライトを外す'
+    );
+
+    // 区域を消す
+    privacy.list.length = 0;
+    grid.updateGrids();
+    assert.equal(grid.renderedBlocks.get(target).options.fillColor, FOOTPRINT_STROKE_COLOR, '区域を外すとハイライトが戻る');
+});
+
+test('更新: 週が変わると先週の足跡では1kmブロックをハイライトしない', () => {
+    const { latBlock, lngBlock } = centerBlock();
+    const inside = tileInsideBlock(latBlock, lngBlock, 5, 5);
+    const footprint = [`tile_${inside.latIdx}_${inside.lngIdx}`];
+    const { grid } = createRealGrid({
+        footprint,
+        zoom: 11,
+        bounds: blockWindowBounds(latBlock, lngBlock)
+    });
+    const target = grid.getBlockId(latBlock, lngBlock);
+    grid.updateGrids();
+    assert.equal(grid.renderedBlocks.get(target).options.fillColor, FOOTPRINT_STROKE_COLOR);
+
+    // 週が変わった（checkWeekReset 相当）: 足跡は作り直され、索引も捨てる
+    grid.weekId = '2026-W48';
+    grid.weekIdCachedAt = Date.now();
+    grid.footprintIds = [];
+    grid.footprintSet = new Set();
+    grid.footprintWeek = '2026-W48';
+    grid.footprintIndexCache = null;
+    grid.updateGrids();
+    assert.equal(grid.footprintBlockIndex().size, 0);
+    assert.notEqual(
+        grid.renderedBlocks.get(target).options.fillColor,
+        FOOTPRINT_STROKE_COLOR,
+        '先週の足跡は出さない'
+    );
+});
+
+test('更新: スキンを変えても1kmブロックのハイライトは残る（redrawTiles）', () => {
+    const { latBlock, lngBlock } = centerBlock();
+    const inside = tileInsideBlock(latBlock, lngBlock, 5, 5);
+    const footprint = [`tile_${inside.latIdx}_${inside.lngIdx}`];
+    const { grid } = createRealGrid({ footprint, zoom: 12, bounds: blockWindowBounds(latBlock, lngBlock) });
+    const target = grid.getBlockId(latBlock, lngBlock);
+    grid.updateGrids();
+
+    global.document.body.dataset.skin = 'neon';
+    try {
+        grid.redrawTiles();
+        assert.equal(grid.renderedBlocks.get(target).options.fillColor, FOOTPRINT_STROKE_COLOR, 'スキン変更後もオレンジ');
+        assert.equal(grid.renderedBlocks.get(target).options.weight, FOOTPRINT_BLOCK_STROKE_WEIGHT);
+    } finally {
+        global.document.body.dataset.skin = 'default';
+    }
+});
+
+/* ------------------------------------------------------------------ *
  * 6. 性能（footprintSet を描画中に何度も走査しない）
  * ------------------------------------------------------------------ */
 
@@ -508,7 +757,7 @@ test('性能: 10kmブロックの索引は描画1回につき1回だけ作る（
         yield* realSet;
     };
     grid.footprintSet = spy;
-    grid.footprintMacroCache = null;
+    grid.footprintIndexCache = null;
 
     grid.updateGrids();
     assert.ok(grid.renderedMacroBlocks.size > 1);
@@ -530,4 +779,34 @@ test('性能: 10kmブロックの判定は Set（O(1)）で、1万ブロック�
     assert.ok(grid.renderedMacroBlocks.size >= 12000, `zoom 6 は約12,500枚（実際: ${grid.renderedMacroBlocks.size}）`);
     assert.ok(ms < 400, `足跡の索引を足しても初回描画は400ms以内（実際: ${ms.toFixed(1)}ms）`);
     assert.equal(typeof grid.footprintMacroIndex().has, 'function', '索引は Set');
+});
+
+test('性能: 1kmブロックの索引は描画1回につき1回だけ作る（全ブロックで使い回す）', () => {
+    const { latBlock, lngBlock } = centerBlock();
+    const inside = tileInsideBlock(latBlock, lngBlock, 5, 5);
+    const footprint = [`tile_${inside.latIdx}_${inside.lngIdx}`];
+    const { grid } = createRealGrid({ footprint, zoom: 11, bounds: blockWindowBounds(latBlock, lngBlock) });
+
+    const realSet = grid.footprintSet;
+    let scanned = 0;
+    const spy = new Set(realSet);
+    spy[Symbol.iterator] = function* iterate() {
+        scanned += 1;
+        yield* realSet;
+    };
+    grid.footprintSet = spy;
+    grid.footprintIndexCache = null;
+
+    grid.updateGrids();
+    assert.ok(grid.renderedBlocks.size > 1);
+    assert.equal(scanned, 1, `描画1回の走査は1回だけ（実際: ${scanned}回）`);
+
+    // 変化が無ければ作り直さない（同じ Set を使い回す）
+    const index = grid.footprintBlockIndex();
+    assert.equal(grid.footprintBlockIndex(), index, 'キャッシュした索引を返す');
+    grid.updateGrids();
+    assert.equal(scanned, 1, '再描画でも footprintSet を走査し直さない');
+
+    // 1kmと10kmは同じ走査で作るので、両方の索引も同時に揃っている
+    assert.equal(typeof grid.footprintMacroIndex().has, 'function');
 });
