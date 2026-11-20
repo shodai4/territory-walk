@@ -1,12 +1,12 @@
 {
   "name": "territory-walk",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Territory Walk - Real-time GPS territory walking game with Leaflet & Supabase",
   "author": "お絵描き楽しも委員会（しょうだい）",
   "license": "MIT",
   "private": true,
   "scripts": {
-    "test": "node --test tests/",
+    "test": "node --test tests/*.test.js",
     "build": "node scripts/build.js",
     "assets:generate": "python3 scripts/generate-assets.py",
     "cap:add": "npm run build && npx cap add ios && node scripts/configure-ios.js && node scripts/setup-ios-assets.js",

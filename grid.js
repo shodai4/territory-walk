@@ -9,16 +9,22 @@
  *   3. 自分が今週踏んで塗ったマスだけ、自分の端末で細い枠線（足跡）を付ける。サーバーには送らない。
  *   4. 非表示ピン（privacy.js）の区域の中は、自分の画面でも初期配置の見た目に戻す。
  *
- * v1.1 ズーム別の描画（居場所の手がかりを残さない3段階）:
- *   - zoom >= 16（近距離）: 100mマス。初期配置＋実績＋自分の足跡枠線。
- *   - 11 <= zoom < 16（中〜広域）: 100mマスは描かず、10×10マス（約1km四方）のブロックに集計して薄く塗る。
- *     ブロック内の色は多数決なので、細かな歩行経路は分からない。
- *   - zoom < 11（広域）: マスもブロックも一切描かない。
+ * v1.1 ズーム別の描画（居場所の手がかりを残さない段階表示）:
+ *   100mマス / 1kmブロック / 10kmブロックの4段階で、引くほど粗く集計して薄く描く。
  *   スコア（勝敗）は従来どおり claimedTilesCache だけで集計し、描画とは無関係。
  *
- * v1.2 ブロック表示を県レベル（zoom 11）まで拡張。
- *   375×812 の画面あたりブロック数は約1,400なので、描画上限を
- *   ブロック用に BLOCK_RENDER_MAX_COUNT で別に持つ。
+ * v1.3 ズーム4段階（案B）:
+ *   - zoom >= 14（近距離）: 100mマス。初期配置＋実績＋自分の足跡枠線。
+ *   - 10 <= zoom <= 13（中距離）: 100mマスは描かず、10×10マス（約1km四方）のブロックに集計して薄く塗る。
+ *     ブロック内の色は多数決なので、細かな歩行経路は分からない。
+ *   - 6 <= zoom <= 9（広域）: 1kmブロックをさらに10×10（約10km四方）に集計した10kmブロック。
+ *   - zoom <= 5（広域）: マスもブロックも一切描かない。
+ *   スコア（勝敗）は従来どおり claimedTilesCache だけで集計し、描画とは無関係。
+ *
+ * 描画上限は段階ごとに別に持つ（375×812 の画面あたりの枚数）:
+ *   100mマス 約1,950（zoom 14）/ 1kmブロック 約4,950（zoom 10）/ 10kmブロック 約12,500（zoom 6）。
+ *   10kmブロックは1枚あたりが軽い（実績の無いブロックはハッシュで色を決め、中の100マスを数えない）ため、
+ *   12,500枚でも描画は数十msで終わる。
  */
 
 /** 塗りの濃さ（初期配置・実際に塗ったマスで同じにする＝見分けが付かない） */
@@ -35,15 +41,23 @@ const FOOTPRINT_MAX_TILES = 3000;
 
 /** 1kmブロック = 10×10 の 100mマス */
 const BLOCK_TILES = 10;
+/** 10kmブロック = 10×10 の 1kmブロック */
+const MACRO_BLOCKS = 10;
 /** 100mマス（近距離）を描く下限ズーム */
-const TILE_DETAIL_MIN_ZOOM = 16;
-/** 1kmブロック（中〜広域）を描く下限ズーム。これ未満は何も描かない */
-const BLOCK_RENDER_MIN_ZOOM = 11;
-/** 画面に描く1kmブロックの上限（375×812 / zoom 11 で約1,400枚。全部埋まる上限） */
-const BLOCK_RENDER_MAX_COUNT = 2000;
+const TILE_DETAIL_MIN_ZOOM = 14;
+/** 1kmブロック（中距離）を描く下限ズーム */
+const BLOCK_RENDER_MIN_ZOOM = 10;
+/** 10kmブロック（広域）を描く下限ズーム。これ未満は何も描かない */
+const MACRO_RENDER_MIN_ZOOM = 6;
+/** 画面に描く1kmブロックの上限（375×812 / zoom 10 で約4,950枚。画面が欠けない上限） */
+const BLOCK_RENDER_MAX_COUNT = 6500;
+/** 画面に描く10kmブロックの上限（375×812 / zoom 6 で約12,500枚。画面が欠けない上限） */
+const MACRO_RENDER_MAX_COUNT = 13000;
 /**
  * 100mマスを取得する下限ズーム。
- * ブロック表示は zoom 11 からだが、1マス単位のDB取得は13から（画面全体が15kmを超えるため）。
+ * マス表示は zoom 14 からだが、1マス単位のDB取得は13から始める
+ * （zoom 13 はブロック表示で、取得した実績はブロックの色に効く）。
+ * 画面全体が15kmを超える場合は supabase.js 側のガードで問い合わせない。
  */
 const REMOTE_FETCH_MIN_ZOOM = 13;
 /**
@@ -60,6 +74,13 @@ const WEEK_ID_CACHE_MS = 2000;
 const BLOCK_FILL_OPACITY = 0.24;
 const BLOCK_STROKE_OPACITY = 0.08;
 const BLOCK_STROKE_WEIGHT = 0.6;
+/**
+ * 10kmブロックの描画スタイル。1kmブロックよりさらに薄く・細くして、
+ * 広域で「誰かが歩いた10km四方」が浮き彫りにならないようにする。
+ */
+const MACRO_FILL_OPACITY = 0.2;
+const MACRO_STROKE_OPACITY = 0.06;
+const MACRO_STROKE_WEIGHT = 0.5;
 
 /**
  * Asia/Tokyo の ISO 週（例: 2026-W47）。
@@ -111,6 +132,87 @@ function deterministicBlockTeam(weekId, latBlock, lngBlock) {
 }
 
 /**
+ * 10kmブロックの色を決める決定論的なハッシュ。
+ * 実績マスが1個も無い10kmブロックは、中の100個の1kmブロックを数えずにこれで色を決める
+ * （zoom 6 では画面に約12,500枚並ぶため、1枚あたりの計算をハッシュ1回に抑える）。
+ */
+function deterministicMacroTeam(weekId, latMacro, lngMacro) {
+    return (tileHash(`${weekId}#macro`, latMacro, lngMacro) & 1) === 1 ? 'white' : 'black';
+}
+
+/* ------------------------------------------------------------------ *
+ * 毎回の描画で使う「初期配置」の高速計算
+ *
+ * 1kmブロックの色は中の100マスの多数決なので、zoom 10 では画面あたり約49万マス分のハッシュが要る。
+ * tileHash は文字列 `${weekId}:${latIdx}:${lngIdx}` を作って1文字ずつ回すので、
+ * そのままだとパンのたびに数百msかかる。そこで FNV-1a の性質（前の状態から続けて計算できる）を使い、
+ *  ・`${weekId}:` の分は週ごとに1回だけ計算して覚えておく
+ *  ・latIdx / lngIdx は String() を作らず、10進の桁をそのまま流し込む
+ * ことで、tileHash と完全に同じ値をより軽く出す（tests/zoom-blocks.test.js で一致を検証）。
+ * ------------------------------------------------------------------ */
+
+/** FNV-1a に1文字流し込む */
+function tileHashFeedChar(h, code) {
+    h ^= code;
+    return Math.imul(h, 0x01000193) >>> 0;
+}
+
+/** FNV-1a の最後の攪拌（tileHash と同じ） */
+function tileHashMix(h) {
+    h ^= h >>> 15;
+    h = Math.imul(h, 0x2c1b3c6d) >>> 0;
+    h ^= h >>> 12;
+    h = Math.imul(h, 0x297a2d39) >>> 0;
+    h ^= h >>> 15;
+    return h >>> 0;
+}
+
+/** `\`${weekId}:\`` までのハッシュ状態（週ごとに1回だけ計算して覚える） */
+const WEEK_HASH_SEED_CACHE = new Map();
+function tileHashWeekSeed(weekId) {
+    const key = String(weekId);
+    const cached = WEEK_HASH_SEED_CACHE.get(key);
+    if (cached !== undefined) return cached;
+    const text = `${key}:`;
+    let h = 0x811c9dc5;
+    for (let i = 0; i < text.length; i += 1) h = tileHashFeedChar(h, text.charCodeAt(i));
+    if (WEEK_HASH_SEED_CACHE.size >= 8) WEEK_HASH_SEED_CACHE.clear();
+    WEEK_HASH_SEED_CACHE.set(key, h);
+    return h;
+}
+
+/** 整数を10進の桁のまま FNV-1a に流し込む（String(n).charCodeAt と同じ並び） */
+function tileHashFeedInt(h, value) {
+    let n = Math.trunc(Number(value)) || 0;
+    if (n < 0) {
+        h = tileHashFeedChar(h, 45); // '-'
+        n = -n;
+    }
+    let divisor = 1;
+    while (n >= divisor * 10) divisor *= 10;
+    while (divisor >= 1) {
+        const digit = Math.floor(n / divisor);
+        h = tileHashFeedChar(h, 48 + digit);
+        n -= digit * divisor;
+        divisor /= 10;
+    }
+    return h;
+}
+
+/** 週のシードから、1マスの初期配置の色を出す（deterministicInitialTeam と同じ値） */
+function initialTeamWithSeed(seed, latIdx, lngIdx) {
+    let h = tileHashFeedInt(seed, latIdx);
+    h = tileHashFeedChar(h, 58); // ':'
+    h = tileHashFeedInt(h, lngIdx);
+    return (tileHashMix(h) & 1) === 1 ? 'white' : 'black';
+}
+
+/** deterministicInitialTeam の高速版（毎回の描画用） */
+function deterministicInitialTeamFast(weekId, latIdx, lngIdx) {
+    return initialTeamWithSeed(tileHashWeekSeed(weekId), latIdx, lngIdx);
+}
+
+/**
  * ズームしきい値。CONFIG があればそちらを優先（アプリ側で1か所にまとめる）。
  * テストや単体利用では CONFIG が無いので定数の既定値を使う。
  */
@@ -118,21 +220,24 @@ function zoomThresholds() {
     const cfg = (typeof CONFIG !== 'undefined' && CONFIG) ? CONFIG : {};
     const detailMin = Number.isFinite(cfg.TILE_DETAIL_MIN_ZOOM) ? cfg.TILE_DETAIL_MIN_ZOOM : TILE_DETAIL_MIN_ZOOM;
     const blockMin = Number.isFinite(cfg.TILE_RENDER_MIN_ZOOM) ? cfg.TILE_RENDER_MIN_ZOOM : BLOCK_RENDER_MIN_ZOOM;
-    return { detailMin, blockMin };
+    const macroMin = Number.isFinite(cfg.MACRO_RENDER_MIN_ZOOM) ? cfg.MACRO_RENDER_MIN_ZOOM : MACRO_RENDER_MIN_ZOOM;
+    return { detailMin, blockMin, macroMin };
 }
 
 /**
  * 現在のズームの表示モード。
- *   'tiles'  : 100mマス（zoom >= 16）
- *   'blocks' : 1kmブロック（11 <= zoom < 16）
- *   'none'   : 何も描かない（zoom < 11）
+ *   'tiles'       : 100mマス（zoom >= 14）
+ *   'blocks'      : 1kmブロック（10 <= zoom <= 13）
+ *   'macroBlocks' : 10kmブロック（6 <= zoom <= 9）
+ *   'none'        : 何も描かない（zoom <= 5）
  */
 function displayModeForZoom(zoom) {
-    const { detailMin, blockMin } = zoomThresholds();
+    const { detailMin, blockMin, macroMin } = zoomThresholds();
     const z = Number(zoom);
     if (!Number.isFinite(z)) return 'none';
     if (z >= detailMin) return 'tiles';
     if (z >= blockMin) return 'blocks';
+    if (z >= macroMin) return 'macroBlocks';
     return 'none';
 }
 
@@ -149,11 +254,22 @@ class GridManager {
         this.claimedTilesCache = new Map(); // meshId -> 'white' | 'black'
         this.renderedMeshes = new Map();     // meshId -> L.Rectangle layer
         this.renderedBlocks = new Map();     // blockId -> L.Rectangle layer（中距離表示）
+        this.renderedMacroBlocks = new Map(); // macroId -> L.Rectangle layer（広域表示）
         // ブロックの色（100マスの多数決）のキャッシュ。
         //   県レベル（zoom 11）は画面に約1,400ブロック＝約14万マスの集計が必要で、
         //   パンのたびに数え直すと数十msかかる。ブロック単位で覚えておき、
         //   陣地・非表示ピン・週が変わったときにその分だけ捨てる。
         this.blockTeamCache = new Map();     // `${weekId}|${latBlock}_${lngBlock}` -> 'white' | 'black'
+        // 10kmブロックの色のキャッシュ（中身は同じ規則で捨てる）
+        this.macroTeamCache = new Map();     // `${weekId}|${latMacro}_${lngMacro}` -> 'white' | 'black'
+        // 実績マスの索引（ブロック内の実績マス一覧・10kmブロックの有無）。
+        //   広域（zoom 6）は画面に約12,500個の10kmブロックが並ぶので、
+        //     ・実績なし → ハッシュ1回で色を決める
+        //     ・実績あり → 中の1kmブロック100個の色を数える
+        //   を切り分けるために使う。実績が変わったら null に戻して作り直す。
+        this.claimIndexCache = null;         // { size, blocks: Map, macros: Set }
+        // 初期配置（実績なし）だけのブロック集計。週が変われば別キーで数え直す
+        this.blockInitialCache = new Map();  // `${weekId}|${latBlock}_${lngBlock}` -> { white, black }
 
         // 自分の足跡（今週踏んだマス）。端末内のみ・サーバーへは送らない
         this.footprintWeek = null;
@@ -254,17 +370,49 @@ class GridManager {
     /**
      * ブロック内の100マスを数える。
      * 非表示ピンの中のマスは「中立」として数えない（区域の存在を色に滲ませない）。
-     * 県レベル（zoom 11）は画面あたり約1,400ブロック＝約14万マスを数えるので、
-     * 1マスあたりの処理を最小限にする（文字列生成とメソッド呼び出しを減らす）。
+     *
+     * zoom 10 では画面あたり約4,950ブロック＝約49万マスを数えることになるため、
+     *  ・実績が無いブロック → 初期配置だけの集計をブロック単位でキャッシュ（blockInitialCounts）
+     *  ・実績があるブロック → キャッシュした初期配置の集計に、実績マスの差分だけ足す
+     * の2段構えにしている。非表示ピンがある端末だけは、区域の内外をマスごとに判定する
+     * 正確なループ（従来と同一）を使う。
      */
     tallyBlock(latBlock, lngBlock) {
         const weekId = this.getWeekId();
-        const latBase = latBlock * BLOCK_TILES;
-        const lngBase = lngBlock * BLOCK_TILES;
-        const cache = this.claimedTilesCache;
         // 非表示ピンが1件も無い（大多数の端末）なら、マスごとの判定自体を省く
         const hasPrivacy = !!(this.app && this.app.privacyZones
             && typeof this.app.privacyZones.containsMesh === 'function');
+        if (hasPrivacy) return this.tallyBlockWithPrivacy(weekId, latBlock, lngBlock);
+
+        const initial = this.blockInitialCounts(weekId, latBlock, lngBlock);
+        let white = initial.white;
+        let black = initial.black;
+
+        // このブロックに入っている実績マスだけ、初期配置の色を差し引いて実績の色を足す
+        const claimedTiles = this.claimIndex().blocks.get(this.getBlockId(latBlock, lngBlock));
+        if (claimedTiles) {
+            const seed = tileHashWeekSeed(weekId);
+            for (let i = 0; i < claimedTiles.length; i += 1) {
+                const tile = claimedTiles[i];
+                const initialTeam = initialTeamWithSeed(seed, tile.latIdx, tile.lngIdx);
+                if (initialTeam === 'white') white -= 1;
+                else black -= 1;
+                if (tile.team === 'white') white += 1;
+                else black += 1;
+            }
+        }
+
+        return { white, black, masked: 0, counted: white + black };
+    }
+
+    /**
+     * 非表示ピンがある端末用の正確な集計（マスごとに区域の内外を判定する）。
+     * 区域の中は「中立」として、初期配置からも差し引く。
+     */
+    tallyBlockWithPrivacy(weekId, latBlock, lngBlock) {
+        const latBase = latBlock * BLOCK_TILES;
+        const lngBase = lngBlock * BLOCK_TILES;
+        const cache = this.claimedTilesCache;
         let white = 0;
         let black = 0;
         let masked = 0;
@@ -273,7 +421,7 @@ class GridManager {
             const latIdx = latBase + dLat;
             for (let dLng = 0; dLng < BLOCK_TILES; dLng += 1) {
                 const lngIdx = lngBase + dLng;
-                if (hasPrivacy && this.getPrivacyZone(latIdx, lngIdx)) {
+                if (this.getPrivacyZone(latIdx, lngIdx)) {
                     masked += 1;
                     continue;
                 }
@@ -288,6 +436,34 @@ class GridManager {
         }
 
         return { white, black, masked, counted: white + black };
+    }
+
+    /**
+     * 初期配置（実績なし）だけのブロック集計。週とブロック座標だけで決まるのでキャッシュする。
+     * 週が変わればキーが変わるため、前週の値を誤って使わない。
+     */
+    blockInitialCounts(weekId, latBlock, lngBlock) {
+        const key = `${weekId}|${latBlock}_${lngBlock}`;
+        const cached = this.blockInitialCache.get(key);
+        if (cached) return cached;
+
+        const latBase = latBlock * BLOCK_TILES;
+        const lngBase = lngBlock * BLOCK_TILES;
+        const seed = tileHashWeekSeed(weekId);
+        let white = 0;
+        let black = 0;
+        for (let dLat = 0; dLat < BLOCK_TILES; dLat += 1) {
+            const latIdx = latBase + dLat;
+            for (let dLng = 0; dLng < BLOCK_TILES; dLng += 1) {
+                if (initialTeamWithSeed(seed, latIdx, lngBase + dLng) === 'white') white += 1;
+                else black += 1;
+            }
+        }
+        const counts = { white, black };
+        // パンし続けてもメモリを増やしすぎない（1画面あたり最大5,000ブロックなので十分な余裕）
+        if (this.blockInitialCache.size >= 30000) this.blockInitialCache.clear();
+        this.blockInitialCache.set(key, counts);
+        return counts;
     }
 
     /**
@@ -325,6 +501,13 @@ class GridManager {
         if (!this.blockTeamCache || typeof this.blockTeamCache.delete !== 'function') return false;
         if (!Number.isFinite(latIdx) || !Number.isFinite(lngIdx)) return false;
         const { latBlock, lngBlock } = this.getBlockIndices(latIdx, lngIdx);
+        const { latMacro, lngMacro } = this.getMacroIndices(latIdx, lngIdx);
+        // 上の段（1kmブロック・10kmブロック）の色キャッシュも、そのマスの属する分だけ捨てる
+        if (this.macroTeamCache && typeof this.macroTeamCache.delete === 'function') {
+            this.macroTeamCache.delete(this.macroTeamCacheKey(latMacro, lngMacro));
+        }
+        // 実績マスの集合が変わったので索引を作り直す
+        this.claimIndexCache = null;
         return this.blockTeamCache.delete(this.blockTeamCacheKey(latBlock, lngBlock));
     }
 
@@ -332,7 +515,119 @@ class GridManager {
     clearBlockTeamCache() {
         const size = this.blockTeamCache.size;
         this.blockTeamCache.clear();
+        this.macroTeamCache.clear();
+        this.claimIndexCache = null;
         return size;
+    }
+
+    /* ---------------- 10kmブロック（広域表示） ---------------- */
+
+    /** マス座標 → 10kmブロック座標（10×10の1kmブロック = 100×100マス ≒ 10km四方） */
+    getMacroIndices(latIdx, lngIdx) {
+        const cells = BLOCK_TILES * MACRO_BLOCKS;
+        return {
+            latMacro: Math.floor(latIdx / cells),
+            lngMacro: Math.floor(lngIdx / cells)
+        };
+    }
+
+    getMacroId(latMacro, lngMacro) {
+        return `macro_${latMacro}_${lngMacro}`;
+    }
+
+    /** 10kmブロックの外枠（南西・北東の座標） */
+    getMacroBounds(latMacro, lngMacro) {
+        const cells = BLOCK_TILES * MACRO_BLOCKS;
+        const south = latMacro * cells * this.LAT_GRID;
+        const north = south + cells * this.LAT_GRID;
+        const west = lngMacro * cells * this.LNG_GRID;
+        const east = west + cells * this.LNG_GRID;
+        return [[south, west], [north, east]];
+    }
+
+    /**
+     * 実績マスの索引（claimedTilesCache を1回走査して作る）。
+     *   blocks : blockId -> [{ latIdx, lngIdx, team }]（そのブロックに入っている実績マス）
+     *   macros : 実績マスを含む10kmブロックの macroId の集合
+     * 実績が変わったら claimIndexCache = null にして作り直す。
+     * サイズも見ているので、実績をまとめて入れ替えた場面でも古い索引を使わない。
+     */
+    claimIndex() {
+        const size = this.claimedTilesCache ? this.claimedTilesCache.size : 0;
+        if (this.claimIndexCache && this.claimIndexCache.size === size) return this.claimIndexCache;
+
+        const blocks = new Map();
+        const macros = new Set();
+        if (this.claimedTilesCache && typeof this.claimedTilesCache.entries === 'function') {
+            for (const [meshId, team] of this.claimedTilesCache.entries()) {
+                if (team !== 'white' && team !== 'black') continue;
+                const parts = meshId.split('_');
+                if (parts.length !== 3) continue;
+                const latIdx = parseInt(parts[1], 10);
+                const lngIdx = parseInt(parts[2], 10);
+                if (!Number.isFinite(latIdx) || !Number.isFinite(lngIdx)) continue;
+                const blockId = this.getBlockId(Math.floor(latIdx / BLOCK_TILES), Math.floor(lngIdx / BLOCK_TILES));
+                const list = blocks.get(blockId);
+                if (list) list.push({ latIdx, lngIdx, team });
+                else blocks.set(blockId, [{ latIdx, lngIdx, team }]);
+                const { latMacro, lngMacro } = this.getMacroIndices(latIdx, lngIdx);
+                macros.add(this.getMacroId(latMacro, lngMacro));
+            }
+        }
+        this.claimIndexCache = { size, blocks, macros };
+        return this.claimIndexCache;
+    }
+
+    /** 実績マスを含む10kmブロックの集合（広域描画用） */
+    macroClaimIndex() {
+        return this.claimIndex().macros;
+    }
+
+    /**
+     * 10kmブロックの色。
+     *   実績マスが1個も無いブロック: 10km用のハッシュで決定論的に決める
+     *     （zoom 6 は画面に約12,500枚並ぶので、中の100×100マスは数えない）。
+     *   実績があるブロック: 中の1kmブロック100個の色（＝各100マスの多数決）の多数決。
+     *     の1kmブロックの色は非表示ピンを中立として扱った結果なので、区域の中は色に溶み出ない。
+     *   同数は10km用ハッシュ。
+     */
+    resolveMacroTeam(latMacro, lngMacro, claimIndex = null) {
+        const weekId = this.getWeekId();
+        const index = claimIndex || this.macroClaimIndex();
+        if (!index.has(this.getMacroId(latMacro, lngMacro))) {
+            return deterministicMacroTeam(weekId, latMacro, lngMacro);
+        }
+        const latBase = latMacro * MACRO_BLOCKS;
+        const lngBase = lngMacro * MACRO_BLOCKS;
+        let white = 0;
+        let black = 0;
+        for (let dLat = 0; dLat < MACRO_BLOCKS; dLat += 1) {
+            for (let dLng = 0; dLng < MACRO_BLOCKS; dLng += 1) {
+                const team = this.resolveBlockTeamCached(latBase + dLat, lngBase + dLng);
+                if (team === 'white') white += 1;
+                else black += 1;
+            }
+        }
+        if (white > black) return 'white';
+        if (black > white) return 'black';
+        return deterministicMacroTeam(weekId, latMacro, lngMacro);
+    }
+
+    macroTeamCacheKey(latMacro, lngMacro) {
+        return `${this.getWeekId()}|${latMacro}_${lngMacro}`;
+    }
+
+    /** キャッシュ付きの resolveMacroTeam（描画はこちらを使う） */
+    resolveMacroTeamCached(latMacro, lngMacro, claimIndex = null) {
+        if (!this.macroTeamCache || typeof this.macroTeamCache.get !== 'function') {
+            return this.resolveMacroTeam(latMacro, lngMacro, claimIndex);
+        }
+        const key = this.macroTeamCacheKey(latMacro, lngMacro);
+        const cached = this.macroTeamCache.get(key);
+        if (cached === 'white' || cached === 'black') return cached;
+        const team = this.resolveMacroTeam(latMacro, lngMacro, claimIndex);
+        this.macroTeamCache.set(key, team);
+        return team;
     }
 
     /** 現在の週ID（初期配置のハッシュ種）。短時間キャッシュして描画中の再計算を避ける */
@@ -505,7 +800,7 @@ class GridManager {
         if (!this.app || !this.app.supabaseManager) return;
 
         // 広域表示（zoom < 13）では取得しない：そのズームではマスを描かず、
-        // 大範囲クエリによるDB負荷・描画負荷も防ぐ（zoom 11〜12 は初期配置だけでブロックを描く）。
+        // 大範囲クエリによるDB負荷・描画負荷も防ぐ（zoom 6〜12 は初期配置だけで区画を描く）。
         const zoom = this.map ? this.map.getZoom() : 0;
         const minZoom = (typeof CONFIG !== 'undefined' && CONFIG && Number.isFinite(CONFIG.REMOTE_FETCH_MIN_ZOOM))
             ? CONFIG.REMOTE_FETCH_MIN_ZOOM
@@ -657,6 +952,14 @@ class GridManager {
             rectangle.setStyle(this.getBlockStyle(this.resolveBlockTeam(latBlock, lngBlock)));
             rectangle._twStyleKey = null;
         }
+        for (const [macroId, rectangle] of this.renderedMacroBlocks.entries()) {
+            const parts = macroId.split('_');
+            if (parts.length !== 3) continue;
+            const latMacro = parseInt(parts[1], 10);
+            const lngMacro = parseInt(parts[2], 10);
+            rectangle.setStyle(this.getMacroStyle(this.resolveMacroTeam(latMacro, lngMacro)));
+            rectangle._twStyleKey = null;
+        }
     }
 
     /**
@@ -680,16 +983,22 @@ class GridManager {
                 rectangle.setStyle(this.getBlockStyle(null));
             } catch (e) { /* 同上 */ }
         }
+        for (const rectangle of this.renderedMacroBlocks.values()) {
+            try {
+                rectangle.setStyle(this.getMacroStyle(null));
+            } catch (e) { /* 同上 */ }
+        }
         this.saveTilesToStorage();
         console.log(`[Debug] Cleared ${cleared} local tiles -> blank board.`);
         return cleared;
     }
 
     /**
-     * 画面内を描く。ズームで3段階に切り替える（updateGrids の唯一の入口）。
-     *   zoom >= 16 : 100mマス
-     *   11 <= zoom < 16 : 1kmブロック（県レベルまで）
-     *   zoom < 11 : 何も描かない（画面上のマス・ブロックをすべて消す）
+     * 画面内を描く。ズームで4段階に切り替える（updateGrids の唯一の入口）。
+     *   zoom >= 14 : 100mマス
+     *   10 <= zoom <= 13 : 1kmブロック
+     *   6 <= zoom <= 9 : 10kmブロック
+     *   zoom <= 5 : 何も描かない（画面上のマス・ブロックをすべて消す）
      */
     updateGrids() {
         const bounds = this.map.getBounds();
@@ -698,20 +1007,29 @@ class GridManager {
 
         if (mode === 'tiles') {
             this.clearRenderedBlocks();
+            this.clearRenderedMacroBlocks();
             this.updateTileGrids(bounds);
             return;
         }
         if (mode === 'blocks') {
             this.clearRenderedTiles();
+            this.clearRenderedMacroBlocks();
             this.updateBlockGrids(bounds);
             return;
         }
-        // 広域（zoom < 11）: 過疎地で「誰かが歩いた場所」が浮き上がらないよう、何も描かない
+        if (mode === 'macroBlocks') {
+            this.clearRenderedTiles();
+            this.clearRenderedBlocks();
+            this.updateMacroGrids(bounds);
+            return;
+        }
+        // 広域（zoom <= 5）: 過疎地で「誰かが歩いた場所」が浮き上がらないよう、何も描かない
         this.clearRenderedTiles();
         this.clearRenderedBlocks();
+        this.clearRenderedMacroBlocks();
     }
 
-    /** 近距離（zoom >= 16）: 実績マス＋初期配置の100mマス */
+    /** 近距離（zoom >= 14）: 実績マス＋初期配置の100mマス */
     updateTileGrids(bounds) {
         const south = bounds.getSouth();
         const north = bounds.getNorth();
@@ -724,7 +1042,7 @@ class GridManager {
         const maxLngIdx = Math.floor(east / this.LNG_GRID);
 
         const currentVisibleMeshes = new Set();
-        const maxRender = (typeof CONFIG !== 'undefined' && CONFIG.MAX_TILES_PER_RENDER) ? CONFIG.MAX_TILES_PER_RENDER : 1200;
+        const maxRender = (typeof CONFIG !== 'undefined' && CONFIG.MAX_TILES_PER_RENDER) ? CONFIG.MAX_TILES_PER_RENDER : 3000;
         let renderedCount = 0;
 
         // 1. 実績マスを先に描く（描画上限に達しても、実際に塗られたマスを優先して残す）
@@ -767,7 +1085,7 @@ class GridManager {
         }
     }
 
-    /** 中〜広域（11 <= zoom < 16）: 10×10マスをまとめた1kmブロック */
+    /** 中距離（10 <= zoom <= 13）: 10×10マスをまとめた1kmブロック */
     updateBlockGrids(bounds) {
         const minLatIdx = Math.floor(bounds.getSouth() / this.LAT_GRID);
         const maxLatIdx = Math.floor(bounds.getNorth() / this.LAT_GRID);
@@ -779,10 +1097,10 @@ class GridManager {
         const minLngBlock = Math.floor(minLngIdx / BLOCK_TILES);
         const maxLngBlock = Math.floor(maxLngIdx / BLOCK_TILES);
 
-        // ブロックは県レベル（zoom 11）で約1,400枚になるので、マス用の上限とは別に持つ
+        // 1kmブロックは zoom 10 で約4,950枚になるので、マス用の上限とは別に持つ
         const maxRender = (typeof CONFIG !== 'undefined' && CONFIG.BLOCK_RENDER_MAX_COUNT)
             ? CONFIG.BLOCK_RENDER_MAX_COUNT
-            : (typeof CONFIG !== 'undefined' && CONFIG.MAX_TILES_PER_RENDER ? Math.max(CONFIG.MAX_TILES_PER_RENDER, BLOCK_RENDER_MAX_COUNT) : BLOCK_RENDER_MAX_COUNT);
+            : BLOCK_RENDER_MAX_COUNT;
         const currentVisibleBlocks = new Set();
         let renderedCount = 0;
 
@@ -822,9 +1140,58 @@ class GridManager {
         this.renderedBlocks.clear();
     }
 
+    /** 10kmブロックのレイヤーをすべて消す（モード切替・広域表示用） */
+    clearRenderedMacroBlocks() {
+        for (const rectangle of this.renderedMacroBlocks.values()) {
+            this.gridLayerGroup.removeLayer(rectangle);
+        }
+        this.renderedMacroBlocks.clear();
+    }
+
+    /**
+     * 広域（6 <= zoom <= 9）: 1kmブロックを 10×10 にまとめた10kmブロック。
+     *   実績の無い10kmブロックはハッシュ1回で色を決めるので、
+     *   zoom 6（約12,500枚）でも数十msで描き終わる。
+     */
+    updateMacroGrids(bounds) {
+        const cells = BLOCK_TILES * MACRO_BLOCKS;
+        const minLatMacro = Math.floor(Math.floor(bounds.getSouth() / this.LAT_GRID) / cells);
+        const maxLatMacro = Math.floor(Math.floor(bounds.getNorth() / this.LAT_GRID) / cells);
+        const minLngMacro = Math.floor(Math.floor(bounds.getWest() / this.LNG_GRID) / cells);
+        const maxLngMacro = Math.floor(Math.floor(bounds.getEast() / this.LNG_GRID) / cells);
+
+        const maxRender = (typeof CONFIG !== 'undefined' && CONFIG.MACRO_RENDER_MAX_COUNT)
+            ? CONFIG.MACRO_RENDER_MAX_COUNT
+            : MACRO_RENDER_MAX_COUNT;
+        // 実績マスを含む10kmブロックの索引は1回だけ作って全マスで使う
+        const claimIndex = this.macroClaimIndex();
+        const currentVisibleMacros = new Set();
+        let renderedCount = 0;
+
+        for (let latMacro = minLatMacro; latMacro <= maxLatMacro; latMacro++) {
+            for (let lngMacro = minLngMacro; lngMacro <= maxLngMacro; lngMacro++) {
+                if (renderedCount >= maxRender) break;
+                const macroId = this.getMacroId(latMacro, lngMacro);
+                currentVisibleMacros.add(macroId);
+                // 既に描いてあるマスも、中の塗りが変わっていれば色を更新する
+                this.renderSingleMacro(macroId, latMacro, lngMacro, claimIndex);
+                renderedCount++;
+            }
+        }
+
+        // 画面外に出た10kmブロックを消す
+        for (const [macroId, rectangle] of this.renderedMacroBlocks.entries()) {
+            if (!currentVisibleMacros.has(macroId)) {
+                this.gridLayerGroup.removeLayer(rectangle);
+                this.renderedMacroBlocks.delete(macroId);
+            }
+        }
+    }
+
     /**
      * 今のズームに合った形で1マス分を描き直す（塗った直後に呼ばれる）。
-     *   近距離 = そのマス、中距離 = そのマスが属するブロック、広域 = 何もしない
+     *   近距離 = そのマス、中距離 = そのマスが属する1kmブロック、
+     *   広域 = そのマスが属する10kmブロック、非表示域 = 何もしない
      */
     renderTileForCurrentZoom(meshId, latIdx, lngIdx) {
         const zoom = (this.map && typeof this.map.getZoom === 'function') ? this.map.getZoom() : null;
@@ -834,6 +1201,10 @@ class GridManager {
         if (mode === 'blocks') {
             const { latBlock, lngBlock } = this.getBlockIndices(latIdx, lngIdx);
             return this.renderSingleBlock(this.getBlockId(latBlock, lngBlock), latBlock, lngBlock);
+        }
+        if (mode === 'macroBlocks') {
+            const { latMacro, lngMacro } = this.getMacroIndices(latIdx, lngIdx);
+            return this.renderSingleMacro(this.getMacroId(latMacro, lngMacro), latMacro, lngMacro);
         }
         return null;
     }
@@ -922,6 +1293,47 @@ class GridManager {
         this.renderedBlocks.set(blockId, rect);
         return rect;
     }
+
+    /**
+     * 10kmブロックの描画スタイル。1kmブロックよりさらに薄く・枠線も細くする。
+     */
+    getMacroStyle(team) {
+        const base = this.getTileStyle(team);
+        const claimed = team === 'white' || team === 'black';
+        return {
+            ...base,
+            weight: MACRO_STROKE_WEIGHT,
+            opacity: MACRO_STROKE_OPACITY,
+            fillOpacity: claimed ? MACRO_FILL_OPACITY : base.fillOpacity,
+            interactive: false
+        };
+    }
+
+    /**
+     * 1マス（約10km四方）描く。色は resolveMacroTeamCached（中の1kmブロックの多数決）。
+     * 見た目が前回と同じなら setStyle しない（12,500枚の再描画を防ぐ）。
+     */
+    renderSingleMacro(macroId, latMacro, lngMacro, claimIndex = null) {
+        const team = this.resolveMacroTeamCached(latMacro, lngMacro, claimIndex);
+        const styleKey = `${team}|${this.currentSkin()}`;
+
+        if (this.renderedMacroBlocks.has(macroId)) {
+            const rect = this.renderedMacroBlocks.get(macroId);
+            if (rect._twStyleKey === styleKey) return rect;
+            rect.setStyle(this.getMacroStyle(team));
+            rect._twStyleKey = styleKey;
+            return rect;
+        }
+
+        const style = this.getMacroStyle(team);
+        const bounds = this.getMacroBounds(latMacro, lngMacro);
+        const options = this.canvasRenderer ? { ...style, renderer: this.canvasRenderer } : style;
+        const rect = L.rectangle(bounds, options);
+        rect._twStyleKey = styleKey;
+        rect.addTo(this.gridLayerGroup);
+        this.renderedMacroBlocks.set(macroId, rect);
+        return rect;
+    }
 }
 
 if (typeof module !== 'undefined' && module.exports) {
@@ -929,16 +1341,24 @@ if (typeof module !== 'undefined' && module.exports) {
         GridManager,
         tileHash,
         deterministicInitialTeam,
+        deterministicInitialTeamFast,
+        initialTeamWithSeed,
+        tileHashWeekSeed,
         deterministicBlockTeam,
+        deterministicMacroTeam,
         isoWeekIdJst,
         displayModeForZoom,
         zoomThresholds,
         TILE_FILL_OPACITY,
         BLOCK_TILES,
+        MACRO_BLOCKS,
         BLOCK_FILL_OPACITY,
+        MACRO_FILL_OPACITY,
         TILE_DETAIL_MIN_ZOOM,
         BLOCK_RENDER_MIN_ZOOM,
+        MACRO_RENDER_MIN_ZOOM,
         BLOCK_RENDER_MAX_COUNT,
+        MACRO_RENDER_MAX_COUNT,
         REMOTE_FETCH_MIN_ZOOM,
         FOOTPRINT_STROKE_COLOR,
         FOOTPRINT_STORAGE_KEY

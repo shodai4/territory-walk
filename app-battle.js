@@ -229,7 +229,7 @@ class TerritoryWalkAppBattle extends TerritoryWalkAppStats {
         setText('battle-detail-tiles-black', blackTiles.toLocaleString());
         setText('battle-detail-tiles-white', whiteTiles.toLocaleString());
 
-        // だから今の割合（％バーと同じ計算式）
+        // 現在の割合（％バーと同じ計算式）
         setText('battle-detail-pct-black', blackPct);
         setText('battle-detail-pct-white', whitePct);
         const barBlack = document.getElementById('battle-detail-bar-black');

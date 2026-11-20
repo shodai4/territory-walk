@@ -293,7 +293,7 @@ class TerritoryWalkAppGameplay extends TerritoryWalkAppTracking {
             }
 
             if (!this.isAppInBackground) {
-                // ズームに合った形で描く（近距離=マス / 中距離=1kmブロック / 広域=描かない）
+                // ズームに合った形で描く（近距離=100mマス / 中距離=1kmブロック / 広域=10kmブロック / zoom 5以下=描かない）
                 if (typeof this.gridManager.renderTileForCurrentZoom === 'function') {
                     this.gridManager.renderTileForCurrentZoom(meshId, latIdx, lngIdx);
                 } else {

@@ -18,20 +18,27 @@ const CONFIG = {
     WIDE_ZOOM: 5,
     MIN_ZOOM: 2,
     MAX_ZOOM: 20,
-    // 地図の描画はズームで3段階（grid.js の displayModeForZoom）:
-    //   zoom >= 16 … 100mマス（初期配置＋実績＋自分の足跡）
-    //   11〜15 … 10×10マス（約1km四方）のブロックに集計して薄く描く（県レベルまで）
-    //   10以下 … マスもブロックも一切描かない（広域での居場所特定を防ぐ）
+    // 地図の描画はズームで4段階（grid.js の displayModeForZoom）:
+    //   zoom >= 14 … 100mマス（初期配置＋実績＋自分の足跡）
+    //   10〜13 … 10×10マス（約1km四方）のブロックに集計して薄く描く
+    //   6〜9 … 10×10ブロック（約10km四方）に集計してさらに薄く描く
+    //   5以下 … マスもブロックも一切描かない（広域での居場所特定を防ぐ）
     // 100mマスを描く下限ズーム
-    TILE_DETAIL_MIN_ZOOM: 16,
-    // 何かを描く下限ズーム（1kmブロック）。これ未満は何も描かない
-    TILE_RENDER_MIN_ZOOM: 11,
+    TILE_DETAIL_MIN_ZOOM: 14,
+    // 1kmブロックを描く下限ズーム。これ未満は1kmブロックを描かない
+    TILE_RENDER_MIN_ZOOM: 10,
+    // 10kmブロックを描く下限ズーム。これ未満（zoom 5以下）は何も描かない
+    MACRO_RENDER_MIN_ZOOM: 6,
     // 100mマスの取得下限ズーム。
-    //   zoom 11〜12 はブロック表示だが、画面全体が15km四方を超えて
-    //   supabase.js の MAX_INDEX_SPAN（150マス≒15km）を超えるため、そもそも取得しない。
-    //   そのズームでは初期配置と自分の実績だけでブロックを描く（1マス単位の取得は12以下で禁止）。
+    //   zoom 13 はブロック表示だが、取得した実績はブロックの色に効くため 13 から取得する。
+    //   画面全体が15km四方を超える場合は supabase.js の MAX_INDEX_SPAN（150マス≒15km）で止める。
     REMOTE_FETCH_MIN_ZOOM: 13,
-    MAX_TILES_PER_RENDER: 1200,
+    // 画面に描く枚数の上限（375×812 の画面あたり）
+    //   100mマス：zoom 14 で約1,950枚 / 1kmブロック：zoom 10 で約4,950枚
+    //   10kmブロック：zoom 6 で約12,500枚（実績なしはハッシュ1回で色を決めるので軽い）
+    MAX_TILES_PER_RENDER: 3000,
+    BLOCK_RENDER_MAX_COUNT: 6500,
+    MACRO_RENDER_MAX_COUNT: 13000,
     // デバッグ機能（D-PAD・コイン操作・プレビュー・チーム切替等）のマスタースイッチ
     // App Store 提出ビルドのため false（UIごと非表示になり、AdMob も本番IDへ自動切替）
     ENABLE_DEBUG_TOOLS: false
