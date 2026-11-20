@@ -33,12 +33,12 @@ const CONFIG = {
     //   zoom 13 はブロック表示だが、取得した実績はブロックの色に効くため 13 から取得する。
     //   画面全体が15km四方を超える場合は supabase.js の MAX_INDEX_SPAN（150マス≒15km）で止める。
     REMOTE_FETCH_MIN_ZOOM: 13,
-    // 画面に描く枚数の上限（375×812 の画面あたり）
-    //   100mマス：zoom 14 で約1,950枚 / 1kmブロック：zoom 10 で約4,950枚
-    //   10kmブロック：zoom 6 で約12,500枚（実績なしはハッシュ1回で色を決めるので軽い）
-    MAX_TILES_PER_RENDER: 3000,
-    BLOCK_RENDER_MAX_COUNT: 6500,
-    MACRO_RENDER_MAX_COUNT: 13000,
+    // 画面に描く枚数の上限（画面あたり。iPhone の最大サイズ 440×956 でも欠けない値）
+    //   100mマス：zoom 14 で約1,950枚（Pro Max 約2,750）/ 1kmブロック：zoom 10 で約4,950枚（約6,800）
+    //   10kmブロック：zoom 6 で約12,500枚（約17,200）。実績なしはハッシュ1回で色を決めるので軽い
+    MAX_TILES_PER_RENDER: 3500,
+    BLOCK_RENDER_MAX_COUNT: 8000,
+    MACRO_RENDER_MAX_COUNT: 18000,
     // デバッグ機能（D-PAD・コイン操作・プレビュー・チーム切替等）のマスタースイッチ
     // App Store 提出ビルドのため false（UIごと非表示になり、AdMob も本番IDへ自動切替）
     ENABLE_DEBUG_TOOLS: false

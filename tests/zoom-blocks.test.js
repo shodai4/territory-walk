@@ -97,11 +97,12 @@ function createMapStub(bounds, zoom) {
     };
 }
 
-/** 中心 lat/lng・画面 375×812px・指定ズームのときの地図範囲（緯度経度） */
-function viewportBounds(lat, lng, zoom) {
+/** 中心 lat/lng・指定ズームのときの地図範囲（緯度経度）。size は画面のCSSサイズ（既定 375×812） */
+function viewportBounds(lat, lng, zoom, size = [375, 812]) {
+    const [width, height] = size;
     const metersPerPixel = 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, zoom);
-    const halfHeight = (812 / 2) * metersPerPixel / 111320;
-    const halfWidth = (375 / 2) * metersPerPixel / (111320 * Math.cos(lat * Math.PI / 180));
+    const halfHeight = (height / 2) * metersPerPixel / 111320;
+    const halfWidth = (width / 2) * metersPerPixel / (111320 * Math.cos(lat * Math.PI / 180));
     return [lat - halfHeight, lng - halfWidth, lat + halfHeight, lng + halfWidth];
 }
 
@@ -109,11 +110,11 @@ function viewportBounds(lat, lng, zoom) {
  * 実際の GridManager を、地図と Leaflet のスタブで組み立てる。
  * localStorage はテストごとに空にする（週リセットの副作用を避ける）。
  */
-function createRealGrid({ claimed = [], zones = null, weekId = WEEK, zoom = 17, center = [34.6, 135.6] } = {}) {
+function createRealGrid({ claimed = [], zones = null, weekId = WEEK, zoom = 17, center = [34.6, 135.6], size = [375, 812] } = {}) {
     global.localStorage = createMemoryStorage();
     installLeafletStub();
 
-    const map = createMapStub(viewportBounds(center[0], center[1], zoom), zoom);
+    const map = createMapStub(viewportBounds(center[0], center[1], zoom, size), zoom);
     const app = {
         supabaseManager: { getCurrentWeekId: () => weekId },
         privacyZones: zones ? { containsMesh: (latIdx, lngIdx) => zones(latIdx, lngIdx) } : null
@@ -181,10 +182,11 @@ test('設定: CONFIG がこの仕様（マス=14以上 / 1km=10以上 / 10km=6�
     assert.match(configBlock, /TILE_RENDER_MIN_ZOOM:\s*10/);
     assert.match(configBlock, /MACRO_RENDER_MIN_ZOOM:\s*6/);
     assert.match(configBlock, /REMOTE_FETCH_MIN_ZOOM:\s*13/);
-    // 描画上限: zoom 14 の約1,950マス / zoom 10 の約4,950ブロック / zoom 6 の約12,500ブロックが収まる
-    assert.match(configBlock, /MAX_TILES_PER_RENDER:\s*3000/);
-    assert.match(configBlock, /BLOCK_RENDER_MAX_COUNT:\s*6500/);
-    assert.match(configBlock, /MACRO_RENDER_MAX_COUNT:\s*13000/);
+    // 描画上限: zoom 14 の約1,950マス / zoom 10 の約4,950ブロック / zoom 6 の約12,500ブロック
+    // （iPhone Pro Max の 440×956 でも 約2,750 / 約6,800 / 約17,200）がすべて収まる
+    assert.match(configBlock, /MAX_TILES_PER_RENDER:\s*3500/);
+    assert.match(configBlock, /BLOCK_RENDER_MAX_COUNT:\s*8000/);
+    assert.match(configBlock, /MACRO_RENDER_MAX_COUNT:\s*18000/);
     // 古いしきい値が残っていない
     assert.doesNotMatch(configBlock, /TILE_DETAIL_MIN_ZOOM:\s*16/);
     assert.doesNotMatch(configBlock, /TILE_RENDER_MIN_ZOOM:\s*11/);
@@ -384,7 +386,7 @@ test('描画: zoom 14 では100mマスを描き、画面の四隅まで欠けな
     assert.equal(grid.renderedBlocks.size, 0);
     assert.equal(grid.renderedMacroBlocks.size, 0);
     assert.ok(grid.renderedMeshes.size >= 1900, `375×812 の zoom 14 は約1,950マス（実際: ${grid.renderedMeshes.size}）`);
-    assert.ok(grid.renderedMeshes.size <= 3000, '描画上限以内');
+    assert.ok(grid.renderedMeshes.size <= 3500, '描画上限以内');
 
     // 画面の四隅のマスが描かれている（上限で下側が欠けていない）
     const bounds = map.getBounds();
@@ -459,6 +461,41 @@ test('描画: zoom 6 では10kmブロックで画面が埋まり、zoom 5 では
     map.state.zoom = 5;
     grid.updateGrids();
     assert.equal(grid.renderedMeshes.size + grid.renderedBlocks.size + grid.renderedMacroBlocks.size, 0);
+});
+
+test('描画: iPhone の最大サイズ（440×956）でも、どの段階も画面の四隅まで欠けない', () => {
+    const size = [440, 956];
+    const cases = [
+        { zoom: 14, key: 'renderedMeshes', unit: 'tile' },
+        { zoom: 10, key: 'renderedBlocks', unit: 'block' },
+        { zoom: 6, key: 'renderedMacroBlocks', unit: 'macro' }
+    ];
+
+    for (const { zoom, key } of cases) {
+        const { grid, map } = createRealGrid({ zoom, size });
+        grid.updateGrids();
+        const rendered = grid[key];
+        assert.ok(rendered.size > 0, `zoom ${zoom} で区画を描く`);
+
+        const bounds = map.getBounds();
+        const corners = [
+            [bounds.getSouth(), bounds.getWest()],
+            [bounds.getNorth(), bounds.getEast()]
+        ];
+        for (const [lat, lng] of corners) {
+            const { latIdx, lngIdx } = grid.getMeshIndices(lat, lng);
+            let id;
+            if (zoom >= 14) id = grid.getMeshId(latIdx, lngIdx);
+            else if (zoom >= 10) {
+                const { latBlock, lngBlock } = grid.getBlockIndices(latIdx, lngIdx);
+                id = grid.getBlockId(latBlock, lngBlock);
+            } else {
+                const { latMacro, lngMacro } = grid.getMacroIndices(latIdx, lngIdx);
+                id = grid.getMacroId(latMacro, lngMacro);
+            }
+            assert.ok(rendered.has(id), `zoom ${zoom}: 四隅 ${id} も描く（描画上限で欠けない）`);
+        }
+    }
 });
 
 test('描画: ブロックは薄い半透明で、細かな経路が見えない濃さにする', () => {

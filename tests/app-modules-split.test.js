@@ -55,7 +55,7 @@ test('分割: index.html が 12 本をこの順で読み、最後が app.js', ()
 
     const versions = new Set(srcs.map((s) => s.version));
     assert.equal(versions.size, 1, '分割モジュールは同じキャッシュバスターで揃える');
-    assert.ok([...versions][0] >= '20261121v65', '今回の変更版に上がっている');
+    assert.ok([...versions][0] >= '20261121v66', '今回の変更版に上がっている');
 });
 
 test('分割: 各ファイルは前のファイルのクラスを継承している', () => {
