@@ -631,7 +631,7 @@ test('配線: 文言は coins.js の共通ビルダーだけを使う', () => {
 
 test('キャッシュバスター: 変更したファイルは新しい版を指す', () => {
     assert.match(INDEX_HTML, /coins\.js\?v=20261122v56/);
-    assert.match(INDEX_HTML, /app-stats\.js\?v=20261122v67/);
-    assert.match(INDEX_HTML, /app-battle\.js\?v=20261122v67/);
-    assert.match(WWW_HTML, /app-stats\.js\?v=20261122v67/);
+    assert.match(INDEX_HTML, /app-stats\.js\?v=20261123v68/);
+    assert.match(INDEX_HTML, /app-battle\.js\?v=20261123v68/);
+    assert.match(WWW_HTML, /app-stats\.js\?v=20261123v68/);
 });
