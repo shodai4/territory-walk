@@ -705,9 +705,18 @@ class TerritoryWalkAppGameplay extends TerritoryWalkAppTracking {
             const jst = new Date(jstString);
 
             // Compute current ISO week
-            if (seasonBadge && this.supabaseManager) {
-                seasonBadge.textContent = this.supabaseManager.getCurrentWeekId();
+            const weekId = this.supabaseManager ? this.supabaseManager.getCurrentWeekId() : null;
+            if (seasonBadge && weekId) {
+                seasonBadge.textContent = weekId;
             }
+
+            // 月曜0時をまたいだら（アプリを閉じずに跨いだ場合も）先週の結果表を出す。
+            // カウントダウンは1秒ごとなので、週が変わった瞬間だけ確認する。
+            if (weekId && this.countdownWeekId && this.countdownWeekId !== weekId
+                && typeof this.checkWeeklyResetResult === 'function') {
+                Promise.resolve(this.checkWeeklyResetResult()).catch(() => {});
+            }
+            if (weekId) this.countdownWeekId = weekId;
 
             // Next Monday 00:00 JST
             const nextMonday = new Date(jst);

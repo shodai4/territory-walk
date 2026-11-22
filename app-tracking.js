@@ -350,6 +350,10 @@ class TerritoryWalkAppTracking extends TerritoryWalkAppMarking {
             // 止めていたカウントダウンを即時更新して刻み直し、陣地を1回だけ取り直す
             // （この中で8秒ポーリングも再開する）
             this.resumeForegroundUpdates();
+            // バックグラウンドのまま月曜0時をまたいだ場合に、先週の結果表を取りこぼさない
+            if (typeof this.checkWeeklyResetResult === 'function') {
+                Promise.resolve(this.checkWeeklyResetResult()).catch(() => {});
+            }
             // Apple Watch も復帰と同時に追いつかせる
             this.initWatchBridge();
             this.notifyWatchState('foreground');
@@ -386,6 +390,10 @@ class TerritoryWalkAppTracking extends TerritoryWalkAppMarking {
                     if (this.syncQueue) this.syncQueue.flush('app-active');
                     this.refreshGlobalTeamCounts({ force: true });
                     this.resumeForegroundUpdates();
+                    // ネイティブの appStateChange 側でも週跨ぎの結果表を確認する（visibilitychange が来ない端末の保険）
+                    if (typeof this.checkWeeklyResetResult === 'function') {
+                        Promise.resolve(this.checkWeeklyResetResult()).catch(() => {});
+                    }
                     this.initWatchBridge();
                     this.notifyWatchState('foreground');
                 });

@@ -63,6 +63,8 @@ class TerritoryWalkAppCore {
         this.resetCountdownTimer = null;
         // リセットまでのカウントダウンを即時更新する関数（initResetCountdown が差し込む）
         this.updateResetCountdown = null;
+        // 週明けの結果表を出した週（同じ週で何度も重ねないためのガード）
+        this.weeklyResultShownWeek = null;
         // 復帰時の陣地取り直しを連打で重ねないための最終実行時刻
         this.lastForegroundRefreshAt = 0;
 

@@ -1,6 +1,7 @@
 /**
  * TERRITORY WALK - app-battle.js
  * 週次バトルの見える化（画面上部％バーのタップ＝今週の戦況詳細／過去週の履歴／通算戦績）
+ * と、週明けの「先週の最終結果」モーダル（起動・フォアグラウンド復帰・週跨ぎで1回だけ）
  *
  * app.js（旧4,283行の単一クラス）を役割ごとに分割したモジュール。
  * 読み込み順は index.html の <script> 順（app-config → app-core → … → app-gameplay → app.js）。
@@ -365,4 +366,282 @@ class TerritoryWalkAppBattle extends TerritoryWalkAppStats {
         return status;
     }
 
+    initWeeklyResultModal() {
+        const modal = document.getElementById('weekly-result-modal');
+        const closeBtn = document.getElementById('btn-close-weekly-result');
+        const closeIconBtn = document.getElementById('btn-close-weekly-result-icon');
+        const shareBtn = document.getElementById('btn-share-weekly-result');
+        const openFromMenuBtn = document.getElementById('btn-open-weekly-result');
+
+        const closeModal = () => {
+            if (!modal) return;
+            modal.classList.add('hidden');
+            const currentWeek = this.supabaseManager ? this.supabaseManager.getCurrentWeekId() : 'current';
+            localStorage.setItem('tw_last_seen_week', currentWeek);
+        };
+
+        if (closeBtn) closeBtn.addEventListener('click', closeModal);
+        if (closeIconBtn) closeIconBtn.addEventListener('click', closeModal);
+        this.setupSwipeUpToClose('weekly-result-modal', closeModal);
+
+        if (modal) {
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) closeModal();
+            });
+        }
+
+        if (shareBtn) {
+            shareBtn.addEventListener('click', () => {
+                const res = this.lastResultData || {};
+                const outcomeText = res.isWin ? '勝利陣営！' : (res.isDraw ? '引き分け！' : '敗北陣営...');
+                const teamName = (res.myTeam || this.currentTeam || 'black').toUpperCase();
+                const blackPct = res.blackPct || 50;
+                const whitePct = res.whitePct || 50;
+                const tiles = res.myTiles || 0;
+                const inviteCode = (this.coinManager && this.coinManager.getInviteCode()) || '';
+
+                // シェア文言（末尾のハッシュタグ #テリウォーク 等）は coins.js の共通定義に一本化
+                const shareText = CoinManager.buildWeeklyResultShareText({
+                    teamName,
+                    outcomeText,
+                    blackPct,
+                    whitePct,
+                    tiles,
+                    inviteCode
+                });
+                const shareUrl = 'https://shodai4.com/territory-walk/';
+
+                if (navigator.share) {
+                    navigator.share({
+                        title: 'TERRITORY WALK シーズン結果',
+                        text: shareText,
+                        url: shareUrl
+                    }).catch(() => {
+                        window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText + '\n' + shareUrl)}`, '_blank');
+                    });
+                } else {
+                    window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText + '\n' + shareUrl)}`, '_blank');
+                }
+            });
+        }
+
+        if (openFromMenuBtn) {
+            openFromMenuBtn.addEventListener('click', () => {
+                if (this.menuModal) this.menuModal.classList.add('hidden');
+                this.showWeeklyResultModal(true);
+            });
+        }
+    }
+
+    /**
+     * 週が変わった（月曜0時をまたいだ）ら、先週の最終結果モーダルを1回だけ出す。
+     *   - 起動時だけでなく、フォアグラウンド復帰・週跨ぎのカウントダウン更新からも呼ばれる
+     *     （バックグラウンドのまま月曜0時を過ぎても取りこぼさない）
+     *   - tw_last_seen_week が未設定（引き継ぎ・再インストール・設定の入れ替え）でも、
+     *     前週に対戦データがあれば出す
+     *   - 同じ週で何度呼ばれてもモーダルは重ねない（shownWeek ガード＋表示中の確認）
+     */
+    async checkWeeklyResetResult() {
+        if (!this.supabaseManager || !this.statsManager) return;
+        const currentWeek = this.supabaseManager.getCurrentWeekId();
+        if (!currentWeek) return;
+        const lastSeen = localStorage.getItem('tw_last_seen_week');
+
+        let targetWeek = null;
+        if (!lastSeen) {
+            // 初回インストールのルール説明の上に先週の結果を重ねない（2回目以降の起動だけ見る）
+            const rulesSeen = this.startupGate && typeof this.startupGate.hasSeenRules === 'function'
+                ? this.startupGate.hasSeenRules()
+                : localStorage.getItem('territory_rules_seen_v1') != null;
+            if (!rulesSeen) {
+                localStorage.setItem('tw_last_seen_week', currentWeek);
+                return;
+            }
+
+            const previousWeek = typeof this.getPreviousWeekId === 'function' ? this.getPreviousWeekId(currentWeek) : null;
+            let previousResult = null;
+            if (previousWeek && typeof this.statsManager.getPreviousWeekResult === 'function') {
+                try {
+                    previousResult = await this.statsManager.getPreviousWeekResult(previousWeek);
+                } catch (e) {
+                    previousResult = null;
+                }
+            }
+            const previousTiles = previousResult
+                ? (Number(previousResult.blackTotal) || 0) + (Number(previousResult.whiteTotal) || 0)
+                : 0;
+            if (!previousWeek || previousTiles === 0) {
+                // 前週に誰の記録も無ければ出すものは無い
+                localStorage.setItem('tw_last_seen_week', currentWeek);
+                return;
+            }
+            targetWeek = previousWeek;
+        } else if (lastSeen !== currentWeek) {
+            // New week has arrived!
+            targetWeek = lastSeen;
+        } else {
+            return;
+        }
+
+        // 同じ週の結果表は1回だけ（復帰のたびに重ねない）
+        if (this.weeklyResultShownWeek === targetWeek) return;
+        const modal = document.getElementById('weekly-result-modal');
+        if (modal && modal.classList && !modal.classList.contains('hidden')) {
+            this.weeklyResultShownWeek = targetWeek;
+            return;
+        }
+        this.weeklyResultShownWeek = targetWeek;
+        setTimeout(() => {
+            this.showWeeklyResultModal(false, targetWeek);
+        }, 1000);
+    }
+
+    async showWeeklyResultModal(isManual = false, targetWeek = null) {
+        const modal = document.getElementById('weekly-result-modal');
+        if (!modal) return;
+
+        const currentWeek = this.supabaseManager ? this.supabaseManager.getCurrentWeekId() : '2026-W46';
+        const weekToShow = targetWeek || (isManual ? currentWeek : this.getPreviousWeekId(currentWeek));
+
+        document.getElementById('result-week-id').textContent = isManual ? `${currentWeek} (現在)` : weekToShow;
+        document.getElementById('result-winner-banner').textContent = '集計中...';
+        modal.classList.remove('hidden');
+
+        let result = null;
+        if (isManual) {
+            // デバッグプレビュー時は現在のリアルタイム実データを動的に取得
+            if (this.statsManager && this.statsManager.getCurrentWeekLiveResult) {
+                result = await this.statsManager.getCurrentWeekLiveResult();
+            }
+            if (!result) {
+                let bCount = 0;
+                let wCount = 0;
+                if (this.gridManager) {
+                    for (const team of this.gridManager.claimedTilesCache.values()) {
+                        if (team === 'black') bCount++;
+                        else if (team === 'white') wCount++;
+                    }
+                }
+                const tot = bCount + wCount;
+                const bPct = tot > 0 ? Math.round((bCount / tot) * 100) : 50;
+                const wPct = tot > 0 ? 100 - bPct : 50;
+                const myT = this.currentTeam || 'black';
+                let winT = 'draw';
+                if (bCount > wCount) winT = 'black';
+                else if (wCount > bCount) winT = 'white';
+
+                result = {
+                    weekId: currentWeek,
+                    blackTotal: bCount,
+                    whiteTotal: wCount,
+                    blackPct: bPct,
+                    whitePct: wPct,
+                    winnerTeam: winT,
+                    isDraw: (winT === 'draw'),
+                    myTeam: myT,
+                    myTiles: (this.statsManager && this.statsManager.stats) ? (this.statsManager.stats.lifetime_tiles || 0) : 0,
+                    isWin: (winT === myT)
+                };
+            }
+        } else {
+            result = this.statsManager ? await this.statsManager.getPreviousWeekResult(weekToShow) : null;
+        }
+
+        const banner = document.getElementById('result-winner-banner');
+        const outcome = document.getElementById('result-battle-outcome');
+        const barBlack = document.getElementById('result-bar-black');
+        const barWhite = document.getElementById('result-bar-white');
+
+        if (!result) {
+            banner.textContent = '記録なし';
+            document.getElementById('result-winner-subtitle').textContent = `${weekToShow} の対戦データはありません`;
+            document.getElementById('result-score-black').textContent = '-';
+            document.getElementById('result-score-white').textContent = '-';
+            const blackTiles = document.getElementById('result-black-tiles');
+            const whiteTiles = document.getElementById('result-white-tiles');
+            if (blackTiles) blackTiles.textContent = '-';
+            if (whiteTiles) whiteTiles.textContent = '-';
+            if (barBlack) barBlack.style.width = '50%';
+            if (barWhite) barWhite.style.width = '50%';
+            document.getElementById('result-my-team').textContent = this.currentTeam === 'black' ? 'Black' : 'White';
+            document.getElementById('result-my-tiles').textContent = '0 マス';
+            document.getElementById('result-battle-outcome').textContent = '対戦なし';
+            return;
+        }
+
+        if (isManual) {
+            document.getElementById('result-winner-subtitle').textContent = '今シーズン終了時のリアルタイム判定シミュレーション';
+        } else {
+            document.getElementById('result-winner-subtitle').textContent = '前週のシーズン対戦が決着しました';
+        }
+
+        if (result.winnerTeam === 'black') {
+            banner.innerHTML = '<span class="text-zinc-100 font-bold">BLACK TEAM WIN</span>';
+        } else if (result.winnerTeam === 'white') {
+            banner.innerHTML = '<span class="text-zinc-100 font-bold">WHITE TEAM WIN</span>';
+        } else {
+            banner.innerHTML = '<span class="text-amber-400 font-bold">DRAW (引き分け)</span>';
+        }
+
+        document.getElementById('result-score-black').innerHTML = `<span class="text-white font-bold">${result.blackPct}%</span>`;
+        document.getElementById('result-score-white').innerHTML = `<span class="text-white font-bold">${result.whitePct}%</span>`;
+
+        // 獲得総マス数は勢力ゲージではなく下の詳細テーブルに表示（文字溢れ防止）
+        const blackTiles = document.getElementById('result-black-tiles');
+        const whiteTiles = document.getElementById('result-white-tiles');
+        if (blackTiles) blackTiles.textContent = `${Number(result.blackTotal || 0).toLocaleString()} マス`;
+        if (whiteTiles) whiteTiles.textContent = `${Number(result.whiteTotal || 0).toLocaleString()} マス`;
+
+        // 対戦比率ゲージバーの更新（アニメーション伸縮）
+        if (barBlack) barBlack.style.width = `${Math.max(5, Math.min(95, result.blackPct))}%`;
+        if (barWhite) barWhite.style.width = `${Math.max(5, Math.min(95, result.whitePct))}%`;
+
+        document.getElementById('result-my-team').textContent = result.myTeam === 'black' ? 'Black' : 'White';
+        document.getElementById('result-my-tiles').textContent = `${result.myTiles.toLocaleString()} マス`;
+
+        if (result.isDraw) {
+            outcome.innerHTML = '<span class="text-zinc-400">引き分け</span>';
+        } else if (result.isWin) {
+            outcome.innerHTML = '<span class="text-amber-400 font-bold">VICTORY (勝利陣営)</span>';
+            if (!isManual && this.statsManager) {
+                // サーバー集計済みなら二重計上しない（recordBattleOutcome が判定する）
+                if (typeof this.statsManager.recordBattleOutcome === 'function') {
+                    this.statsManager.recordBattleOutcome(true);
+                } else {
+                    this.statsManager.stats.battles_won += 1;
+                    this.statsManager.saveLocalStats();
+                }
+            }
+        } else {
+            outcome.innerHTML = '<span class="text-zinc-400">DEFEAT (敗北陣営)</span>';
+            if (!isManual && this.statsManager) {
+                if (typeof this.statsManager.recordBattleOutcome === 'function') {
+                    this.statsManager.recordBattleOutcome(false);
+                } else {
+                    this.statsManager.stats.battles_lost += 1;
+                    this.statsManager.saveLocalStats();
+                }
+            }
+        }
+
+        this.lastResultData = result;
+
+        // 週明け直後はサーバーの確定記録で通算戦績を上書きする（開かなかった週の取りこぼしも埋める）
+        if (!isManual) this.loadBattleHistory({ force: true });
+    }
+
+    getPreviousWeekId(currentWeekId) {
+        // e.g., '2026-W46' -> '2026-W45'
+        const parts = currentWeekId.split('-W');
+        if (parts.length === 2) {
+            const year = parseInt(parts[0], 10);
+            const week = parseInt(parts[1], 10);
+            if (week > 1) {
+                return `${year}-W${String(week - 1).padStart(2, '0')}`;
+            } else {
+                return `${year - 1}-W52`;
+            }
+        }
+        return currentWeekId;
+    }
 }
