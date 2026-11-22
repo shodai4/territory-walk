@@ -177,20 +177,30 @@ class TerritoryWalkAppBattle extends TerritoryWalkAppStats {
                 await this.refreshGlobalTeamCounts({ force: true });
             } catch (e) { /* 通信できなくてもローカル集計で表示する */ }
         }
-        let summary = null;
-        if (this.statsManager && typeof this.statsManager.getWeeklyBattleSummary === 'function') {
-            try {
-                summary = await this.statsManager.getWeeklyBattleSummary(weekId);
-            } catch (e) {
-                summary = null;
-            }
-        }
+        // 今週の実参加者（territory_weekly_rankings）と、チームに振り分けられた登録人数
+        // （territory_users の黒・白の総人数）を同時に取りに行く。週明け直後は実参加者が
+        // 0 人でも、登録人数は前の週から変わらないので戦況の規模が伝わる。
+        const summaryRequest = this.statsManager && typeof this.statsManager.getWeeklyBattleSummary === 'function'
+            ? Promise.resolve()
+                .then(() => this.statsManager.getWeeklyBattleSummary(weekId))
+                .catch(() => null)
+            : Promise.resolve(null);
+        const teamCountsRequest = this.supabaseManager && typeof this.supabaseManager.fetchUserTeamCounts === 'function'
+            ? Promise.resolve()
+                .then(() => this.supabaseManager.fetchUserTeamCounts())
+                .catch(() => null)
+            : Promise.resolve(null);
+        const [summary, teamCounts] = await Promise.all([summaryRequest, teamCountsRequest]);
 
-        this.renderWeeklyBattleDetail(summary);
+        this.renderWeeklyBattleDetail(summary, teamCounts);
     }
 
-    /** 集計結果を「今週の戦況詳細」モーダルへ描画する（オフライン時はローカル集計へフォールバック） */
-    renderWeeklyBattleDetail(summary) {
+    /**
+     * 集計結果を「今週の戦況詳細」モーダルへ描画する（オフライン時はローカル集計へフォールバック）。
+     * @param {object|null} summary getWeeklyBattleSummary の結果（今週の実参加者・参加者マス合計）
+     * @param {{black:number, white:number}|null} [teamCounts] fetchUserTeamCounts の結果（チーム配属人数）
+     */
+    renderWeeklyBattleDetail(summary, teamCounts = null) {
         const loadingEl = document.getElementById('battle-detail-loading');
         const contentEl = document.getElementById('battle-detail-content');
         const emptyEl = document.getElementById('battle-detail-empty');
@@ -216,13 +226,25 @@ class TerritoryWalkAppBattle extends TerritoryWalkAppStats {
         const playerTotal = summaryOk ? Number(summary.playerTotal) || 0 : 0;
         const participantTiles = summaryOk ? Number(summary.participantTiles) || 0 : 0;
 
+        // チームに振り分けられた登録人数（territory_users）。取れなければ null ＝ 表示は「—」
+        const toCount = (value) => {
+            if (value == null) return null;
+            const num = Number(value);
+            return Number.isFinite(num) ? Math.max(0, Math.floor(num)) : null;
+        };
+        const registeredBlack = teamCounts ? toCount(teamCounts.black) : null;
+        const registeredWhite = teamCounts ? toCount(teamCounts.white) : null;
+        const registeredOk = registeredBlack !== null && registeredWhite !== null;
+        const registeredTotal = registeredOk ? registeredBlack + registeredWhite : 0;
+
         if (loadingEl) loadingEl.classList.add('hidden');
 
         // 共有ボタンは、この描画で出した数字（summary・マス数）を使い回す
         this.weeklyBattleDetailSummary = summaryOk ? summary : null;
 
-        // 今週まだ誰も塗っていない（＝対戦が始まっていない）週だけ案内文へ
-        if (summaryOk && totalTiles === 0 && playerTotal === 0) {
+        // 今週まだ誰も塗っておらず、登録人数も取れていない週だけ案内文へ
+        // （週明け直後でも、振り分けられた登録人数が分かるなら戦況の規模は見せる）
+        if (summaryOk && totalTiles === 0 && playerTotal === 0 && !registeredOk) {
             contentEl.classList.add('hidden');
             if (emptyEl) emptyEl.classList.remove('hidden');
             // この週は共有する数字が無い（前回の値を共有させない）
@@ -235,10 +257,20 @@ class TerritoryWalkAppBattle extends TerritoryWalkAppStats {
         contentEl.classList.remove('hidden');
         this.setWeeklyBattleShareVisible(true);
 
-        // 参加人数（サーバー集計が取れないときは「—」）
-        setText('battle-detail-players-total', summaryOk ? playerTotal.toLocaleString() : '—');
-        setText('battle-detail-players-black', summaryOk ? (Number(summary.blackPlayers) || 0).toLocaleString() : '—');
-        setText('battle-detail-players-white', summaryOk ? (Number(summary.whitePlayers) || 0).toLocaleString() : '—');
+        // チームの登録人数（territory_users の配属人数。取得できないときは「—」）
+        setText('battle-detail-players-total', registeredOk ? registeredTotal.toLocaleString() : '—');
+        setText('battle-detail-players-black', registeredOk ? registeredBlack.toLocaleString() : '—');
+        setText('battle-detail-players-white', registeredOk ? registeredWhite.toLocaleString() : '—');
+        const playersNoteEl = document.getElementById('battle-detail-players-note');
+        if (playersNoteEl) {
+            if (!registeredOk) {
+                playersNoteEl.textContent = 'チームの登録人数を取得できませんでした';
+            } else if (summaryOk) {
+                playersNoteEl.textContent = `黒・白に振り分けられた登録メンバーの人数です（今週歩いたのは ${playerTotal.toLocaleString()}人）`;
+            } else {
+                playersNoteEl.textContent = '黒・白に振り分けられた登録メンバーの人数です';
+            }
+        }
 
         // マス数（上部％バーと同じ基準）
         setText('battle-detail-tiles-total', totalTiles.toLocaleString());
@@ -262,12 +294,16 @@ class TerritoryWalkAppBattle extends TerritoryWalkAppStats {
 
         // 取得元の注記（オフライン／集計中はローカル集計であることを明示）
         if (sourceEl) {
-            if (!summaryOk) {
+            if (!summaryOk && !registeredOk) {
                 sourceEl.textContent = '最新の集計を取得できませんでした（オフライン）。マス数はこの端末が読み込んだ範囲の値です';
+            } else if (!summaryOk) {
+                sourceEl.textContent = '通信できないため、マス数はこの端末が読み込んだ範囲の値です（登録人数は黒・白の配属人数）';
+            } else if (!registeredOk) {
+                sourceEl.textContent = '登録人数を取得できませんでした。マス数は全国の週次塗り替えから集計しています';
             } else if (counts.source !== 'global') {
                 sourceEl.textContent = '全国集計がまだ取得できていないため、マス数はこの端末が読み込んだ範囲の値です';
             } else {
-                sourceEl.textContent = '全国のマス数（週の塗り替え）と、週間ランキングの実参加者から集計しています';
+                sourceEl.textContent = '登録人数は黒・白に振り分けられた総人数、マス数は全国の週次塗り替えから集計しています';
             }
         }
     }

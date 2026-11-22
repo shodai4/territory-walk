@@ -831,16 +831,17 @@
                 <div id="battle-detail-loading" class="text-center text-zinc-400 py-6 text-[11px]">集計中...</div>
 
                 <div id="battle-detail-content" class="hidden space-y-2.5">
-                    <!-- 今週の参加人数（territory_weekly_rankings の実参加者） -->
+                    <!-- チームに振り分けられた登録人数（territory_users の黒・白の総人数。週の切り替えでは減らない） -->
                     <div class="bg-zinc-950/80 border border-zinc-800 rounded-xl p-3 space-y-1.5">
                         <div class="flex items-center justify-between gap-2">
-                            <span class="text-zinc-400 text-[11px]">今週の参加人数</span>
+                            <span class="text-zinc-400 text-[11px]">チームの登録人数</span>
                             <span class="text-white font-bold text-sm"><span id="battle-detail-players-total">0</span><span class="text-[10px] text-zinc-400 ml-0.5">人</span></span>
                         </div>
                         <div class="flex items-center justify-between gap-2 text-[10px] text-zinc-400">
                             <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-sm bg-black border border-zinc-500"></span>黒チーム <span id="battle-detail-players-black" class="text-zinc-200 font-bold">0</span>人</span>
                             <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-sm bg-white"></span>白チーム <span id="battle-detail-players-white" class="text-zinc-200 font-bold">0</span>人</span>
                         </div>
+                        <p id="battle-detail-players-note" class="text-[9px] text-zinc-500 leading-tight">黒・白に振り分けられた登録メンバーの人数です</p>
                     </div>
 
                     <!-- 今週塗られたマス数（上部％バーと同じ基準） -->

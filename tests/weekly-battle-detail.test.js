@@ -2,7 +2,8 @@
  * TERRITORY WALK - Node tests
  * 週次バトルの見える化（5点改修の 1〜3）
  *   1) 画面上部％バー（#battle-bar-container）はタップ可能で、専用モーダルを開く
- *   2) 「今週の戦況詳細」は当週の territory_weekly_rankings から参加人数を集計する
+ *   2) 「今週の戦況詳細」の人数欄は、チームに振り分けられた登録人数（territory_users）を出す
+ *      （当週の territory_weekly_rankings の実参加人数は注記に小さく添える）
  *   3) 過去週のバトル履歴（#container-battle-history）を週ごとに描画する
  *   4) 通算戦績はサーバーの過去週実績から算出し、ローカル加算の二重計上を防ぐ
  *
@@ -329,13 +330,28 @@ test('通算: サーバー実績が未取得のうちは従来どおりローカ
  * 5. 画面（DOM 描画）
  * ------------------------------------------------------------------ */
 
-function createElementStub() {
+function createClassList(initial = []) {
+    const set = new Set(initial);
+    return {
+        set,
+        add: (...names) => names.forEach((name) => set.add(name)),
+        remove: (...names) => names.forEach((name) => set.delete(name)),
+        contains: (name) => set.has(name),
+        toggle: (name, force) => {
+            const on = typeof force === 'boolean' ? force : !set.has(name);
+            if (on) set.add(name); else set.delete(name);
+            return on;
+        }
+    };
+}
+
+function createElementStub(initialClasses = []) {
     return {
         _innerHTML: '',
         textContent: '',
         style: {},
         dataset: {},
-        classList: { add() {}, remove() {}, toggle() {}, contains() { return false; } },
+        classList: createClassList(initialClasses),
         addEventListener() {},
         setAttribute() {},
         getAttribute() { return null; },
@@ -344,12 +360,35 @@ function createElementStub() {
     };
 }
 
-function loadAppWithDom() {
-    const elements = {
+function createDetailElements() {
+    return {
         'container-battle-history': createElementStub(),
         'stat-battles-record': createElementStub(),
-        'battle-bar-container': createElementStub()
+        'battle-bar-container': createElementStub(),
+        'weekly-battle-modal': createElementStub(['hidden']),
+        'battle-detail-loading': createElementStub(),
+        'battle-detail-content': createElementStub(['hidden']),
+        'battle-detail-empty': createElementStub(['hidden']),
+        'battle-detail-extra-note': createElementStub(['hidden']),
+        'battle-detail-source': createElementStub(),
+        'battle-detail-week': createElementStub(),
+        'battle-detail-players-total': createElementStub(),
+        'battle-detail-players-black': createElementStub(),
+        'battle-detail-players-white': createElementStub(),
+        'battle-detail-players-note': createElementStub(),
+        'battle-detail-tiles-total': createElementStub(),
+        'battle-detail-tiles-black': createElementStub(),
+        'battle-detail-tiles-white': createElementStub(),
+        'battle-detail-pct-black': createElementStub(),
+        'battle-detail-pct-white': createElementStub(),
+        'battle-detail-formula': createElementStub(),
+        'battle-detail-bar-black': createElementStub(),
+        'battle-detail-bar-white': createElementStub(),
+        'btn-share-weekly-battle': createElementStub(['hidden'])
     };
+}
+
+function loadAppWithDom(elements = createDetailElements()) {
     const sandbox = {
         console: { log() {}, warn() {}, error() {} },
         document: {
@@ -375,6 +414,19 @@ function loadAppWithDom() {
         vm.runInContext(readAppFile(file), context, { filename: file });
     });
     const app = vm.runInContext('Object.create(TerritoryWalkApp.prototype)', context);
+    return { app, elements, context };
+}
+
+/** 戦況詳細の描画用：全国マス数は loaded 済みにして、人数欄の描画だけを見る */
+function createDetailApp(options = {}) {
+    const { app, elements } = loadAppWithDom();
+    app.currentTeam = 'black';
+    app.globalTeamCounts = options.globalTeamCounts || { black: 600, white: 400, loaded: true };
+    app.supabaseManager = {
+        getCurrentWeekId: () => CURRENT_WEEK,
+        ...(options.supabaseManager || {})
+    };
+    app.statsManager = options.statsManager || null;
     return { app, elements };
 }
 
@@ -446,6 +498,100 @@ test('配線: 今週の戦況詳細モーダルの要素が揃っている', () 
     assert.match(HTML, /黒マス|黒 \d+マス ÷ 合計/, '計算式がひと目でわかる');
 });
 
+test('文言: 人数欄は「チームの登録人数」（実参加者の「今週の参加人数」は見出しにしない）', () => {
+    assert.match(HTML, /チームの登録人数/, '振り分けられた登録人数であることが見出しで分かる');
+    assert.doesNotMatch(HTML, /今週の参加人数/, '週明けに0人と出る実参加者の見出しは残さない');
+    assert.match(HTML, /id="battle-detail-players-note"[^>]*>[^<]*振り分けられた登録メンバー/, '補足説明がある');
+    assert.match(HTML, /今週塗られたマス数/, 'マス数の欄はそのまま残す');
+    assert.match(WWW_HTML, /チームの登録人数/, 'www/ にも反映');
+    assert.doesNotMatch(WWW_HTML, /今週の参加人数/, 'www/ にも古い見出しを残さない');
+});
+
+test('描画: 人数欄は territory_users の振り分け人数、マス数は従来どおり全国集計', () => {
+    const { app, elements } = createDetailApp();
+
+    app.renderWeeklyBattleDetail(
+        { ok: true, weekId: CURRENT_WEEK, blackPlayers: 6, whitePlayers: 4, playerTotal: 10, participantTiles: 900 },
+        { black: 32, white: 28 }
+    );
+
+    assert.equal(elements['battle-detail-players-total'].textContent, '60');
+    assert.equal(elements['battle-detail-players-black'].textContent, '32');
+    assert.equal(elements['battle-detail-players-white'].textContent, '28');
+    assert.equal(elements['battle-detail-tiles-total'].textContent, '1,000', 'マス数はそのまま');
+    assert.equal(elements['battle-detail-tiles-black'].textContent, '600');
+    assert.equal(elements['battle-detail-tiles-white'].textContent, '400');
+    assert.match(elements['battle-detail-players-note'].textContent, /振り分けられた登録メンバー/);
+    assert.match(elements['battle-detail-players-note'].textContent, /今週歩いたのは 10人/, '実参加者は補足に添える');
+    assert.equal(elements['battle-detail-content'].classList.contains('hidden'), false);
+    assert.equal(elements['battle-detail-empty'].classList.contains('hidden'), true);
+});
+
+test('描画: 週明けで0マス0人でも、振り分け人数があれば案内文にせず表示する', () => {
+    const { app, elements } = createDetailApp({ globalTeamCounts: { black: 0, white: 0, loaded: true } });
+
+    app.renderWeeklyBattleDetail(
+        { ok: true, weekId: CURRENT_WEEK, blackPlayers: 0, whitePlayers: 0, playerTotal: 0, participantTiles: 0 },
+        { black: 12, white: 15 }
+    );
+
+    assert.equal(elements['battle-detail-content'].classList.contains('hidden'), false, '人数は出す');
+    assert.equal(elements['battle-detail-empty'].classList.contains('hidden'), true);
+    assert.equal(elements['battle-detail-players-total'].textContent, '27');
+    assert.equal(elements['battle-detail-tiles-total'].textContent, '0');
+    assert.match(elements['battle-detail-players-note'].textContent, /今週歩いたのは 0人/);
+});
+
+test('描画: 0マス・0人・登録人数も取れない週だけ案内文', () => {
+    const { app, elements } = createDetailApp({ globalTeamCounts: { black: 0, white: 0, loaded: true } });
+
+    app.renderWeeklyBattleDetail(
+        { ok: true, weekId: CURRENT_WEEK, blackPlayers: 0, whitePlayers: 0, playerTotal: 0, participantTiles: 0 },
+        null
+    );
+
+    assert.equal(elements['battle-detail-content'].classList.contains('hidden'), true);
+    assert.equal(elements['battle-detail-empty'].classList.contains('hidden'), false);
+    assert.equal(app.weeklyBattleDetailSummary, null);
+});
+
+test('描画: 登録人数が取れないときは「—」（マス数はそのまま出す）', () => {
+    const { app, elements } = createDetailApp();
+
+    app.renderWeeklyBattleDetail(
+        { ok: true, weekId: CURRENT_WEEK, blackPlayers: 3, whitePlayers: 2, playerTotal: 5, participantTiles: 42 },
+        null
+    );
+
+    assert.equal(elements['battle-detail-players-total'].textContent, '—');
+    assert.equal(elements['battle-detail-players-black'].textContent, '—');
+    assert.equal(elements['battle-detail-players-white'].textContent, '—');
+    assert.equal(elements['battle-detail-tiles-total'].textContent, '1,000');
+    assert.match(elements['battle-detail-players-note'].textContent, /取得できませんでした/);
+    assert.match(elements['battle-detail-source'].textContent, /登録人数を取得できませんでした/);
+});
+
+test('配線: モーダルを開くと登録人数も取りに行って描画する', async () => {
+    let calls = 0;
+    const { app, elements } = createDetailApp({
+        supabaseManager: {
+            fetchUserTeamCounts: async () => { calls += 1; return { black: 5, white: 7 }; }
+        },
+        statsManager: {
+            getWeeklyBattleSummary: async () => ({ ok: true, weekId: CURRENT_WEEK, blackPlayers: 1, whitePlayers: 0, playerTotal: 1, participantTiles: 3 })
+        }
+    });
+
+    await app.openWeeklyBattleDetail();
+
+    assert.equal(calls, 1, 'fetchUserTeamCounts で territory_users の人数を取る');
+    assert.equal(elements['battle-detail-players-total'].textContent, '12');
+    assert.equal(elements['battle-detail-players-black'].textContent, '5');
+    assert.equal(elements['battle-detail-players-white'].textContent, '7');
+    assert.equal(elements['battle-detail-content'].classList.contains('hidden'), false);
+    assert.match(elements['battle-detail-source'].textContent, /振り分けられた総人数/);
+});
+
 test('配線: ％バーのタップと戦績表示は app-battle.js が受け持つ', () => {
     const battle = readAppFile('app-battle.js');
     assert.match(battle, /^class TerritoryWalkAppBattle extends TerritoryWalkAppStats \{/m);
@@ -454,4 +600,6 @@ test('配線: ％バーのタップと戦績表示は app-battle.js が受け持
     assert.match(readAppFile('app-core.js'), /this\.initWeeklyBattleDetail\(\);/, '起動時に配線する');
     assert.match(readAppFile('app-stats.js'), /this\.loadBattleHistory\(\);/, '戦績モーダルを開いたら履歴を読み直す');
     assert.match(readAppFile('app-battle.js'), /からタップ|openWeeklyBattleDetail/, '％バーのクリックで詳細を開く');
+    assert.match(readAppFile('app-battle.js'), /fetchUserTeamCounts\b/, '人数欄はチーム配属人数（territory_users）から取る');
+    assert.match(readAppFile('app-battle.js'), /renderWeeklyBattleDetail\(summary, teamCounts\)/, '取得した登録人数を描画へ渡す');
 });

@@ -769,7 +769,7 @@ test('文言: 今週の戦況詳細の見出しは「現在の割合」（「だ
     const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
     assert.match(html, /現在の割合/, '見出しは現在の割合');
     assert.doesNotMatch(html, /だから今の割合/, '不自然な「だから今の割合」は残さない');
-    // 上2つ（今週の参加人数・今週塗られたマス数）と同じ言い方に揃っている
-    assert.match(html, /今週の参加人数/);
+    // 上2つ（チームの登録人数・今週塗られたマス数）と同じ言い方に揃っている
+    assert.match(html, /チームの登録人数/);
     assert.match(html, /今週塗られたマス数/);
 });
