@@ -957,8 +957,12 @@ class CoinManager {
 
     /**
      * 共有シート（iOS ならネイティブのシェアシート）を優先し、
-     * 使えない環境では X の投稿画面を開く。コインは付与しない。
-     * @returns {Promise<boolean>} 共有シートを開けた／投稿画面を開いたら true、操作キャンセルは false
+     * 使えない環境では X の投稿画面を開く。それも塞がれたとき（アプリ内WebView等）は
+     * 文面をクリップボードへコピーして知らせる。コインは付与しない。
+     *
+     * 呼び出し側は、タップの直後にこれを呼ぶこと（先に await すると共有シートを開く
+     * ユーザー操作の判定が切れてしまうため）。
+     * @returns {Promise<'shared'|'opened'|'copied'|'cancelled'|'failed'>}
      */
     static async shareText(text, title = 'テリトリーウォーク') {
         const body = String(text == null ? '' : text);
@@ -969,19 +973,33 @@ class CoinManager {
         if (canUseShareSheet) {
             try {
                 await navigator.share({ title, text: body });
-                return true;
+                return 'shared';
             } catch (e) {
-                // ユーザーがシェアシートを閉じただけなら投稿画面は開かない
-                if (e && e.name === 'AbortError') return false;
+                // ユーザーがシェアシートを閉じただけなら、他の手段は出さない
+                if (e && e.name === 'AbortError') return 'cancelled';
                 // それ以外は X の投稿画面へフォールバックする
             }
         }
 
         const xUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(body)}`;
-        if (typeof window !== 'undefined' && window && typeof window.open === 'function') {
-            window.open(xUrl, '_blank');
-        }
-        return true;
+        let opened = null;
+        try {
+            if (typeof window !== 'undefined' && window && typeof window.open === 'function') {
+                opened = window.open(xUrl, '_blank');
+            }
+        } catch (e) { /* ポップアップが拒否された場合はコピーへ回す */ }
+        if (opened) return 'opened';
+
+        // アプリ内WebViewやポップアップブロックで開けないときは、Xに貼れるよう文面を渡す
+        try {
+            if (typeof navigator !== 'undefined' && navigator
+                && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+                await navigator.clipboard.writeText(body);
+                return 'copied';
+            }
+        } catch (e) { /* ignore */ }
+
+        return 'failed';
     }
 
     canShareToXToday() {

@@ -149,6 +149,9 @@ class TerritoryWalkAppBattle extends TerritoryWalkAppStats {
         if (!modal) return;
         modal.classList.remove('hidden');
 
+        // シェアをタップした瞬間に通信待ちでタップ判定が切れないよう、自分のマス数を先読みする
+        if (typeof this.prefetchMyWeeklyRank === 'function') this.prefetchMyWeeklyRank();
+
         const loadingEl = document.getElementById('battle-detail-loading');
         const contentEl = document.getElementById('battle-detail-content');
         const emptyEl = document.getElementById('battle-detail-empty');
@@ -174,7 +177,6 @@ class TerritoryWalkAppBattle extends TerritoryWalkAppStats {
                 await this.refreshGlobalTeamCounts({ force: true });
             } catch (e) { /* 通信できなくてもローカル集計で表示する */ }
         }
-
         let summary = null;
         if (this.statsManager && typeof this.statsManager.getWeeklyBattleSummary === 'function') {
             try {
@@ -283,7 +285,7 @@ class TerritoryWalkAppBattle extends TerritoryWalkAppStats {
      * 参加人数（描画済み summary）をそのまま使う。コインは付与しない。
      */
     async shareWeeklyBattle() {
-        if (typeof CoinManager === 'undefined') return false;
+        if (typeof CoinManager === 'undefined') return 'failed';
 
         const counts = typeof this.getScoreCounts === 'function'
             ? this.getScoreCounts()
@@ -300,11 +302,16 @@ class TerritoryWalkAppBattle extends TerritoryWalkAppStats {
         const weekId = this.supabaseManager && typeof this.supabaseManager.getCurrentWeekId === 'function'
             ? this.supabaseManager.getCurrentWeekId()
             : null;
+
+        // タップの直後に共有シートを開けるよう、自分のマス数は先読み済みの値を使う
         let myTiles = 0;
-        if (this.statsManager && typeof this.statsManager.getMyWeeklyRank === 'function') {
+        const cache = this.weeklyRankCache;
+        if (cache && cache.weekId === weekId) {
+            myTiles = cache.tilesCount;
+        } else if (this.statsManager && typeof this.statsManager.getMyWeeklyRank === 'function') {
             try {
                 const mine = await this.statsManager.getMyWeeklyRank(weekId);
-                myTiles = mine ? Number(mine.tilesCount) || 0 : 0;
+                myTiles = mine ? Math.max(0, Math.floor(Number(mine.tilesCount) || 0)) : 0;
             } catch (e) { /* オフライン時は0マスで共有 */ }
         }
 
@@ -317,11 +324,12 @@ class TerritoryWalkAppBattle extends TerritoryWalkAppStats {
             myTeam: this.currentTeam || 'black',
             myTiles
         });
-        const shared = await CoinManager.shareText(text, 'テリトリーウォーク 今週の戦況');
-        if (shared && typeof this.showToast === 'function') {
-            this.showToast('共有画面を開きました');
+        const status = await CoinManager.shareText(text, 'テリトリーウォーク 今週の戦況');
+        if (typeof this.showToast === 'function') {
+            if (status === 'copied') this.showToast('シェア用の文面をコピーしました（Xに貼り付けて投稿できます）');
+            else if (status === 'shared' || status === 'opened') this.showToast('共有画面を開きました');
         }
-        return shared;
+        return status;
     }
 
 }

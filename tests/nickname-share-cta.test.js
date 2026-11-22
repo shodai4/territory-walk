@@ -183,7 +183,7 @@ function createApp(options = {}) {
     };
     const opened = shared.opened;
     sandbox.window = {
-        open: (url, target) => { opened.push({ url, target }); return null; },
+        open: (url, target) => { opened.push({ url, target }); return { closed: false }; },
         addEventListener() {},
         document: sandbox.document,
         localStorage: storage,
@@ -308,7 +308,7 @@ test('共有: navigator.share があればシェアシートを開き、Xは開�
 
     const result = await CoinManager.shareText('テスト本文', 'タイトル');
 
-    assert.equal(result, true);
+    assert.equal(result, 'shared');
     assert.equal(sharedPayloads.length, 1);
     assert.deepEqual(JSON.parse(JSON.stringify(sharedPayloads[0])), { title: 'タイトル', text: 'テスト本文' });
     assert.equal(shared.opened.length, 0, 'フォールバックのXは開かない');
@@ -320,7 +320,7 @@ test('共有: シェアシートが無ければ twitter intent を開く', async
 
     const result = await CoinManager.shareText('本文 #テリウォーク');
 
-    assert.equal(result, true);
+    assert.equal(result, 'opened');
     assert.equal(shared.opened.length, 1);
     const url = new URL(shared.opened[0].url);
     assert.equal(url.hostname, 'twitter.com');
@@ -336,7 +336,7 @@ test('共有: ユーザーがシェアシートを閉じただけならXを開�
 
     const result = await CoinManager.shareText('本文');
 
-    assert.equal(result, false);
+    assert.equal(result, 'cancelled');
     assert.equal(shared.opened.length, 0, 'キャンセルで勝手にXへ飛ばさない');
 });
 
@@ -346,8 +346,35 @@ test('共有: シェアシートが失敗したらXへフォールバックす�
 
     const result = await CoinManager.shareText('本文');
 
-    assert.equal(result, true);
+    assert.equal(result, 'opened');
     assert.equal(shared.opened.length, 1);
+});
+
+test('共有: ポップアップが塞がれた環境では文面をコピーする（アプリ内WebView対策）', async () => {
+    const copied = [];
+    const { context, shared, elements } = createApp({
+        navigator: {
+            share: undefined,
+            clipboard: { writeText: (text) => { copied.push(text); return Promise.resolve(); } }
+        }
+    });
+    // window.open がブロックされた状態を再現する
+    context.window.open = () => null;
+    void elements;
+
+    const result = await context.__CoinManager.shareText('本文です');
+
+    assert.equal(result, 'copied');
+    assert.deepEqual(copied, ['本文です']);
+});
+
+test('共有: どの手段も使えないときは failed を返す（トーストを出さない）', async () => {
+    const { context } = createApp({ navigator: {} });
+    context.window.open = () => null;
+
+    const result = await context.__CoinManager.shareText('本文');
+
+    assert.equal(result, 'failed');
 });
 
 /* ------------------------------------------------------------------ *
@@ -369,7 +396,7 @@ test('配線: マイ戦績のシェアは今週のマス数・順位を実デー
 
     const result = await app.shareMyWeeklyResult();
 
-    assert.equal(result, true);
+    assert.equal(result, 'shared');
     assert.equal(payloads.length, 1);
     assert.match(payloads[0].text, /今週の戦果：512マス開拓（白組）/);
     assert.match(payloads[0].text, /今週の順位は3位！/);
@@ -378,8 +405,55 @@ test('配線: マイ戦績のシェアは今週のマス数・順位を実デー
     assert.ok(shared.calls.some(([kind, message]) => kind === 'toast' && /共有画面/.test(message)));
 });
 
-test('配線: 戦況詳細のシェアは画面と同じ％と参加人数を使う', async () => {
-    const { app, elements, context } = createApp();
+test('配線: 順位を先読みしていれば、タップ時に通信せず共有シートを開く', async () => {
+    const { app, context } = createApp();
+    const payloads = [];
+    context.navigator.share = (payload) => { payloads.push(payload); return Promise.resolve(); };
+
+    app.weeklyRankCache = { weekId: '2026-W47', tilesCount: 77, rank: 2 };
+    let called = 0;
+    app.statsManager = { getMyWeeklyRank: async () => { called += 1; return { rank: 9, tilesCount: 9 }; } };
+
+    const status = await app.shareMyWeeklyResult();
+
+    assert.equal(status, 'shared');
+    assert.equal(called, 0, 'タップの瞬間に通信待ちを入れない');
+    assert.match(payloads[0].text, /77マス開拓/);
+    assert.match(payloads[0].text, /今週の順位は2位！/);
+});
+
+test('配線: 戦績モーダルを開いたときに順位を先読みする', async () => {
+    const { app } = createApp();
+    let called = 0;
+    app.statsManager.getMyWeeklyRank = async (weekId) => {
+        called += 1;
+        assert.equal(weekId, '2026-W47');
+        return { rank: 4, tilesCount: 88 };
+    };
+
+    app.openStatsModal('my-stats');
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(called, 1, 'モーダルを開いた時点で1回だけ先読み');
+    assert.deepEqual({ ...app.weeklyRankCache }, { weekId: '2026-W47', tilesCount: 88, rank: 4 });
+});
+
+test('配線: コピーへ回したときはその旨をトーストで知らせる', async () => {
+    const copied = [];
+    const { app, context, shared } = createApp({
+        navigator: { clipboard: { writeText: (text) => { copied.push(text); return Promise.resolve(); } } }
+    });
+    context.window.open = () => null;
+    app.weeklyRankCache = { weekId: '2026-W47', tilesCount: 5, rank: null };
+
+    const status = await app.shareMyWeeklyResult();
+
+    assert.equal(status, 'copied');
+    assert.ok(copied[0].includes(APP_STORE_URL), 'コピーする文面にもストアURLが入る');
+    assert.ok(shared.calls.some(([, message]) => /コピーしました/.test(message)));
+});
+
+test('配線: 戦況詳細のシェアは画面と同じ％と参加人数を使う', async () => {    const { app, elements, context } = createApp();
     const payloads = [];
     context.navigator.share = (payload) => { payloads.push(payload); return Promise.resolve(); };
 

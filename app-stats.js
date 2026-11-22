@@ -95,6 +95,36 @@ class TerritoryWalkAppStats extends TerritoryWalkAppMap {
         modal.classList.remove('hidden');
         this.updateStatsDisplay();
         this.switchStatsTab(tabKey);
+        // シェアをタップした瞬間に通信待ちでタップ判定が切れないよう、開いたときに先読みしておく
+        this.prefetchMyWeeklyRank();
+    }
+
+    /**
+     * 今週の順位・マス数を先読みしてキャッシュする（シェアを通信待ちなしで開くため）。
+     * 失敗しても何もしない（シェア側が改めて取得する）。
+     */
+    async prefetchMyWeeklyRank() {
+        if (this.weeklyRankRequest) return this.weeklyRankRequest;
+        const weekId = this.supabaseManager && typeof this.supabaseManager.getCurrentWeekId === 'function'
+            ? this.supabaseManager.getCurrentWeekId()
+            : null;
+        if (!this.statsManager || typeof this.statsManager.getMyWeeklyRank !== 'function') return null;
+
+        this.weeklyRankRequest = (async () => {
+            try {
+                const mine = await this.statsManager.getMyWeeklyRank(weekId);
+                if (mine) {
+                    this.weeklyRankCache = {
+                        weekId,
+                        tilesCount: Math.max(0, Math.floor(Number(mine.tilesCount) || 0)),
+                        rank: typeof mine.rank === 'number' ? mine.rank : null
+                    };
+                }
+            } catch (e) { /* オフラインならキャッシュ無しのまま */ }
+            this.weeklyRankRequest = null;
+            return this.weeklyRankCache || null;
+        })();
+        return this.weeklyRankRequest;
     }
 
     /**
@@ -229,11 +259,12 @@ class TerritoryWalkAppStats extends TerritoryWalkAppMap {
     }
 
     /**
-     * 「今週の戦果」を共有する。今週の塗りマスと順位はサーバー集計から取り、
-     * 取得できなくても「ここから参戦」の文言で共有できる。コインは付与しない。
+     * 「今週の戦果」を共有する。今週の塗りマスと順位は先読み済みの値を使い、
+     * まだ無いときだけ取りに行く（取得できなくても「ここから参戦」の文言で共有できる）。
+     * コインは付与しない。
      */
     async shareMyWeeklyResult() {
-        if (typeof CoinManager === 'undefined') return false;
+        if (typeof CoinManager === 'undefined') return 'failed';
 
         const weekId = this.supabaseManager && typeof this.supabaseManager.getCurrentWeekId === 'function'
             ? this.supabaseManager.getCurrentWeekId()
@@ -241,11 +272,15 @@ class TerritoryWalkAppStats extends TerritoryWalkAppMap {
 
         let tiles = 0;
         let rank = null;
-        if (this.statsManager && typeof this.statsManager.getMyWeeklyRank === 'function') {
+        const cache = this.weeklyRankCache;
+        if (cache && cache.weekId === weekId) {
+            tiles = cache.tilesCount;
+            rank = cache.rank;
+        } else if (this.statsManager && typeof this.statsManager.getMyWeeklyRank === 'function') {
             try {
                 const mine = await this.statsManager.getMyWeeklyRank(weekId);
                 if (mine) {
-                    tiles = Number(mine.tilesCount) || 0;
+                    tiles = Math.max(0, Math.floor(Number(mine.tilesCount) || 0));
                     rank = typeof mine.rank === 'number' ? mine.rank : null;
                 }
             } catch (e) { /* オフライン時は0マスの文言で共有する */ }
@@ -256,11 +291,12 @@ class TerritoryWalkAppStats extends TerritoryWalkAppMap {
             rank,
             myTeam: this.currentTeam || 'black'
         });
-        const shared = await CoinManager.shareText(text, 'テリトリーウォーク 今週の戦果');
-        if (shared && typeof this.showToast === 'function') {
-            this.showToast('共有画面を開きました');
+        const status = await CoinManager.shareText(text, 'テリトリーウォーク 今週の戦果');
+        if (typeof this.showToast === 'function') {
+            if (status === 'copied') this.showToast('シェア用の文面をコピーしました（Xに貼り付けて投稿できます）');
+            else if (status === 'shared' || status === 'opened') this.showToast('共有画面を開きました');
         }
-        return shared;
+        return status;
     }
 
     async switchStatsTab(tabKey) {
