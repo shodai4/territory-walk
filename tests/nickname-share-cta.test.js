@@ -137,6 +137,7 @@ function createApp(options = {}) {
         'menu-modal': createElement(['hidden']),
         'input-nickname': createElement(),
         'btn-save-nickname': createElement(),
+        'btn-stats-share-weekly': createElement(),
         'tab-my-stats': createElement(),
         'panel-my-stats': createElement(['hidden']),
         'tab-weekly-rank': createElement(),
@@ -402,7 +403,7 @@ test('配線: マイ戦績のシェアは今週のマス数・順位を実デー
     assert.match(payloads[0].text, /今週の順位は3位！/);
     assert.ok(payloads[0].text.includes(APP_STORE_URL));
     assert.deepEqual(app.coinAdds, [], 'シェアでコインは付与しない');
-    assert.ok(shared.calls.some(([kind, message]) => kind === 'toast' && /共有画面/.test(message)));
+    assert.deepEqual(shared.calls.filter(([kind]) => kind === 'toast'), [], 'モーダル中にキューされるトーストは出さない');
 });
 
 test('配線: 順位を先読みしていれば、タップ時に通信せず共有シートを開く', async () => {
@@ -438,19 +439,25 @@ test('配線: 戦績モーダルを開いたときに順位を先読みする', 
     assert.deepEqual({ ...app.weeklyRankCache }, { weekId: '2026-W47', tilesCount: 88, rank: 4 });
 });
 
-test('配線: コピーへ回したときはその旨をトーストで知らせる', async () => {
+test('配線: コピーへ回したときはボタン文言で知らせる（モーダル中でも見える）', async () => {
     const copied = [];
-    const { app, context, shared } = createApp({
+    const timers = [];
+    const { app, elements, context } = createApp({
         navigator: { clipboard: { writeText: (text) => { copied.push(text); return Promise.resolve(); } } }
     });
     context.window.open = () => null;
+    context.setTimeout = (fn) => { timers.push(fn); return 0; };
     app.weeklyRankCache = { weekId: '2026-W47', tilesCount: 5, rank: null };
 
     const status = await app.shareMyWeeklyResult();
 
     assert.equal(status, 'copied');
     assert.ok(copied[0].includes(APP_STORE_URL), 'コピーする文面にもストアURLが入る');
-    assert.ok(shared.calls.some(([, message]) => /コピーしました/.test(message)));
+    assert.equal(elements['btn-stats-share-weekly'].textContent, '文面をコピーしました');
+    assert.equal(elements['btn-stats-share-weekly'].disabled, true, '連打を防ぐ');
+
+    timers.forEach((fn) => fn());
+    assert.equal(elements['btn-stats-share-weekly'].disabled, false, 'しばらくして元に戻る');
 });
 
 test('配線: 戦況詳細のシェアは画面と同じ％と参加人数を使う', async () => {    const { app, elements, context } = createApp();

@@ -292,11 +292,38 @@ class TerritoryWalkAppStats extends TerritoryWalkAppMap {
             myTeam: this.currentTeam || 'black'
         });
         const status = await CoinManager.shareText(text, 'テリトリーウォーク 今週の戦果');
-        if (typeof this.showToast === 'function') {
-            if (status === 'copied') this.showToast('シェア用の文面をコピーしました（Xに貼り付けて投稿できます）');
-            else if (status === 'shared' || status === 'opened') this.showToast('共有画面を開きました');
-        }
+        this.showShareResult(status, document.getElementById('btn-stats-share-weekly'));
         return status;
+    }
+
+    /**
+     * シェアの結果を、モーダルを閉じても消えない形で伝える。
+     * トーストはモーダル表示中キューに退避されて見えないので、共有ボタンの文言を
+     * 一時的に差し替える（共有一覧が開いた共有シート自体はフィードバックになる）。
+     */
+    showShareResult(status, button) {
+        if (status === 'copied') {
+            this.flashButtonLabel(button, '文面をコピーしました');
+        } else if (status === 'failed') {
+            this.flashButtonLabel(button, '共有できませんでした');
+        }
+    }
+
+    /** ボタンの表示文言を一時的に差し替えて元に戻す */
+    flashButtonLabel(btn, message, ms = 1800) {
+        if (!btn) return;
+        const target = (typeof btn.querySelector === 'function' && btn.querySelector('span')) || btn;
+        if (!target) return;
+        if (!target.__twShareLabelSaved) {
+            target.__twShareLabelSaved = target.textContent;
+        }
+        target.textContent = message;
+        btn.disabled = true;
+        setTimeout(() => {
+            target.textContent = target.__twShareLabelSaved;
+            delete target.__twShareLabelSaved;
+            btn.disabled = false;
+        }, ms);
     }
 
     async switchStatsTab(tabKey) {

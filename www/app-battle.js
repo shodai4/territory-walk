@@ -325,10 +325,7 @@ class TerritoryWalkAppBattle extends TerritoryWalkAppStats {
             myTiles
         });
         const status = await CoinManager.shareText(text, 'テリトリーウォーク 今週の戦況');
-        if (typeof this.showToast === 'function') {
-            if (status === 'copied') this.showToast('シェア用の文面をコピーしました（Xに貼り付けて投稿できます）');
-            else if (status === 'shared' || status === 'opened') this.showToast('共有画面を開きました');
-        }
+        this.showShareResult(status, document.getElementById('btn-share-weekly-battle'));
         return status;
     }
 
