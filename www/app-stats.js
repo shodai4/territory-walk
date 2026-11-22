@@ -7,6 +7,10 @@
  * このファイルは TerritoryWalkAppMap を継承してメソッドを積み上げる。
  * メソッドの中身は分割前と同一（挙動・保存データ・DOM 操作は変えない）。
  */
+
+/** 「あとで」で閉じた表示名バナーの再表示を止める端末キー（未設定のまま人だけ保存する） */
+const NICKNAME_BANNER_DISMISSED_KEY = 'tw_nickname_banner_dismissed';
+
 class TerritoryWalkAppStats extends TerritoryWalkAppMap {
     initStatsModal() {
         const modal = document.getElementById('stats-modal');
@@ -15,12 +19,7 @@ class TerritoryWalkAppStats extends TerritoryWalkAppMap {
         const footerCloseBtn = document.getElementById('btn-stats-footer-close');
 
         if (openBtn) {
-            openBtn.addEventListener('click', () => {
-                if (this.menuModal) this.menuModal.classList.add('hidden');
-                modal.classList.remove('hidden');
-                this.updateStatsDisplay();
-                this.switchStatsTab('my-stats');
-            });
+            openBtn.addEventListener('click', () => this.openStatsModal('my-stats'));
         }
 
         const closeModal = () => modal.classList.add('hidden');
@@ -42,24 +41,10 @@ class TerritoryWalkAppStats extends TerritoryWalkAppMap {
             }
         });
 
-        // Save Nickname (表示名)
+        // Save Nickname (表示名) — バナー導線からの保存も同じ処理を使う
         const saveNickBtn = document.getElementById('btn-save-nickname');
         if (saveNickBtn) {
-            saveNickBtn.addEventListener('click', async () => {
-                const input = document.getElementById('input-nickname');
-                if (input && this.statsManager) {
-                    saveNickBtn.disabled = true;
-                    saveNickBtn.textContent = '保存中...';
-                    await this.statsManager.setNickname(input.value);
-                    saveNickBtn.textContent = '保存完了';
-                    this.showToast('表示名を更新しました');
-                    setTimeout(() => {
-                        saveNickBtn.textContent = '保存';
-                        saveNickBtn.disabled = false;
-                    }, 1200);
-                    this.updateStatsDisplay();
-                }
-            });
+            saveNickBtn.addEventListener('click', () => this.saveNicknameFromInput());
         }
 
         // Title Select
@@ -89,6 +74,193 @@ class TerritoryWalkAppStats extends TerritoryWalkAppMap {
                 if (this.coinManager) this.coinManager.copyReferralCode();
             });
         }
+
+        // 今週の戦果をシェア（コイン付与なし・共有シート優先）
+        const btnStatsShareWeekly = document.getElementById('btn-stats-share-weekly');
+        if (btnStatsShareWeekly) {
+            btnStatsShareWeekly.addEventListener('click', () => this.shareMyWeeklyResult());
+        }
+
+        // 未設定の人にだけ出す表示名バナー
+        this.initNicknameBanner();
+    }
+
+    /**
+     * 戦績モーダルを開く（タブ指定可）。ヘッダーの入口と表示名バナーで共通化する。
+     */
+    openStatsModal(tabKey = 'my-stats') {
+        const modal = document.getElementById('stats-modal');
+        if (!modal) return;
+        if (this.menuModal) this.menuModal.classList.add('hidden');
+        modal.classList.remove('hidden');
+        this.updateStatsDisplay();
+        this.switchStatsTab(tabKey);
+    }
+
+    /**
+     * 表示名の保存（入力欄の保存ボタン／バナー導線で共通）。
+     * 未入力のままなら何も変わらない（従来どおりユーザーID表示を維持）。
+     */
+    async saveNicknameFromInput() {
+        const input = document.getElementById('input-nickname');
+        const btn = document.getElementById('btn-save-nickname');
+        if (!input || !this.statsManager) return;
+
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = '保存中...';
+        }
+        await this.statsManager.setNickname(input.value);
+        if (btn) {
+            btn.textContent = '保存完了';
+            setTimeout(() => {
+                btn.textContent = '保存';
+                btn.disabled = false;
+            }, 1200);
+        }
+        this.showToast('表示名を更新しました');
+        // 名前を付けたらバナーは役目を終える（再表示のキーは書かない）
+        this.hideNicknameBanner();
+        this.updateStatsDisplay();
+    }
+
+    /**
+     * 表示名（ニックネーム）未設定者向けのバナー。
+     * 未設定＝従来どおりユーザーID表示のままで、仮名は作らない。
+     */
+    initNicknameBanner() {
+        const banner = document.getElementById('nickname-banner');
+        if (!banner) return;
+
+        const laterBtn = document.getElementById('btn-nickname-later');
+        if (laterBtn) {
+            laterBtn.addEventListener('click', () => this.hideNicknameBanner({ remember: true }));
+        }
+
+        const setupBtn = document.getElementById('btn-nickname-setup');
+        if (setupBtn) {
+            setupBtn.addEventListener('click', () => {
+                this.hideNicknameBanner();
+                this.openStatsModal('my-stats');
+                const input = document.getElementById('input-nickname');
+                if (input && typeof input.focus === 'function') {
+                    try {
+                        input.focus({ preventScroll: true });
+                    } catch (e) {
+                        input.focus();
+                    }
+                    if (typeof input.scrollIntoView === 'function') {
+                        input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                }
+            });
+        }
+
+        if (typeof window !== 'undefined' && window && typeof window.addEventListener === 'function'
+            && !this.nicknameBannerResizeBound) {
+            this.nicknameBannerResizeBound = true;
+            window.addEventListener('resize', () => this.layoutNicknameBanner());
+        }
+
+        this.refreshNicknameBanner();
+    }
+
+    /** 未設定かつ「あとで」を押していないときだけバナーを出す */
+    refreshNicknameBanner() {
+        const banner = document.getElementById('nickname-banner');
+        if (!banner || !this.statsManager) return;
+
+        let dismissed = null;
+        try {
+            dismissed = localStorage.getItem(NICKNAME_BANNER_DISMISSED_KEY);
+        } catch (e) { /* 保存領域が読めないときは出さない判断をしない */ }
+
+        const hasName = typeof this.statsManager.hasCustomNickname === 'function'
+            ? this.statsManager.hasCustomNickname()
+            : false;
+
+        if (hasName || dismissed) {
+            banner.classList.add('hidden');
+            return;
+        }
+
+        banner.classList.remove('hidden');
+        this.layoutNicknameBanner();
+    }
+
+    /** バナーを閉じる（remember=true なら次回以降も出さない） */
+    hideNicknameBanner(options = {}) {
+        const banner = document.getElementById('nickname-banner');
+        if (banner) banner.classList.add('hidden');
+        if (options && options.remember) {
+            try {
+                localStorage.setItem(NICKNAME_BANNER_DISMISSED_KEY, 'true');
+            } catch (e) { /* ignore */ }
+        }
+    }
+
+    /**
+     * バナーをヘッダー直下に置く（位置情報オフ／マーキング停止のバナーが出ていればその下）。
+     * 位置は他バナーと同じくヘッダー実測で決める（セーフエリア・回転に追従）。
+     */
+    layoutNicknameBanner() {
+        const banner = document.getElementById('nickname-banner');
+        if (!banner || !banner.style) return null;
+        if (banner.classList && banner.classList.contains('hidden')) return null;
+
+        let top = 168;
+        try {
+            const header = typeof document.querySelector === 'function' ? document.querySelector('header') : null;
+            if (header && typeof header.getBoundingClientRect === 'function') {
+                const rect = header.getBoundingClientRect();
+                if (rect && rect.height > 0) top = Math.round(rect.bottom + 8);
+            }
+            ['location-permission-banner', 'marking-paused-banner'].forEach((id) => {
+                const other = document.getElementById(id);
+                if (!other || !other.classList || other.classList.contains('hidden')) return;
+                if (typeof other.getBoundingClientRect !== 'function') return;
+                const rect = other.getBoundingClientRect();
+                if (rect && rect.height > 0) top = Math.max(top, Math.round(rect.bottom + 8));
+            });
+        } catch (e) { /* fallback */ }
+
+        banner.style.top = `${Math.max(top, 64)}px`;
+        return banner.style.top;
+    }
+
+    /**
+     * 「今週の戦果」を共有する。今週の塗りマスと順位はサーバー集計から取り、
+     * 取得できなくても「ここから参戦」の文言で共有できる。コインは付与しない。
+     */
+    async shareMyWeeklyResult() {
+        if (typeof CoinManager === 'undefined') return false;
+
+        const weekId = this.supabaseManager && typeof this.supabaseManager.getCurrentWeekId === 'function'
+            ? this.supabaseManager.getCurrentWeekId()
+            : null;
+
+        let tiles = 0;
+        let rank = null;
+        if (this.statsManager && typeof this.statsManager.getMyWeeklyRank === 'function') {
+            try {
+                const mine = await this.statsManager.getMyWeeklyRank(weekId);
+                if (mine) {
+                    tiles = Number(mine.tilesCount) || 0;
+                    rank = typeof mine.rank === 'number' ? mine.rank : null;
+                }
+            } catch (e) { /* オフライン時は0マスの文言で共有する */ }
+        }
+
+        const text = CoinManager.buildMyWeeklyResultShareText({
+            tiles,
+            rank,
+            myTeam: this.currentTeam || 'black'
+        });
+        const shared = await CoinManager.shareText(text, 'テリトリーウォーク 今週の戦果');
+        if (shared && typeof this.showToast === 'function') {
+            this.showToast('共有画面を開きました');
+        }
+        return shared;
     }
 
     async switchStatsTab(tabKey) {

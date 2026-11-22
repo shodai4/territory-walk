@@ -16,6 +16,13 @@
  */
 const SHARE_HASHTAGS = ['#テリウォーク', '#テリトリーウォーク', '#TerritoryWalk'];
 
+/**
+ * シェア文言から誘導する App Store の短縮URL（2026-11-22 の集客改善）。
+ * 長い共有URL（shodai4.com）だと「アプリを入れてもらう」まで届かないので、
+ * 「今週の戦果」「今の戦況」の共有はストアへ直接送る。
+ */
+const APP_STORE_URL = 'https://apps.apple.com/jp/app/id6834676433';
+
 class CoinManager {
     constructor(appInstance, supabaseManager) {
         this.app = appInstance;
@@ -881,6 +888,100 @@ class CoinManager {
         return CoinManager.withShareHashtags(
             `【TERRITORY WALK】前週シーズン決着！\n所属: ${teamName}チーム (${outcomeText})\n最終制圧比率: Black ${blackPct}% vs White ${whitePct}%\n個人開拓貢献: ${tiles}マス\n\n街を歩いて白黒陣地を奪い合おう！\n招待コード: ${inviteCode}`
         );
+    }
+
+    /** シェア文言の誘導先（App Store の短縮URL） */
+    static getAppStoreUrl() {
+        return APP_STORE_URL;
+    }
+
+    /**
+     * 「今週の戦果」（マイ戦績タブ）のシェア文言。
+     * 実データ（今週の塗りマス・順位・自分のチーム）から組み立てる。
+     * コインは付与しない（ボーナスは shareToX の1日1回だけ）。
+     */
+    static buildMyWeeklyResultShareText({ tiles = 0, rank = null, myTeam = 'black' } = {}) {
+        const teamLabel = myTeam === 'white' ? '白組' : '黒組';
+        const tileCount = Math.max(0, Math.floor(Number(tiles) || 0));
+        const rankNumber = Math.floor(Number(rank));
+        const lines = [];
+
+        if (tileCount > 0) {
+            lines.push(`今週の戦果：${tileCount.toLocaleString()}マス開拓（${teamLabel}）`);
+            if (Number.isFinite(rankNumber) && rankNumber > 0) {
+                lines.push(`今週の順位は${rankNumber}位！`);
+            }
+        } else {
+            // 0マスの日でも「0マス」と晒さず、これから参戦する一文にする
+            lines.push(`今週はここから参戦（${teamLabel}）`);
+        }
+
+        lines.push('街を歩いて白黒の陣地を奪い合う「テリトリーウォーク」');
+        lines.push(APP_STORE_URL);
+        return CoinManager.withShareHashtags(lines.join('\n'));
+    }
+
+    /**
+     * 「今の戦況」（今週の戦況詳細モーダル）のシェア文言。
+     * 上部％バーと同じ基準の黒白％・マス数、参加人数、自分の貢献マスを載せる。
+     * コインは付与しない。
+     */
+    static buildWeeklyBattleShareText({
+        blackPct = 50,
+        whitePct = 50,
+        blackTiles = 0,
+        whiteTiles = 0,
+        totalPlayers = 0,
+        myTeam = 'black',
+        myTiles = 0
+    } = {}) {
+        const teamLabel = myTeam === 'white' ? '白組' : '黒組';
+        const bTiles = Math.max(0, Math.floor(Number(blackTiles) || 0));
+        const wTiles = Math.max(0, Math.floor(Number(whiteTiles) || 0));
+        const players = Math.max(0, Math.floor(Number(totalPlayers) || 0));
+        const mine = Math.max(0, Math.floor(Number(myTiles) || 0));
+        const bPct = Math.round(Number(blackPct) || 0);
+        const wPct = Math.round(Number(whitePct) || 0);
+
+        const lines = [
+            `今週の戦況：黒 ${bPct}%（${bTiles.toLocaleString()}マス）vs 白 ${wPct}%（${wTiles.toLocaleString()}マス）`
+        ];
+        if (players > 0) lines.push(`全国 ${players.toLocaleString()}人が参戦中`);
+        lines.push(mine > 0
+            ? `私は${teamLabel}で ${mine.toLocaleString()}マス貢献`
+            : `${teamLabel}で参戦中`);
+        lines.push(APP_STORE_URL);
+
+        return CoinManager.withShareHashtags(lines.join('\n'));
+    }
+
+    /**
+     * 共有シート（iOS ならネイティブのシェアシート）を優先し、
+     * 使えない環境では X の投稿画面を開く。コインは付与しない。
+     * @returns {Promise<boolean>} 共有シートを開けた／投稿画面を開いたら true、操作キャンセルは false
+     */
+    static async shareText(text, title = 'テリトリーウォーク') {
+        const body = String(text == null ? '' : text);
+        const canUseShareSheet = typeof navigator !== 'undefined'
+            && navigator
+            && typeof navigator.share === 'function';
+
+        if (canUseShareSheet) {
+            try {
+                await navigator.share({ title, text: body });
+                return true;
+            } catch (e) {
+                // ユーザーがシェアシートを閉じただけなら投稿画面は開かない
+                if (e && e.name === 'AbortError') return false;
+                // それ以外は X の投稿画面へフォールバックする
+            }
+        }
+
+        const xUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(body)}`;
+        if (typeof window !== 'undefined' && window && typeof window.open === 'function') {
+            window.open(xUrl, '_blank');
+        }
+        return true;
     }
 
     canShareToXToday() {

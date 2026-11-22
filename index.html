@@ -137,6 +137,20 @@
         </button>
     </div>
 
+    <!-- 表示名（ニックネーム）未設定者向けの案内バナー：ヘッダー直下に控えめに出す。
+         未設定のあいだの表示は従来どおりユーザーIDのままで、仮名は作らない。
+         「あとで」で閉じると次回以降は出さない（localStorage 1キー）。 -->
+    <div id="nickname-banner" class="hidden fixed left-1/2 -translate-x-1/2 top-[168px] w-[calc(100%_-_1.5rem)] max-w-sm z-[1390] pointer-events-none" role="status" aria-live="polite">
+        <div class="bg-zinc-950/95 border border-zinc-700/90 backdrop-blur-md rounded-xl shadow-2xl px-3 py-2 flex items-center gap-2 pointer-events-auto">
+            <div class="flex-1 min-w-0 text-left">
+                <div class="text-[11px] font-bold text-zinc-100 leading-snug">表示名を設定できます</div>
+                <div class="text-[10px] text-zinc-400 leading-snug mt-0.5">ランキングやシェアにこの名前が出ます（未設定はIDのまま）</div>
+            </div>
+            <button id="btn-nickname-later" type="button" class="shrink-0 px-2 py-1 rounded-lg text-zinc-500 hover:text-zinc-200 text-[10px] font-bold active:scale-95 transition-all">あとで</button>
+            <button id="btn-nickname-setup" type="button" class="shrink-0 px-2.5 py-1 rounded-lg bg-zinc-100 hover:bg-white text-black text-[10px] font-bold whitespace-nowrap active:scale-95 transition-all">名前をつける</button>
+        </div>
+    </div>
+
     <!-- 地図コンテナ（全画面表示） -->
     <main id="map" class="flex-1 w-full h-full z-0"></main>
 
@@ -745,6 +759,12 @@
                         </div>
                     </div>
 
+                    <!-- 今週の戦果をシェア（コイン付与なし・iOSは共有シート／他はXの投稿画面） -->
+                    <button id="btn-stats-share-weekly" class="w-full py-2 bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-700 border border-zinc-700 text-zinc-100 font-bold font-mono text-xs rounded-lg shadow transition-all active:scale-95 flex items-center justify-center gap-1.5">
+                        <svg class="w-3.5 h-3.5 text-zinc-300 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"></path><path d="M8 8l4-4 4 4"></path><path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"></path></svg>
+                        <span>今週の戦果をシェア</span>
+                    </button>
+
                     <div class="space-y-1.5">
                         <span class="text-zinc-400 text-[10px] font-bold tracking-wider">過去の週次バトル履歴</span>
                         <div id="container-battle-history" class="space-y-1 max-h-32 overflow-y-auto pr-1">
@@ -856,7 +876,8 @@
                 </div>
             </div>
 
-            <div class="pt-2 border-t border-zinc-800">
+            <div class="pt-2 border-t border-zinc-800 space-y-2">
+                <button id="btn-share-weekly-battle" class="hidden w-full py-2 bg-zinc-100 hover:bg-white text-black font-bold font-mono text-xs rounded-xl shadow transition-all active:scale-95">今の戦況をシェア</button>
                 <button id="btn-battle-detail-footer-close" class="w-full py-2.5 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 border border-zinc-700 text-white font-bold font-mono text-xs rounded-xl shadow transition-all active:scale-95">閉じる</button>
             </div>
         </div>
@@ -1245,7 +1266,7 @@
     <script src="poster.js?v=20261115v54"></script>
     <script src="pro.js?v=20261114v43"></script>
     <script src="search.js?v=20261113v24"></script>
-    <script src="coins.js?v=20261115v55"></script>
+    <script src="coins.js?v=20261122v56"></script>
     <script src="admob.js?v=20261115v51"></script>
     <script src="iap.js?v=20261115v50"></script>
     <script src="identity.js?v=20261117v1"></script>
@@ -1261,17 +1282,17 @@
     <script src="permission.js?v=20261115v47"></script>
     <script src="debug-tools.js?v=20261114v39"></script>
     <!-- app.js は役割ごとのモジュールに分割（読み込み順が依存関係。最後に app.js が起動する） -->
-    <script src="app-config.js?v=20261121v66"></script>
-    <script src="app-core.js?v=20261121v66"></script>
-    <script src="app-map.js?v=20261121v66"></script>
-    <script src="app-stats.js?v=20261121v66"></script>
-    <script src="app-battle.js?v=20261121v66"></script>
-    <script src="app-actions.js?v=20261121v66"></script>
-    <script src="app-menus.js?v=20261121v66"></script>
-    <script src="app-geolocation.js?v=20261121v66"></script>
-    <script src="app-marking.js?v=20261121v66"></script>
-    <script src="app-tracking.js?v=20261121v66"></script>
-    <script src="app-gameplay.js?v=20261121v66"></script>
-    <script src="app.js?v=20261121v66"></script>
+    <script src="app-config.js?v=20261122v67"></script>
+    <script src="app-core.js?v=20261122v67"></script>
+    <script src="app-map.js?v=20261122v67"></script>
+    <script src="app-stats.js?v=20261122v67"></script>
+    <script src="app-battle.js?v=20261122v67"></script>
+    <script src="app-actions.js?v=20261122v67"></script>
+    <script src="app-menus.js?v=20261122v67"></script>
+    <script src="app-geolocation.js?v=20261122v67"></script>
+    <script src="app-marking.js?v=20261122v67"></script>
+    <script src="app-tracking.js?v=20261122v67"></script>
+    <script src="app-gameplay.js?v=20261122v67"></script>
+    <script src="app.js?v=20261122v67"></script>
 </body>
 </html>

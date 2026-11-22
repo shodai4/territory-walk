@@ -101,7 +101,11 @@ class TerritoryWalkAppMarking extends TerritoryWalkAppGeolocation {
         if (typeof document === 'undefined') return null;
         const pauseEl = document.getElementById('marking-paused-banner');
         if (!pauseEl || !pauseEl.style) return null;
-        if (pauseEl.classList && pauseEl.classList.contains('hidden')) return null;
+        if (pauseEl.classList && pauseEl.classList.contains('hidden')) {
+            // 停止バーが無くても、表示名バナーは警告バナーの下へ積み直す
+            if (typeof this.layoutNicknameBanner === 'function') this.layoutNicknameBanner();
+            return null;
+        }
 
         let top = 168;
         try {
@@ -120,6 +124,8 @@ class TerritoryWalkAppMarking extends TerritoryWalkAppGeolocation {
         } catch (e) { /* fallback */ }
 
         pauseEl.style.top = `${Math.max(top, 64)}px`;
+        // 3枚目（表示名バナー）も同じ基準で積み直す
+        if (typeof this.layoutNicknameBanner === 'function') this.layoutNicknameBanner();
         return pauseEl.style.top;
     }
 

@@ -523,5 +523,5 @@ test('UI: 省電力モードの初期化で二重配線しない', () => {
 test('配線: www/app.js が app.js と同期し、キャッシュバスターが上がっている', () => {
     const wwwApp = readWwwAppSource();
     assert.equal(wwwApp, APP_SOURCE, 'www/ の app 分割モジュールはルートと同一（npm run build で同期）');
-    assert.match(INDEX_HTML, /app\.js\?v=20261121v66/);
+    assert.match(INDEX_HTML, /app\.js\?v=20261122v67/);
 });

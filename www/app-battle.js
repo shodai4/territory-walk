@@ -131,6 +131,10 @@ class TerritoryWalkAppBattle extends TerritoryWalkAppStats {
             const btn = document.getElementById(id);
             if (btn) btn.addEventListener('click', closeModal);
         });
+
+        // 今の戦況をシェア（コイン付与なし・共有シート優先）
+        const shareBtn = document.getElementById('btn-share-weekly-battle');
+        if (shareBtn) shareBtn.addEventListener('click', () => this.shareWeeklyBattle());
         if (modal) {
             modal.addEventListener('click', (e) => {
                 if (e.target === modal) closeModal();
@@ -157,6 +161,9 @@ class TerritoryWalkAppBattle extends TerritoryWalkAppStats {
         if (emptyEl) emptyEl.classList.add('hidden');
         if (noteEl) noteEl.classList.add('hidden');
         if (sourceEl) sourceEl.textContent = '';
+        // 集計が描画されるまでは前回の数字で共有させない
+        this.weeklyBattleDetailSummary = null;
+        this.setWeeklyBattleShareVisible(false);
 
         const weekId = this.supabaseManager ? this.supabaseManager.getCurrentWeekId() : null;
         if (weekEl) weekEl.textContent = weekId || '----W--';
@@ -209,15 +216,22 @@ class TerritoryWalkAppBattle extends TerritoryWalkAppStats {
 
         if (loadingEl) loadingEl.classList.add('hidden');
 
+        // 共有ボタンは、この描画で出した数字（summary・マス数）を使い回す
+        this.weeklyBattleDetailSummary = summaryOk ? summary : null;
+
         // 今週まだ誰も塗っていない（＝対戦が始まっていない）週だけ案内文へ
         if (summaryOk && totalTiles === 0 && playerTotal === 0) {
             contentEl.classList.add('hidden');
             if (emptyEl) emptyEl.classList.remove('hidden');
+            // この週は共有する数字が無い（前回の値を共有させない）
+            this.weeklyBattleDetailSummary = null;
+            this.setWeeklyBattleShareVisible(false);
             return;
         }
 
         if (emptyEl) emptyEl.classList.add('hidden');
         contentEl.classList.remove('hidden');
+        this.setWeeklyBattleShareVisible(true);
 
         // 参加人数（サーバー集計が取れないときは「—」）
         setText('battle-detail-players-total', summaryOk ? playerTotal.toLocaleString() : '—');
@@ -254,6 +268,60 @@ class TerritoryWalkAppBattle extends TerritoryWalkAppStats {
                 sourceEl.textContent = '全国のマス数（週の塗り替え）と、週間ランキングの実参加者から集計しています';
             }
         }
+    }
+
+    /** 「今の戦況をシェア」ボタンの表示切り替え（数字が無いときは出さない） */
+    setWeeklyBattleShareVisible(visible) {
+        const btn = document.getElementById('btn-share-weekly-battle');
+        if (!btn || !btn.classList) return;
+        if (visible) btn.classList.remove('hidden');
+        else btn.classList.add('hidden');
+    }
+
+    /**
+     * 「今の戦況」を共有する。画面に出ている％・マス数（getScoreCounts）と
+     * 参加人数（描画済み summary）をそのまま使う。コインは付与しない。
+     */
+    async shareWeeklyBattle() {
+        if (typeof CoinManager === 'undefined') return false;
+
+        const counts = typeof this.getScoreCounts === 'function'
+            ? this.getScoreCounts()
+            : { black: 0, white: 0 };
+        const blackTiles = Number(counts.black) || 0;
+        const whiteTiles = Number(counts.white) || 0;
+        const totalTiles = blackTiles + whiteTiles;
+        const blackPct = totalTiles > 0 ? Math.round((blackTiles / totalTiles) * 100) : 50;
+        const whitePct = totalTiles > 0 ? 100 - blackPct : 50;
+
+        const summary = this.weeklyBattleDetailSummary || null;
+        const totalPlayers = summary && summary.ok ? Number(summary.playerTotal) || 0 : 0;
+
+        const weekId = this.supabaseManager && typeof this.supabaseManager.getCurrentWeekId === 'function'
+            ? this.supabaseManager.getCurrentWeekId()
+            : null;
+        let myTiles = 0;
+        if (this.statsManager && typeof this.statsManager.getMyWeeklyRank === 'function') {
+            try {
+                const mine = await this.statsManager.getMyWeeklyRank(weekId);
+                myTiles = mine ? Number(mine.tilesCount) || 0 : 0;
+            } catch (e) { /* オフライン時は0マスで共有 */ }
+        }
+
+        const text = CoinManager.buildWeeklyBattleShareText({
+            blackPct,
+            whitePct,
+            blackTiles,
+            whiteTiles,
+            totalPlayers,
+            myTeam: this.currentTeam || 'black',
+            myTiles
+        });
+        const shared = await CoinManager.shareText(text, 'テリトリーウォーク 今週の戦況');
+        if (shared && typeof this.showToast === 'function') {
+            this.showToast('共有画面を開きました');
+        }
+        return shared;
     }
 
 }

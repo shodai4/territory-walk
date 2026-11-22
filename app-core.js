@@ -380,6 +380,14 @@ class TerritoryWalkAppCore {
                     top = Math.max(top, Math.round(markingRect.bottom + 10));
                 }
             }
+            // 表示名（ニックネーム）バナーも同じ場所に並ぶので、その下へ回す
+            const nicknameBanner = document.getElementById('nickname-banner');
+            if (nicknameBanner && !nicknameBanner.classList.contains('hidden')) {
+                const nicknameRect = nicknameBanner.getBoundingClientRect();
+                if (nicknameRect && nicknameRect.height > 0) {
+                    top = Math.max(top, Math.round(nicknameRect.bottom + 10));
+                }
+            }
         } catch (e) { /* fallback */ }
         container.style.top = `${Math.max(top, 96)}px`;
     }
