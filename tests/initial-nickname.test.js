@@ -238,5 +238,5 @@ test('文言: 入力欄のプレースホルダーは未設定＝ユーザーID�
 
 test('キャッシュバスター: stats.js / app.js は最新版を参照する', () => {
     assert.match(INDEX_HTML, /stats\.js\?v=20261119v61/);
-    assert.match(INDEX_HTML, /app\.js\?v=20261123v68/);
+    assert.match(INDEX_HTML, /app\.js\?v=20261123v69/);
 });

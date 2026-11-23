@@ -148,7 +148,6 @@ function createApp(options = {}) {
         'battle-detail-content': createElement(['hidden']),
         'battle-detail-loading': createElement(),
         'battle-detail-empty': createElement(['hidden']),
-        'battle-detail-extra-note': createElement(['hidden']),
         'battle-detail-source': createElement(),
         'battle-detail-week': createElement(),
         'btn-share-weekly-battle': createElement(['hidden'])
@@ -631,7 +630,7 @@ test('配線: 文言は coins.js の共通ビルダーだけを使う', () => {
 
 test('キャッシュバスター: 変更したファイルは新しい版を指す', () => {
     assert.match(INDEX_HTML, /coins\.js\?v=20261122v56/);
-    assert.match(INDEX_HTML, /app-stats\.js\?v=20261123v68/);
-    assert.match(INDEX_HTML, /app-battle\.js\?v=20261123v68/);
-    assert.match(WWW_HTML, /app-stats\.js\?v=20261123v68/);
+    assert.match(INDEX_HTML, /app-stats\.js\?v=20261123v69/);
+    assert.match(INDEX_HTML, /app-battle\.js\?v=20261123v69/);
+    assert.match(WWW_HTML, /app-stats\.js\?v=20261123v69/);
 });

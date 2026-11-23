@@ -3,7 +3,7 @@
  * 週次バトルの見える化（5点改修の 1〜3）
  *   1) 画面上部％バー（#battle-bar-container）はタップ可能で、専用モーダルを開く
  *   2) 「今週の戦況詳細」の人数欄は、チームに振り分けられた登録人数（territory_users）を出す
- *      （当週の territory_weekly_rankings の実参加人数は注記に小さく添える）
+ *      （注記は「黒・白に振り分けられた登録メンバーの人数です」だけ。実参加人数は出さない）
  *   3) 過去週のバトル履歴（#container-battle-history）を週ごとに描画する
  *   4) 通算戦績はサーバーの過去週実績から算出し、ローカル加算の二重計上を防ぐ
  *
@@ -369,7 +369,6 @@ function createDetailElements() {
         'battle-detail-loading': createElementStub(),
         'battle-detail-content': createElementStub(['hidden']),
         'battle-detail-empty': createElementStub(['hidden']),
-        'battle-detail-extra-note': createElementStub(['hidden']),
         'battle-detail-source': createElementStub(),
         'battle-detail-week': createElementStub(),
         'battle-detail-players-total': createElementStub(),
@@ -502,7 +501,11 @@ test('文言: 人数欄は「チームの登録人数」（実参加者の「今
     assert.match(HTML, /チームの登録人数/, '振り分けられた登録人数であることが見出しで分かる');
     assert.doesNotMatch(HTML, /今週の参加人数/, '週明けに0人と出る実参加者の見出しは残さない');
     assert.match(HTML, /id="battle-detail-players-note"[^>]*>[^<]*振り分けられた登録メンバー/, '補足説明がある');
+    assert.doesNotMatch(HTML, /今週歩いたのは/, '実参加人数は補足に出さない');
     assert.match(HTML, /今週塗られたマス数/, 'マス数の欄はそのまま残す');
+    assert.doesNotMatch(HTML, /battle-detail-extra-note/, 'マス数欄の黄色い注釈は置かない');
+    assert.doesNotMatch(HTML, /自動で広がるマス/, '注釈の文言も残さない');
+    assert.doesNotMatch(WWW_HTML, /自動で広がるマス/, 'www/ にも注釈を残さない');
     assert.match(WWW_HTML, /チームの登録人数/, 'www/ にも反映');
     assert.doesNotMatch(WWW_HTML, /今週の参加人数/, 'www/ にも古い見出しを残さない');
 });
@@ -521,8 +524,7 @@ test('描画: 人数欄は territory_users の振り分け人数、マス数は�
     assert.equal(elements['battle-detail-tiles-total'].textContent, '1,000', 'マス数はそのまま');
     assert.equal(elements['battle-detail-tiles-black'].textContent, '600');
     assert.equal(elements['battle-detail-tiles-white'].textContent, '400');
-    assert.match(elements['battle-detail-players-note'].textContent, /振り分けられた登録メンバー/);
-    assert.match(elements['battle-detail-players-note'].textContent, /今週歩いたのは 10人/, '実参加者は補足に添える');
+    assert.equal(elements['battle-detail-players-note'].textContent, '黒・白に振り分けられた登録メンバーの人数です', '実参加人数は添えない');
     assert.equal(elements['battle-detail-content'].classList.contains('hidden'), false);
     assert.equal(elements['battle-detail-empty'].classList.contains('hidden'), true);
 });
@@ -539,7 +541,7 @@ test('描画: 週明けで0マス0人でも、振り分け人数があれば案�
     assert.equal(elements['battle-detail-empty'].classList.contains('hidden'), true);
     assert.equal(elements['battle-detail-players-total'].textContent, '27');
     assert.equal(elements['battle-detail-tiles-total'].textContent, '0');
-    assert.match(elements['battle-detail-players-note'].textContent, /今週歩いたのは 0人/);
+    assert.equal(elements['battle-detail-players-note'].textContent, '黒・白に振り分けられた登録メンバーの人数です');
 });
 
 test('描画: 0マス・0人・登録人数も取れない週だけ案内文', () => {

@@ -156,14 +156,12 @@ class TerritoryWalkAppBattle extends TerritoryWalkAppStats {
         const loadingEl = document.getElementById('battle-detail-loading');
         const contentEl = document.getElementById('battle-detail-content');
         const emptyEl = document.getElementById('battle-detail-empty');
-        const noteEl = document.getElementById('battle-detail-extra-note');
         const sourceEl = document.getElementById('battle-detail-source');
         const weekEl = document.getElementById('battle-detail-week');
 
         if (loadingEl) loadingEl.classList.remove('hidden');
         if (contentEl) contentEl.classList.add('hidden');
         if (emptyEl) emptyEl.classList.add('hidden');
-        if (noteEl) noteEl.classList.add('hidden');
         if (sourceEl) sourceEl.textContent = '';
         // 集計が描画されるまでは前回の数字で共有させない
         this.weeklyBattleDetailSummary = null;
@@ -205,7 +203,6 @@ class TerritoryWalkAppBattle extends TerritoryWalkAppStats {
         const loadingEl = document.getElementById('battle-detail-loading');
         const contentEl = document.getElementById('battle-detail-content');
         const emptyEl = document.getElementById('battle-detail-empty');
-        const noteEl = document.getElementById('battle-detail-extra-note');
         const sourceEl = document.getElementById('battle-detail-source');
         if (!contentEl) return;
 
@@ -225,7 +222,6 @@ class TerritoryWalkAppBattle extends TerritoryWalkAppStats {
 
         const summaryOk = !!(summary && summary.ok);
         const playerTotal = summaryOk ? Number(summary.playerTotal) || 0 : 0;
-        const participantTiles = summaryOk ? Number(summary.participantTiles) || 0 : 0;
 
         // チームに振り分けられた登録人数（territory_users）。取れなければ null ＝ 表示は「—」
         const toCount = (value) => {
@@ -264,13 +260,9 @@ class TerritoryWalkAppBattle extends TerritoryWalkAppStats {
         setText('battle-detail-players-white', registeredOk ? registeredWhite.toLocaleString() : '—');
         const playersNoteEl = document.getElementById('battle-detail-players-note');
         if (playersNoteEl) {
-            if (!registeredOk) {
-                playersNoteEl.textContent = 'チームの登録人数を取得できませんでした';
-            } else if (summaryOk) {
-                playersNoteEl.textContent = `黒・白に振り分けられた登録メンバーの人数です（今週歩いたのは ${playerTotal.toLocaleString()}人）`;
-            } else {
-                playersNoteEl.textContent = '黒・白に振り分けられた登録メンバーの人数です';
-            }
+            playersNoteEl.textContent = registeredOk
+                ? '黒・白に振り分けられた登録メンバーの人数です'
+                : 'チームの登録人数を取得できませんでした';
         }
 
         // マス数（上部％バーと同じ基準）
@@ -286,12 +278,6 @@ class TerritoryWalkAppBattle extends TerritoryWalkAppStats {
         if (barBlack) barBlack.style.width = `${blackPct}%`;
         if (barWhite) barWhite.style.width = `${whitePct}%`;
         setText('battle-detail-formula', `黒 ${blackTiles.toLocaleString()}マス ÷ 合計 ${totalTiles.toLocaleString()}マス = ${blackPct}%`);
-
-        // AIウォーカー分の注記（参加者の合計マスより全国の塗りマスが多いとき）
-        if (noteEl) {
-            const aiNote = summaryOk && totalTiles > participantTiles;
-            noteEl.classList.toggle('hidden', !aiNote);
-        }
 
         // 取得元の注記（オフライン／集計中はローカル集計であることを明示）
         if (sourceEl) {
