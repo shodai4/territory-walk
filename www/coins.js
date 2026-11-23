@@ -923,7 +923,8 @@ class CoinManager {
 
     /**
      * 「今の戦況」（今週の戦況詳細モーダル）のシェア文言。
-     * 上部％バーと同じ基準の黒白％・マス数、参加人数、自分の貢献マスを載せる。
+     * 上部％バーと同じ基準の黒白％・マス数と、自分の貢献マスを載せる。
+     * 参戦人数（全国 ○人）は載せない（画面の人数欄だけに留める）。
      * コインは付与しない。
      */
     static buildWeeklyBattleShareText({
@@ -931,14 +932,12 @@ class CoinManager {
         whitePct = 50,
         blackTiles = 0,
         whiteTiles = 0,
-        totalPlayers = 0,
         myTeam = 'black',
         myTiles = 0
     } = {}) {
         const teamLabel = myTeam === 'white' ? '白組' : '黒組';
         const bTiles = Math.max(0, Math.floor(Number(blackTiles) || 0));
         const wTiles = Math.max(0, Math.floor(Number(whiteTiles) || 0));
-        const players = Math.max(0, Math.floor(Number(totalPlayers) || 0));
         const mine = Math.max(0, Math.floor(Number(myTiles) || 0));
         const bPct = Math.round(Number(blackPct) || 0);
         const wPct = Math.round(Number(whitePct) || 0);
@@ -946,7 +945,6 @@ class CoinManager {
         const lines = [
             `今週の戦況：黒 ${bPct}%（${bTiles.toLocaleString()}マス）vs 白 ${wPct}%（${wTiles.toLocaleString()}マス）`
         ];
-        if (players > 0) lines.push(`全国 ${players.toLocaleString()}人が参戦中`);
         lines.push(mine > 0
             ? `私は${teamLabel}で ${mine.toLocaleString()}マス貢献`
             : `${teamLabel}で参戦中`);

@@ -240,7 +240,7 @@ test('文言: 0マスの日は「0マス」と晒さず、これから参戦の�
     assert.deepEqual(hashtagsIn(text), EXPECTED_TAGS);
 });
 
-test('文言: 今の戦況は黒白％・マス数・参加人数・自分の貢献を含む', () => {
+test('文言: 今の戦況は黒白％・マス数・自分の貢献を含み、参戦人数は載せない', () => {
     const { context } = createApp();
     const CoinManager = context.__CoinManager;
 
@@ -249,13 +249,13 @@ test('文言: 今の戦況は黒白％・マス数・参加人数・自分の貢
         whitePct: 38,
         blackTiles: 6200,
         whiteTiles: 3800,
-        totalPlayers: 128,
         myTeam: 'black',
         myTiles: 340
     });
 
     assert.match(text, /今週の戦況：黒 62%（6,200マス）vs 白 38%（3,800マス）/);
-    assert.match(text, /全国 128人が参戦中/);
+    assert.ok(!/全国/.test(text), `参戦人数の行を載せない:\n${text}`);
+    assert.ok(!/\d+人が参戦中/.test(text), '「○人が参戦中」を書かない');
     assert.match(text, /私は黒組で 340マス貢献/);
     assert.ok(text.includes(APP_STORE_URL));
     assert.deepEqual(hashtagsIn(text), EXPECTED_TAGS);
@@ -266,10 +266,11 @@ test('文言: 自分が未参加でも戦況は共有できる（チームで参
     const CoinManager = context.__CoinManager;
 
     const text = CoinManager.buildWeeklyBattleShareText({
-        blackPct: 50, whitePct: 50, blackTiles: 0, whiteTiles: 0, totalPlayers: 0, myTeam: 'white', myTiles: 0
+        blackPct: 50, whitePct: 50, blackTiles: 0, whiteTiles: 0, myTeam: 'white', myTiles: 0
     });
     assert.match(text, /白組で参戦中/);
-    assert.ok(!/全国 0人/.test(text), '0人のときは参加人数を書かない');
+    assert.ok(!/全国/.test(text), '参加人数の行は書かない');
+    assert.ok(!/\d+人が参戦中/.test(text), '0人でも人数の行は書かない');
 });
 
 test('文言: X の280字（URLは23換算）に収まり、タグが切られない', () => {
@@ -283,7 +284,6 @@ test('文言: X の280字（URLは23換算）に収まり、タグが切られ�
             whitePct: 0,
             blackTiles: 999999,
             whiteTiles: 999999,
-            totalPlayers: 999999,
             myTeam: 'white',
             myTiles: 999999
         })
@@ -459,7 +459,7 @@ test('配線: コピーへ回したときはボタン文言で知らせる（モ
     assert.equal(elements['btn-stats-share-weekly'].disabled, false, 'しばらくして元に戻る');
 });
 
-test('配線: 戦況詳細のシェアは画面と同じ％と参加人数を使う', async () => {    const { app, elements, context } = createApp();
+test('配線: 戦況詳細のシェアは画面と同じ％とマス数を使い、参戦人数は載せない', async () => {    const { app, elements, context } = createApp();
     const payloads = [];
     context.navigator.share = (payload) => { payloads.push(payload); return Promise.resolve(); };
 
@@ -482,7 +482,8 @@ test('配線: 戦況詳細のシェアは画面と同じ％と参加人数を使
 
     assert.equal(payloads.length, 1);
     assert.match(payloads[0].text, /今週の戦況：黒 60%（600マス）vs 白 40%（400マス）/);
-    assert.match(payloads[0].text, /全国 10人が参戦中/);
+    assert.ok(!/全国/.test(payloads[0].text), `画面の人数（playerTotal 10）をシェア文面に載せない:\n${payloads[0].text}`);
+    assert.ok(!/\d+人が参戦中/.test(payloads[0].text), '「○人が参戦中」を書かない');
     assert.match(payloads[0].text, /私は黒組で 42マス貢献/);
     assert.deepEqual(app.coinAdds, [], 'シェアでコインは付与しない');
 });
@@ -629,8 +630,8 @@ test('配線: 文言は coins.js の共通ビルダーだけを使う', () => {
 });
 
 test('キャッシュバスター: 変更したファイルは新しい版を指す', () => {
-    assert.match(INDEX_HTML, /coins\.js\?v=20261122v56/);
-    assert.match(INDEX_HTML, /app-stats\.js\?v=20261123v69/);
-    assert.match(INDEX_HTML, /app-battle\.js\?v=20261123v69/);
-    assert.match(WWW_HTML, /app-stats\.js\?v=20261123v69/);
+    assert.match(INDEX_HTML, /coins\.js\?v=20261123v70/);
+    assert.match(INDEX_HTML, /app-stats\.js\?v=20261123v70/);
+    assert.match(INDEX_HTML, /app-battle\.js\?v=20261123v70/);
+    assert.match(WWW_HTML, /app-stats\.js\?v=20261123v70/);
 });

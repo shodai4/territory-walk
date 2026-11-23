@@ -304,8 +304,8 @@ class TerritoryWalkAppBattle extends TerritoryWalkAppStats {
     }
 
     /**
-     * 「今の戦況」を共有する。画面に出ている％・マス数（getScoreCounts）と
-     * 参加人数（描画済み summary）をそのまま使う。コインは付与しない。
+     * 「今の戦況」を共有する。画面に出ている％・マス数（getScoreCounts）をそのまま使う。
+     * 参戦人数はシェア文面に載せない（画面の人数欄だけに留める）。コインは付与しない。
      */
     async shareWeeklyBattle() {
         if (typeof CoinManager === 'undefined') return 'failed';
@@ -318,9 +318,6 @@ class TerritoryWalkAppBattle extends TerritoryWalkAppStats {
         const totalTiles = blackTiles + whiteTiles;
         const blackPct = totalTiles > 0 ? Math.round((blackTiles / totalTiles) * 100) : 50;
         const whitePct = totalTiles > 0 ? 100 - blackPct : 50;
-
-        const summary = this.weeklyBattleDetailSummary || null;
-        const totalPlayers = summary && summary.ok ? Number(summary.playerTotal) || 0 : 0;
 
         const weekId = this.supabaseManager && typeof this.supabaseManager.getCurrentWeekId === 'function'
             ? this.supabaseManager.getCurrentWeekId()
@@ -343,7 +340,6 @@ class TerritoryWalkAppBattle extends TerritoryWalkAppStats {
             whitePct,
             blackTiles,
             whiteTiles,
-            totalPlayers,
             myTeam: this.currentTeam || 'black',
             myTiles
         });
