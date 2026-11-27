@@ -1,6 +1,6 @@
 {
   "name": "territory-walk",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "Territory Walk - Real-time GPS territory walking game with Leaflet & Supabase",
   "author": "お絵描き楽しも委員会（しょうだい）",
   "license": "MIT",

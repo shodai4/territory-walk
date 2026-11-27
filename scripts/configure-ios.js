@@ -45,10 +45,11 @@ const MINIMUM_IOS_VERSION = '15.0';
  *   v1.0 → 1.1（公開済み）
  *   v1.1 → 1.2（2026-11-19: v1.1 の train が closed になったため 1.2 へ）
  *   v1.2 → 1.2.1（2026-11-21: 1.2 が公開済みになり train が closed のため、TestFlight 配信用にパッチ版へ）
+ *   1.2.1 → 1.2.2（2026-11-27: 1.2.1 が承認済みになり train が closed のため、共有URL修正の配信用に）
  * ここを上げるときは package.json と tests/minimum-ios.test.js も揃える。
  * Watch アプリのバージョンも add-watch-target.rb がこの値を読んで揃える。
  */
-const APP_MARKETING_VERSION = '1.2.1';
+const APP_MARKETING_VERSION = '1.2.2';
 
 /**
  * ホーム画面（アイコンの下）に表示するアプリ名。
