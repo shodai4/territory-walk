@@ -18,8 +18,9 @@ const SHARE_HASHTAGS = ['#テリウォーク', '#テリトリーウォーク', '
 
 /**
  * シェア文言から誘導する App Store の短縮URL（2026-11-22 の集客改善）。
- * 長い共有URL（shodai4.com）だと「アプリを入れてもらう」まで届かないので、
- * 「今週の戦果」「今の戦況」の共有はストアへ直接送る。
+ * 2026-11-27、翔大さんの指示「共有の時のツイート文は App Store のURLのみ。ブラウザ版は秘匿」。
+ * 長い共有URLだと「アプリを入れてもらう」まで届かないうえ、ブラウザ版を出さないため、
+ * すべてのシェア（X・OS共有シート）はこの1つのURLだけを載せる。
  */
 const APP_STORE_URL = 'https://apps.apple.com/jp/app/id6834676433';
 
@@ -1017,7 +1018,7 @@ class CoinManager {
         const code = this.getInviteCode() || 'WALK';
 
         const tweetText = CoinManager.buildDailyShareText({ tiles, myTeam, code });
-        const tweetUrl = 'https://shodai4.com/territory-walk/';
+        const tweetUrl = APP_STORE_URL;
         const xUrl = `https://x.com/intent/tweet?text=${encodeURIComponent(tweetText)}&url=${encodeURIComponent(tweetUrl)}`;
 
         window.open(xUrl, '_blank');
@@ -1056,7 +1057,7 @@ class CoinManager {
 
     shareReferralNative() {
         const code = this.getInviteCode();
-        const url = 'https://shodai4.com/territory-walk/';
+        const url = APP_STORE_URL;
         const text = CoinManager.buildReferralShareText({ code });
 
         if (navigator.share) {

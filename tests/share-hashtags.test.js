@@ -28,7 +28,10 @@ const read = (file) => fs.readFileSync(path.join(ROOT, file), 'utf8');
 
 const NEW_TAG = '#テリウォーク';
 const EXPECTED_TAGS = [NEW_TAG, '#テリトリーウォーク', '#TerritoryWalk'];
-const SHARE_URL = 'https://shodai4.com/territory-walk/';
+// 2026-11-27 翔大さんの指示「共有の時のツイート文は App Store のURLのみ。ブラウザ版は秘匿」。
+// シェアの誘導先は App Store の1本だけ（ブラウザ版URLは一切出さない）。
+const SHARE_URL = 'https://apps.apple.com/jp/app/id6834676433';
+const BROWSER_URL_PATTERN = /shodai4\.com\/territory-walk|github\.io/;
 
 /** 文言中のハッシュタグを出現順に取り出す（重複もそのまま残す） */
 function hashtagsIn(text) {
@@ -320,4 +323,51 @@ test('配線: 画面の案内文は iOS の設定に並ぶ名前（テリウォ�
     assert.match(wwwHtml, /設定 ＞ テリウォーク ＞ 位置情報/);
     assert.match(read('www/coins.js'), /#テリウォーク/);
     assert.match(readWwwAppSource(), /CoinManager\.buildWeeklyResultShareText\(/);
+});
+
+/* ------------------------------------------------------------------ *
+ * 7. シェアの誘導先は App Store だけ（ブラウザ版URLを出さない）
+ * ------------------------------------------------------------------ */
+test('共有URL: shareToX は App Store のURLだけを載せる', () => {
+    const { manager, opened } = loadCoinManager();
+    manager.shareToX();
+
+    const url = new URL(opened[0]);
+    assert.equal(url.searchParams.get('url'), SHARE_URL, 'X の url パラメータは App Store');
+    assert.doesNotMatch(url.searchParams.get('text') + url.searchParams.get('url'), BROWSER_URL_PATTERN);
+});
+
+test('共有URL: 招待シェア・週次の各文言にブラウザ版URLが混ざらない', () => {
+    const { CoinManager } = loadCoinManager();
+    const texts = [
+        CoinManager.buildDailyShareText({ tiles: 123, myTeam: 'Black', code: 'ABC123' }),
+        CoinManager.buildReferralShareText({ code: 'ABC123' }),
+        CoinManager.buildWeeklyResultShareText({
+            teamName: 'BLACK', outcomeText: '勝利陣営！', blackPct: 52, whitePct: 48, tiles: 321, inviteCode: 'ABC123'
+        }),
+        CoinManager.buildMyWeeklyResultShareText({ tiles: 321, rank: 7, myTeam: 'black' }),
+        CoinManager.buildWeeklyBattleShareText({
+            blackPct: 52, whitePct: 48, blackTiles: 5200, whiteTiles: 4800, myTeam: 'black', myTiles: 321
+        })
+    ];
+
+    texts.forEach((text) => {
+        assert.doesNotMatch(text, BROWSER_URL_PATTERN, `ブラウザ版URLが残っている:\n${text}`);
+    });
+    // 誘導先を載せる文言は App Store のURLだけを持つ
+    assert.ok(texts[3].includes(CoinManager.getAppStoreUrl()));
+    assert.ok(texts[4].includes(CoinManager.getAppStoreUrl()));
+});
+
+test('共有URL: ソースのシェア処理にブラウザ版URLが残っていない', () => {
+    // 共有・ツイート・招待シェアの組み立ては coins.js と app-battle.js の2ファイルだけ
+    const sources = ['coins.js', 'app-battle.js'];
+    sources.forEach((file) => {
+        assert.doesNotMatch(read(file), BROWSER_URL_PATTERN, `${file} にブラウザ版URLが残っている`);
+    });
+    // app-battle.js の週次リザルトは共通定義を使う（URLを直書きしない）
+    assert.match(read('app-battle.js'), /const shareUrl = CoinManager\.getAppStoreUrl\(\);/);
+    // 配布物（www/）も同じ内容であること
+    assert.doesNotMatch(read('www/coins.js'), BROWSER_URL_PATTERN);
+    assert.match(read('www/coins.js'), /const url = APP_STORE_URL;/);
 });

@@ -391,7 +391,8 @@ class TerritoryWalkAppBattle extends TerritoryWalkAppStats {
                     tiles,
                     inviteCode
                 });
-                const shareUrl = 'https://shodai4.com/territory-walk/';
+                // 誘導先は App Store だけ（ブラウザ版URLは共有文面に出さない）。定義は coins.js の1か所。
+                const shareUrl = CoinManager.getAppStoreUrl();
 
                 if (navigator.share) {
                     navigator.share({
